@@ -1,7 +1,6 @@
 use std::error::Error;
 use std::fmt;
 
-pub mod grep;
 pub mod netcdf;
 
 #[derive(Debug)]
@@ -26,7 +25,6 @@ pub struct Config {
 // Define the different modules as an enum
 #[derive(Debug)]
 enum Module {
-    Grep,
     Convert,
     Concat,
 }
@@ -35,11 +33,7 @@ enum Module {
 impl Module {
     fn dispatch(&self, args: &[String]) -> Result<Config, Box<dyn Error>> {
         match self {
-            Module::Grep => {
-                grep::run(args)
-            }
             Module::Convert => {
-                println!("{:?}", args);
                 netcdf::handle_target_dispatch(args)
             }
             Module::Concat => {
@@ -57,7 +51,6 @@ impl Module {
 // Parse the first command-line argument into the correct enum variant
 fn parse_module(arg: &str) -> Option<Module> {
     match arg {
-        "grep" => Some(Module::Grep),
         "netcdf" => Some(Module::Convert),
         "concat" => Some(Module::Concat),
         _ => None,

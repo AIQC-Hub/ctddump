@@ -74,13 +74,12 @@ ctddump <module> [subcommand] <src_file> <target_file>
 | `netcdf` | `cora` | CORA `.nc` | `.parquet` |
 | `netcdf` | `cora2` | Older CORA `.nc` | `.parquet` |
 | `netcdf` | `cora_head` | CORA `.nc` | `.yaml` metadata |
-| `grep` | — | query file_path | stdout |
 
 ## Architecture
 
 Dispatch flows through two levels:
 
-1. **`src/lib.rs`** — `handle_dispatch()` parses `args[0]` as a module (`grep`, `netcdf`, `concat`) and delegates to the module's `run()` or sub-dispatcher.
+1. **`src/lib.rs`** — `handle_dispatch()` parses `args[0]` as a module (`netcdf`, `concat`) and delegates to the module's `run()` or sub-dispatcher.
 2. **`src/netcdf.rs`** — `handle_target_dispatch()` parses `args[0]` as a format target (e.g., `nrt_ar`) and calls the corresponding submodule's `run()`.
 
 Each converter submodule (e.g., `src/netcdf/nrt_ar.rs`) follows the same pattern:
