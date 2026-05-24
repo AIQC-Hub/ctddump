@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Git Workflow
 
-This repository uses **gitflow**. Always use `git flow` commands to manage branches — do not create feature/release/hotfix branches manually.
+This repository uses **gitflow** (`git-flow` AVH Edition is installed). Always use `git flow` commands to manage branches — do not create feature/release/hotfix branches manually.
 
 | Task | Command |
 |------|---------|
