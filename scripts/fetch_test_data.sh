@@ -43,9 +43,7 @@ trap 'rm -f "$TMP_ZIP"' EXIT
 echo "Downloading test-data.zip from release '$VERSION' of $REPO ..."
 gh release download "$VERSION" \
   --repo "$REPO" \
-  --pattern 'test-data.zip' \
-  --output "$TMP_ZIP" \
-  --clobber
+  --pattern 'test_data.zip'
 
 echo "Extracting to $TARGET_DIR ..."
 unzip -q -o "$TMP_ZIP" -d "$TARGET_DIR"
