@@ -8,6 +8,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **NRT** (Near Real Time): data from various regions — Arctic Sea (AR), Baltic Sea (BO), Mediterranean Sea (MO), and Global (GL)
 - **CORA** (Copernicus Ocean Reanalysis): historical re-processed CTD profiles (`cora` and `cora2` for older files)
 
+## Git Workflow
+
+This repository uses **gitflow**. Always use `git flow` commands to manage branches — do not create feature/release/hotfix branches manually.
+
+| Task | Command |
+|------|---------|
+| Start a feature | `git flow feature start <name>` |
+| Finish a feature | `git flow feature finish <name>` |
+| Start a release | `git flow release start <version>` |
+| Finish a release | `git flow release finish <version>` |
+| Start a hotfix | `git flow hotfix start <name>` |
+| Finish a hotfix | `git flow hotfix finish <name>` |
+
+Branch configuration (from `.git/config`):
+- Stable branch: `main`
+- Development branch: `develop`
+- Prefixes: `feature/`, `release/`, `hotfix/`
+
 ## Commands
 
 ```bash
