@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-26
+
+### Added
+- `concat convert` command: merge Parquet files from a directory tree into a single file with optional `profile_no` / `observation_no` renumbering (on by default)
+- `concat header` command: merge header YAML files into a single YAML file; errors on duplicate keys
+- CI workflow: runs tests on push/PR to `main` (GitHub Actions)
+- README.md
+
+### Changed
+- `concat` is now a subcommand group (`concat convert`, `concat header`) for consistency with `batch`
+
 ## [0.2.0] - 2026-05-25
 
 ### Added
@@ -23,6 +34,7 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AIQC-Hub/ctddump/releases/tag/v0.1.0
