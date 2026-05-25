@@ -76,17 +76,19 @@ ctddump convert <subcommand> [--config <file.toml>] <src_file> <target_file>
 | `cora` | CORA `.nc` (current format) | `.parquet` | `CoraConfig` |
 | `cora_legacy` | CORA `.nc` (older format) | `.parquet` | `CoraConfig` |
 
-### `batch` — directory-tree NetCDF → Parquet (multi-threaded)
+### `batch` — directory-tree NetCDF → Parquet or YAML (multi-threaded)
 
 ```
 ctddump batch <subcommand> [--config <file.toml>] [--output <dest_dir>] [--threads <n>] <src_dir>
 ```
 
-Recursively finds all `.nc` files under `<src_dir>` and converts them in parallel.
-Output filenames keep the source stem and replace the extension with `.parquet`.
+Recursively finds all `.nc` files under `<src_dir>` and processes them in parallel.
+Output filenames keep the source stem and replace the extension with `.parquet` or `.yaml`.
 If `--output` is omitted, each file is written alongside its source.
 If `--output` is given, all files land flat in that directory — an error is raised before
 conversion starts if any two sources would produce the same output filename.
+
+**`batch convert`** — NetCDF → Parquet:
 
 | Subcommand | Format |
 |------------|--------|
@@ -96,6 +98,13 @@ conversion starts if any two sources would produce the same output filename.
 | `nrt_gl` | NRT Global |
 | `cora` | CORA current format |
 | `cora_legacy` | CORA legacy format |
+
+**`batch header`** — NetCDF → YAML metadata:
+
+| Subcommand | Format |
+|------------|--------|
+| `nrt` | Any NRT `.nc` |
+| `cora` | Any CORA `.nc` |
 
 ### `header` — NetCDF → YAML metadata
 
@@ -145,7 +154,7 @@ Each converter follows the same pattern:
 - `collect_nc_files()` — recursively walk a directory for `.nc` files (`walkdir`)
 - `compute_output_pairs()` — derive flat or in-place output paths
 - `check_duplicates()` — pre-flight duplicate detection
-- `run_batch()` — parallel execution via `rayon`; accepts an optional thread count
+- `run_batch()` — parallel execution via `rayon`; accepts an optional thread count and output extension (`"parquet"` or `"yaml"`)
 
 ### Header modules (`src/header/`)
 - **`src/header/nrt.rs`** — NRT metadata extraction to YAML

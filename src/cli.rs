@@ -10,23 +10,23 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Convert a NetCDF file to Parquet
+    /// Convert a single NetCDF file to Parquet
     #[command(name = "convert")]
     Convert {
         #[command(subcommand)]
         format: ConvertFormat,
     },
-    /// Extract metadata from a NetCDF file to YAML
+    /// Batch-process all NetCDF files in a directory tree
+    #[command(name = "batch")]
+    Batch {
+        #[command(subcommand)]
+        subcommand: BatchSubcommand,
+    },
+    /// Extract metadata from a single NetCDF file to YAML
     #[command(name = "header")]
     Header {
         #[command(subcommand)]
         format: HeaderFormat,
-    },
-    /// Batch-convert all NetCDF files in a directory tree to Parquet
-    #[command(name = "batch")]
-    Batch {
-        #[command(subcommand)]
-        format: BatchFormat,
     },
     /// Concatenate Parquet files
     #[command(name = "concat")]
@@ -36,78 +36,74 @@ pub enum Commands {
     },
 }
 
+// ── convert ──────────────────────────────────────────────────────────────────
+
 #[derive(Subcommand, Debug)]
 pub enum ConvertFormat {
     /// NRT Arctic Sea (.nc -> .parquet)
     #[command(name = "nrt_ar")]
     NrtAr {
-        /// Optional TOML config file to override default NRT settings
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-        /// Source NetCDF file
+        #[arg(short, long)] config: Option<PathBuf>,
         src: PathBuf,
-        /// Output Parquet file
         dest: PathBuf,
     },
     /// NRT Baltic Sea (.nc -> .parquet)
     #[command(name = "nrt_bo")]
     NrtBo {
-        /// Optional TOML config file to override default NRT settings
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-        /// Source NetCDF file
+        #[arg(short, long)] config: Option<PathBuf>,
         src: PathBuf,
-        /// Output Parquet file
         dest: PathBuf,
     },
     /// NRT Mediterranean Sea (.nc -> .parquet)
     #[command(name = "nrt_mo")]
     NrtMo {
-        /// Optional TOML config file to override default NRT settings
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-        /// Source NetCDF file
+        #[arg(short, long)] config: Option<PathBuf>,
         src: PathBuf,
-        /// Output Parquet file
         dest: PathBuf,
     },
     /// NRT Global (.nc -> .parquet)
     #[command(name = "nrt_gl")]
     NrtGl {
-        /// Optional TOML config file to override default NRT settings
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-        /// Source NetCDF file
+        #[arg(short, long)] config: Option<PathBuf>,
         src: PathBuf,
-        /// Output Parquet file
         dest: PathBuf,
     },
     /// CORA current format (.nc -> .parquet)
     #[command(name = "cora")]
     Cora {
-        /// Optional TOML config file to override default CORA settings
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-        /// Source NetCDF file
+        #[arg(short, long)] config: Option<PathBuf>,
         src: PathBuf,
-        /// Output Parquet file
         dest: PathBuf,
     },
     /// CORA legacy format (.nc -> .parquet)
     #[command(name = "cora_legacy")]
     CoraLegacy {
-        /// Optional TOML config file to override default CORA legacy settings
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-        /// Source NetCDF file
+        #[arg(short, long)] config: Option<PathBuf>,
         src: PathBuf,
-        /// Output Parquet file
         dest: PathBuf,
     },
 }
 
+// ── batch ─────────────────────────────────────────────────────────────────────
+
 #[derive(Subcommand, Debug)]
-pub enum BatchFormat {
+pub enum BatchSubcommand {
+    /// Batch-convert .nc → .parquet for all files in a directory tree
+    #[command(name = "convert")]
+    Convert {
+        #[command(subcommand)]
+        format: BatchConvertFormat,
+    },
+    /// Batch-extract .nc → .yaml metadata for all files in a directory tree
+    #[command(name = "header")]
+    Header {
+        #[command(subcommand)]
+        format: BatchHeaderFormat,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum BatchConvertFormat {
     /// NRT Arctic Sea: batch convert .nc → .parquet
     #[command(name = "nrt_ar")]
     NrtAr {
@@ -162,21 +158,40 @@ pub enum BatchFormat {
 }
 
 #[derive(Subcommand, Debug)]
+pub enum BatchHeaderFormat {
+    /// NRT: batch extract .nc → .yaml metadata
+    #[command(name = "nrt")]
+    Nrt {
+        /// Output directory (flat). Defaults to same directory as each input file.
+        #[arg(short, long)] output: Option<PathBuf>,
+        /// Number of threads (defaults to all available CPU cores)
+        #[arg(short, long)] threads: Option<usize>,
+        /// Source directory to search recursively for .nc files
+        src_dir: PathBuf,
+    },
+    /// CORA: batch extract .nc → .yaml metadata
+    #[command(name = "cora")]
+    Cora {
+        #[arg(short, long)] output: Option<PathBuf>,
+        #[arg(short, long)] threads: Option<usize>,
+        src_dir: PathBuf,
+    },
+}
+
+// ── header ────────────────────────────────────────────────────────────────────
+
+#[derive(Subcommand, Debug)]
 pub enum HeaderFormat {
     /// NRT metadata (.nc -> .yaml)
     #[command(name = "nrt")]
     Nrt {
-        /// Source NetCDF file
         src: PathBuf,
-        /// Output YAML file
         dest: PathBuf,
     },
     /// CORA metadata (.nc -> .yaml)
     #[command(name = "cora")]
     Cora {
-        /// Source NetCDF file
         src: PathBuf,
-        /// Output YAML file
         dest: PathBuf,
     },
 }

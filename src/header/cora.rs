@@ -47,6 +47,15 @@ fn collect_netcdf_metadata(
     })
 }
 
+/// Extract metadata from a single NetCDF file to YAML. Called by both `run` and the batch processor.
+pub fn extract_file(src: &str, dest: &str) -> Result<(), Box<dyn Error>> {
+    let config = HeaderConfig {
+        src_file: src.to_string(),
+        target_file: dest.to_string(),
+    };
+    netcdf_to_yaml(&config)
+}
+
 pub fn run(args: &[String]) -> Result<Config, Box<dyn Error>> {
     let config = HeaderConfig::build(args).unwrap_or_else(|err| {
         eprintln!("Problem parsing arguments: {err}");

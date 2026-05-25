@@ -24,10 +24,12 @@ pub fn collect_nc_files(src_dir: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> 
 
 /// Compute `(src, dest)` pairs.
 /// If `output_dir` is given, all outputs land flat in that directory.
-/// Otherwise each output is placed alongside its source (`.nc` → `.parquet`).
+/// Otherwise each output is placed alongside its source.
+/// `output_ext` is the file extension for output files (e.g. `"parquet"` or `"yaml"`).
 pub fn compute_output_pairs(
     nc_files: &[PathBuf],
     output_dir: Option<&Path>,
+    output_ext: &str,
 ) -> Result<Vec<(PathBuf, PathBuf)>, Box<dyn Error>> {
     nc_files
         .iter()
@@ -36,8 +38,8 @@ pub fn compute_output_pairs(
                 .file_stem()
                 .ok_or_else(|| format!("Cannot get file stem for {}", src.display()))?;
             let dest = match output_dir {
-                Some(dir) => dir.join(stem).with_extension("parquet"),
-                None => src.with_extension("parquet"),
+                Some(dir) => dir.join(stem).with_extension(output_ext),
+                None => src.with_extension(output_ext),
             };
             Ok((src.clone(), dest))
         })
@@ -69,22 +71,24 @@ pub fn check_duplicates(pairs: &[(PathBuf, PathBuf)]) -> Result<(), Box<dyn Erro
     Ok(())
 }
 
-/// Walk `src_dir`, convert every `.nc` file using `convert_fn`, and write results to
+/// Walk `src_dir`, process every `.nc` file using `process_fn`, and write results to
 /// the same directory (if `output_dir` is `None`) or flat into `output_dir`.
+/// `output_ext` controls the extension of output files (`"parquet"` or `"yaml"`).
 ///
-/// Returns the number of files successfully converted.
+/// Returns the number of files successfully processed.
 /// Errors from individual files are collected and returned together at the end.
 pub fn run_batch<F>(
     src_dir: &Path,
     output_dir: Option<&Path>,
     threads: Option<usize>,
-    convert_fn: F,
+    output_ext: &str,
+    process_fn: F,
 ) -> Result<usize, Box<dyn Error>>
 where
     F: Fn(&str, &str) -> Result<(), Box<dyn Error>> + Sync + Send,
 {
     let nc_files = collect_nc_files(src_dir)?;
-    let pairs = compute_output_pairs(&nc_files, output_dir)?;
+    let pairs = compute_output_pairs(&nc_files, output_dir, output_ext)?;
     check_duplicates(&pairs)?;
 
     if let Some(dir) = output_dir {
@@ -96,7 +100,7 @@ where
         pairs
             .par_iter()
             .filter_map(|(src, dest)| {
-                convert_fn(
+                process_fn(
                     src.to_str().unwrap_or_default(),
                     dest.to_str().unwrap_or_default(),
                 )
@@ -117,7 +121,7 @@ where
     };
 
     if !errors.is_empty() {
-        return Err(format!("Batch conversion errors:\n{}", errors.join("\n")).into());
+        return Err(format!("Batch processing errors:\n{}", errors.join("\n")).into());
     }
 
     Ok(pairs.len())

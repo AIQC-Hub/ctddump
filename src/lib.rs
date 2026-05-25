@@ -8,7 +8,7 @@ pub mod cli;
 pub mod convert;
 pub mod header;
 
-use cli::{Cli, Commands, ConvertFormat, BatchFormat, HeaderFormat};
+use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat};
 use convert::cora_config::CoraConfig;
 use convert::nrt_config::NrtConfig;
 
@@ -20,12 +20,12 @@ pub struct Config {
     pub args: Vec<String>,
 }
 
-/// Dispatches a parsed [`Cli`] to the appropriate converter.
+/// Dispatches a parsed [`Cli`] to the appropriate module.
 /// Called directly from `main` after `Cli::parse()`.
 pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
     match cli.command {
         Commands::Convert { format } => dispatch_convert(format),
-        Commands::Batch { format } => dispatch_batch(format),
+        Commands::Batch { subcommand } => dispatch_batch(subcommand),
         Commands::Header { format } => dispatch_header(format),
         Commands::Concat { args } => {
             println!("Calling Concat module with arguments: {:?}", args);
@@ -38,7 +38,7 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
     }
 }
 
-/// Parses `args` with clap and dispatches to the appropriate converter.
+/// Parses `args` with clap and dispatches to the appropriate module.
 /// Used by integration tests and as the library entry point.
 pub fn handle_dispatch(args: &[String]) -> Result<Config, Box<dyn Error>> {
     let cli = Cli::try_parse_from(
@@ -78,49 +78,73 @@ fn dispatch_convert(format: ConvertFormat) -> Result<Config, Box<dyn Error>> {
     }
 }
 
-fn dispatch_batch(format: BatchFormat) -> Result<Config, Box<dyn Error>> {
+fn dispatch_batch(subcommand: BatchSubcommand) -> Result<Config, Box<dyn Error>> {
+    match subcommand {
+        BatchSubcommand::Convert { format } => dispatch_batch_convert(format),
+        BatchSubcommand::Header { format } => dispatch_batch_header(format),
+    }
+}
+
+fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn Error>> {
     match format {
-        BatchFormat::NrtAr { config, src_dir, output, threads } => {
+        BatchConvertFormat::NrtAr { config, src_dir, output, threads } => {
             let nrt_config = load_or_default(config, NrtConfig::nrt_ar)?;
-            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
                 convert::nrt::convert_file(src, dest, &nrt_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "nrt_ar".to_string(), args: vec![] })
         }
-        BatchFormat::NrtBo { config, src_dir, output, threads } => {
+        BatchConvertFormat::NrtBo { config, src_dir, output, threads } => {
             let nrt_config = load_or_default(config, NrtConfig::nrt_bo)?;
-            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
                 convert::nrt::convert_file(src, dest, &nrt_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "nrt_bo".to_string(), args: vec![] })
         }
-        BatchFormat::NrtMo { config, src_dir, output, threads } => {
+        BatchConvertFormat::NrtMo { config, src_dir, output, threads } => {
             let nrt_config = load_or_default(config, NrtConfig::nrt_mo)?;
-            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
                 convert::nrt::convert_file(src, dest, &nrt_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "nrt_mo".to_string(), args: vec![] })
         }
-        BatchFormat::NrtGl { config, src_dir, output, threads } => {
+        BatchConvertFormat::NrtGl { config, src_dir, output, threads } => {
             let nrt_config = load_or_default(config, NrtConfig::nrt_gl)?;
-            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
                 convert::nrt::convert_file(src, dest, &nrt_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "nrt_gl".to_string(), args: vec![] })
         }
-        BatchFormat::Cora { config, src_dir, output, threads } => {
+        BatchConvertFormat::Cora { config, src_dir, output, threads } => {
             let cora_config = load_or_default(config, CoraConfig::cora)?;
-            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
                 convert::cora::convert_file(src, dest, &cora_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "cora".to_string(), args: vec![] })
         }
-        BatchFormat::CoraLegacy { config, src_dir, output, threads } => {
+        BatchConvertFormat::CoraLegacy { config, src_dir, output, threads } => {
             let cora_config = load_or_default(config, CoraConfig::cora_legacy)?;
-            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
                 convert::cora::convert_file(src, dest, &cora_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "cora_legacy".to_string(), args: vec![] })
+        }
+    }
+}
+
+fn dispatch_batch_header(format: BatchHeaderFormat) -> Result<Config, Box<dyn Error>> {
+    match format {
+        BatchHeaderFormat::Nrt { src_dir, output, threads } => {
+            batch::run_batch(&src_dir, output.as_deref(), threads, "yaml", |src, dest| {
+                header::nrt::extract_file(src, dest)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "header_nrt".to_string(), args: vec![] })
+        }
+        BatchHeaderFormat::Cora { src_dir, output, threads } => {
+            batch::run_batch(&src_dir, output.as_deref(), threads, "yaml", |src, dest| {
+                header::cora::extract_file(src, dest)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "header_cora".to_string(), args: vec![] })
         }
     }
 }

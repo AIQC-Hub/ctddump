@@ -1,9 +1,9 @@
 use std::fs;
 use ctddump::handle_dispatch;
 
-// ── helpers ─────────────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-/// Copy `src` files into a fresh temp dir and return (temp_dir, src_dir).
+/// Copy `src` files into a fresh temp dir and return (temp_dir, src_path).
 fn setup_src(files: &[&str]) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     for f in files {
@@ -13,10 +13,10 @@ fn setup_src(files: &[&str]) -> (tempfile::TempDir, std::path::PathBuf) {
     (dir, path)
 }
 
-// ── batch nrt_ar ─────────────────────────────────────────────────────────────
+// ── batch convert nrt_ar ──────────────────────────────────────────────────────
 
 #[test]
-fn test_batch_nrt_ar_with_output_dir() {
+fn test_batch_convert_nrt_ar_with_output_dir() {
     let (_src_guard, src_dir) = setup_src(&[
         "./tests/test_data/AR_PR_CT_ITP-71.nc",
         "./tests/test_data/AR_PR_CT_58KN.nc",
@@ -24,7 +24,7 @@ fn test_batch_nrt_ar_with_output_dir() {
     let out_dir = tempfile::tempdir().unwrap();
 
     let args = vec![
-        "batch".to_string(), "nrt_ar".to_string(),
+        "batch".to_string(), "convert".to_string(), "nrt_ar".to_string(),
         "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
         src_dir.to_str().unwrap().to_string(),
     ];
@@ -35,13 +35,13 @@ fn test_batch_nrt_ar_with_output_dir() {
 }
 
 #[test]
-fn test_batch_nrt_ar_in_place() {
+fn test_batch_convert_nrt_ar_in_place() {
     let (src_guard, src_dir) = setup_src(&[
         "./tests/test_data/AR_PR_CT_ITP-71.nc",
     ]);
 
     let args = vec![
-        "batch".to_string(), "nrt_ar".to_string(),
+        "batch".to_string(), "convert".to_string(), "nrt_ar".to_string(),
         src_dir.to_str().unwrap().to_string(),
     ];
     assert!(handle_dispatch(&args).is_ok());
@@ -50,7 +50,7 @@ fn test_batch_nrt_ar_in_place() {
 }
 
 #[test]
-fn test_batch_nrt_ar_with_threads() {
+fn test_batch_convert_nrt_ar_with_threads() {
     let (_src_guard, src_dir) = setup_src(&[
         "./tests/test_data/AR_PR_CT_ITP-71.nc",
         "./tests/test_data/AR_PR_CT_58KN.nc",
@@ -58,7 +58,7 @@ fn test_batch_nrt_ar_with_threads() {
     let out_dir = tempfile::tempdir().unwrap();
 
     let args = vec![
-        "batch".to_string(), "nrt_ar".to_string(),
+        "batch".to_string(), "convert".to_string(), "nrt_ar".to_string(),
         "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
         "--threads".to_string(), "2".to_string(),
         src_dir.to_str().unwrap().to_string(),
@@ -69,17 +69,17 @@ fn test_batch_nrt_ar_with_threads() {
     assert!(out_dir.path().join("AR_PR_CT_58KN.parquet").exists());
 }
 
-// ── batch cora ───────────────────────────────────────────────────────────────
+// ── batch convert cora ────────────────────────────────────────────────────────
 
 #[test]
-fn test_batch_cora_with_output_dir() {
+fn test_batch_convert_cora_with_output_dir() {
     let (_src_guard, src_dir) = setup_src(&[
         "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.nc",
     ]);
     let out_dir = tempfile::tempdir().unwrap();
 
     let args = vec![
-        "batch".to_string(), "cora".to_string(),
+        "batch".to_string(), "convert".to_string(), "cora".to_string(),
         "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
         src_dir.to_str().unwrap().to_string(),
     ];
@@ -88,11 +88,65 @@ fn test_batch_cora_with_output_dir() {
     assert!(out_dir.path().join("CO_DMQCGL01_19861204_PR_CT.parquet").exists());
 }
 
+// ── batch header nrt ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_batch_header_nrt_with_output_dir() {
+    let (_src_guard, src_dir) = setup_src(&[
+        "./tests/test_data/AR_PR_CT_ITP-71.nc",
+        "./tests/test_data/AR_PR_CT_58KN.nc",
+    ]);
+    let out_dir = tempfile::tempdir().unwrap();
+
+    let args = vec![
+        "batch".to_string(), "header".to_string(), "nrt".to_string(),
+        "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
+        src_dir.to_str().unwrap().to_string(),
+    ];
+    assert!(handle_dispatch(&args).is_ok());
+
+    assert!(out_dir.path().join("AR_PR_CT_ITP-71.yaml").exists());
+    assert!(out_dir.path().join("AR_PR_CT_58KN.yaml").exists());
+}
+
+#[test]
+fn test_batch_header_nrt_in_place() {
+    let (src_guard, src_dir) = setup_src(&[
+        "./tests/test_data/AR_PR_CT_ITP-71.nc",
+    ]);
+
+    let args = vec![
+        "batch".to_string(), "header".to_string(), "nrt".to_string(),
+        src_dir.to_str().unwrap().to_string(),
+    ];
+    assert!(handle_dispatch(&args).is_ok());
+
+    assert!(src_guard.path().join("AR_PR_CT_ITP-71.yaml").exists());
+}
+
+// ── batch header cora ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_batch_header_cora_with_output_dir() {
+    let (_src_guard, src_dir) = setup_src(&[
+        "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.nc",
+    ]);
+    let out_dir = tempfile::tempdir().unwrap();
+
+    let args = vec![
+        "batch".to_string(), "header".to_string(), "cora".to_string(),
+        "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
+        src_dir.to_str().unwrap().to_string(),
+    ];
+    assert!(handle_dispatch(&args).is_ok());
+
+    assert!(out_dir.path().join("CO_DMQCGL01_19861204_PR_CT.yaml").exists());
+}
+
 // ── duplicate detection ───────────────────────────────────────────────────────
 
 #[test]
 fn test_batch_duplicate_error() {
-    // Two subdirectories containing files with the same name → flat output clashes
     let src_root = tempfile::tempdir().unwrap();
     let sub_a = src_root.path().join("a");
     let sub_b = src_root.path().join("b");
@@ -110,7 +164,7 @@ fn test_batch_duplicate_error() {
 
     let out_dir = tempfile::tempdir().unwrap();
     let args = vec![
-        "batch".to_string(), "nrt_ar".to_string(),
+        "batch".to_string(), "convert".to_string(), "nrt_ar".to_string(),
         "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
         src_root.path().to_str().unwrap().to_string(),
     ];
@@ -129,7 +183,7 @@ fn test_batch_empty_dir_error() {
     let out_dir = tempfile::tempdir().unwrap();
 
     let args = vec![
-        "batch".to_string(), "nrt_ar".to_string(),
+        "batch".to_string(), "convert".to_string(), "nrt_ar".to_string(),
         "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
         src_dir.path().to_str().unwrap().to_string(),
     ];
