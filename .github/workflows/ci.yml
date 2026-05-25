@@ -36,4 +36,6 @@ jobs:
         run: scripts/fetch_test_data.sh
 
       - name: Run tests
+        env:
+          HDF5_DIR: /usr/lib/x86_64-linux-gnu/hdf5/serial
         run: cargo test
