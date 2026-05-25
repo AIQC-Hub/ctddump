@@ -64,7 +64,7 @@ Built with `clap` — every command and subcommand supports `-h`/`--help`.
 ### `convert` — NetCDF → Parquet
 
 ```
-ctddump convert <subcommand> [--config <file.toml>] <src_file> <target_file>
+ctddump convert <subcommand> [OPTIONS] <src_file> <target_file>
 ```
 
 | Subcommand | Input | Output | Config struct |
@@ -76,10 +76,14 @@ ctddump convert <subcommand> [--config <file.toml>] <src_file> <target_file>
 | `cora` | CORA `.nc` (current format) | `.parquet` | `CoraConfig` |
 | `cora_legacy` | CORA `.nc` (older format) | `.parquet` | `CoraConfig` |
 
+NRT subcommand flags: `--deph-source` / `--no-deph-source`, `--profile-coords` / `--no-profile-coords`
+
+CORA subcommand flags: `--time-var <VAR>`, `--qc-type <int|char>`, `--time-qc` / `--no-time-qc`, `--deph-source` / `--no-deph-source`
+
 ### `batch` — directory-tree NetCDF → Parquet or YAML (multi-threaded)
 
 ```
-ctddump batch <subcommand> [--config <file.toml>] [--output <dest_dir>] [--threads <n>] <src_dir>
+ctddump batch <subcommand> [OPTIONS] <src_dir>
 ```
 
 Recursively finds all `.nc` files under `<src_dir>` and processes them in parallel.
@@ -88,7 +92,7 @@ If `--output` is omitted, each file is written alongside its source.
 If `--output` is given, all files land flat in that directory — an error is raised before
 conversion starts if any two sources would produce the same output filename.
 
-**`batch convert`** — NetCDF → Parquet:
+**`batch convert`** — NetCDF → Parquet (same per-format flags as `convert`, plus `--output`, `--threads`):
 
 | Subcommand | Format |
 |------------|--------|
@@ -117,31 +121,54 @@ ctddump header <subcommand> <src_file> <target_file>
 | `nrt` | Any NRT `.nc` | `.yaml` metadata |
 | `cora` | Any CORA `.nc` | `.yaml` metadata |
 
-### Config files
+### Config files and CLI overrides
 
-Each NRT and CORA subcommand accepts an optional `--config` / `-c` TOML file to override the embedded defaults. Omitting `--config` uses the embedded default for that subcommand.
+All `convert` and `batch convert` subcommands support individual CLI flags for every
+configuration field. The priority order is:
 
-**NRT config** (`src/convert/nrt_config.rs`):
-```toml
-has_deph_source = true      # whether DEPH variable exists in the source file
-has_profile_coords = false  # whether to derive profile_longitude/profile_latitude
-                            # (tries PRECISE_* first, then DEPLOY_* via DEPLOYMENT index)
+```
+built-in default < --config file < individual CLI flags
 ```
 
-**CORA config** (`src/convert/cora_config.rs`):
+`--config` / `-c` accepts a TOML file that sets any subset of fields (useful for saved presets).
+Individual flags override whatever `--config` sets for that field only.
+
+**NRT flags** (all `nrt_*` subcommands):
+
+| Flag | Config field | Default by region |
+|------|-------------|-------------------|
+| `--deph-source` / `--no-deph-source` | `has_deph_source` | `true` for BO/GL, `false` for AR/MO |
+| `--profile-coords` / `--no-profile-coords` | `has_profile_coords` | `true` for BO, `false` for AR/MO/GL |
+
+**CORA flags** (`cora` and `cora_legacy` subcommands):
+
+| Flag | Config field | `cora` default | `cora_legacy` default |
+|------|-------------|---------------|----------------------|
+| `--time-var <VAR>` | `time_var` | `"TIME"` | `"JULD"` |
+| `--qc-type <int\|char>` | `qc_type` | `int` | `char` |
+| `--time-qc` / `--no-time-qc` | `has_time_qc` | `true` | `false` |
+| `--deph-source` / `--no-deph-source` | `has_deph_source` | `true` | `false` |
+
+**TOML config file format** (for `--config`):
+
 ```toml
-time_var = "TIME"    # time variable name ("TIME" or "JULD" for legacy)
-qc_type = "int"      # QC storage type: "int" (i8) or "char" (converted to i8)
-has_time_qc = true   # whether TIME_QC / POSITION_QC variables exist
-has_deph_source = true  # whether DEPH variable exists in the source file
+# NRT
+has_deph_source = true
+has_profile_coords = false
+
+# CORA
+time_var = "TIME"
+qc_type = "int"       # "int" or "char"
+has_time_qc = true
+has_deph_source = true
 ```
 
 ## Architecture
 
 Dispatch is handled by `clap` in two stages:
 
-1. **`src/cli.rs`** — defines the full CLI structure (`Cli`, `Commands`, `ConvertFormat`, `BatchFormat`, `HeaderFormat`) using clap derive macros.
-2. **`src/lib.rs`** — `run(cli)` dispatches to `dispatch_convert()`, `dispatch_batch()`, or `dispatch_header()`, loads the TOML config (or falls back to the embedded default via `load_or_default()`), and calls the appropriate module.
+1. **`src/cli.rs`** — defines the full CLI structure (`Cli`, `Commands`, `ConvertFormat`, `BatchConvertFormat`, `BatchHeaderFormat`, `HeaderFormat`) plus `NrtArgs` and `CoraArgs` flattened arg structs. Each arg struct carries per-field override flags and an `apply_to(&mut Config)` method.
+2. **`src/lib.rs`** — `run(cli)` dispatches to `dispatch_convert()`, `dispatch_batch()`, or `dispatch_header()`. Each arm loads the TOML config (or built-in default via `load_or_default()`), then calls `nrt_args.apply_to()` / `cora_args.apply_to()` to layer CLI flag overrides on top.
 
 ### Convert modules (`src/convert/`)
 Each converter follows the same pattern:
