@@ -443,3 +443,294 @@ pub fn expand_deploy_coords(
 
     Ok(result)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unit tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── i8_to_qc_string ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_i8_to_qc_string_all_digits() {
+        for d in 0i8..=9 {
+            assert_eq!(i8_to_qc_string(d), d.to_string(), "digit {d}");
+        }
+    }
+
+    #[test]
+    fn test_i8_to_qc_string_min_is_empty() {
+        assert_eq!(i8_to_qc_string(i8::MIN), "");
+    }
+
+    #[test]
+    fn test_i8_to_qc_string_negative_is_empty() {
+        assert_eq!(i8_to_qc_string(-1), "");
+    }
+
+    #[test]
+    fn test_i8_to_qc_string_above_9_is_empty() {
+        assert_eq!(i8_to_qc_string(10), "");
+        assert_eq!(i8_to_qc_string(100), "");
+    }
+
+    // ── convert_time_value ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_convert_time_value_epoch() {
+        // days = 0 → the reference date 1950-01-01 00:00:00 UTC
+        let result = convert_time_value(&vec![0.0]).unwrap();
+        let expected = Utc.with_ymd_and_hms(1950, 1, 1, 0, 0, 0).unwrap().timestamp_millis();
+        assert_eq!(result, vec![expected]);
+    }
+
+    #[test]
+    fn test_convert_time_value_half_day() {
+        // 0.5 days → noon on 1950-01-01
+        let result = convert_time_value(&vec![0.5]).unwrap();
+        let expected = Utc.with_ymd_and_hms(1950, 1, 1, 12, 0, 0).unwrap().timestamp_millis();
+        assert_eq!(result, vec![expected]);
+    }
+
+    #[test]
+    fn test_convert_time_value_known_date() {
+        // compute days from 1950-01-01 to 2000-01-01 via chrono (avoids hardcoding)
+        let epoch  = Utc.with_ymd_and_hms(1950, 1, 1, 0, 0, 0).unwrap();
+        let target = Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap();
+        let days = (target - epoch).num_days() as f64;
+
+        let result = convert_time_value(&vec![days]).unwrap();
+        assert_eq!(result, vec![target.timestamp_millis()]);
+    }
+
+    #[test]
+    fn test_convert_time_value_consecutive_days() {
+        let epoch_ms = Utc.with_ymd_and_hms(1950, 1, 1, 0, 0, 0).unwrap().timestamp_millis();
+        let result = convert_time_value(&vec![0.0, 1.0]).unwrap();
+        assert_eq!(result[0], epoch_ms);
+        assert_eq!(result[1], epoch_ms + 86_400_000); // +1 day in ms
+    }
+
+    #[test]
+    fn test_convert_time_value_empty() {
+        assert!(convert_time_value(&vec![]).unwrap().is_empty());
+    }
+
+    // ── get_base_file_name ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_get_base_file_name_simple() {
+        assert_eq!(get_base_file_name("file.nc").unwrap(), "file");
+    }
+
+    #[test]
+    fn test_get_base_file_name_relative_path() {
+        assert_eq!(
+            get_base_file_name("./data/AR_PR_CT_ITP-71.nc").unwrap(),
+            "AR_PR_CT_ITP-71"
+        );
+    }
+
+    #[test]
+    fn test_get_base_file_name_absolute_path() {
+        assert_eq!(
+            get_base_file_name("/ocean/CO_DMQCGL01_19861204_PR_CT.nc").unwrap(),
+            "CO_DMQCGL01_19861204_PR_CT"
+        );
+    }
+
+    // ── create_profile_no_sequence ───────────────────────────────────────────
+
+    #[test]
+    fn test_profile_no_sequence_basic() {
+        // 3 profiles × 2 obs → [1,1, 2,2, 3,3]
+        assert_eq!(create_profile_no_sequence(3, 2).unwrap(), vec![1u32, 1, 2, 2, 3, 3]);
+    }
+
+    #[test]
+    fn test_profile_no_sequence_single_profile() {
+        assert_eq!(create_profile_no_sequence(1, 4).unwrap(), vec![1u32, 1, 1, 1]);
+    }
+
+    #[test]
+    fn test_profile_no_sequence_single_obs() {
+        assert_eq!(create_profile_no_sequence(3, 1).unwrap(), vec![1u32, 2, 3]);
+    }
+
+    // ── create_observation_sequence ──────────────────────────────────────────
+
+    #[test]
+    fn test_observation_sequence_basic() {
+        // 2 profiles × 3 obs → [1,2,3, 1,2,3]
+        assert_eq!(create_observation_sequence(2, 3).unwrap(), vec![1u32, 2, 3, 1, 2, 3]);
+    }
+
+    #[test]
+    fn test_observation_sequence_single_obs() {
+        assert_eq!(create_observation_sequence(3, 1).unwrap(), vec![1u32, 1, 1]);
+    }
+
+    #[test]
+    fn test_observation_sequence_restarts_each_profile() {
+        // obs numbers always restart at 1 for each new profile
+        let seq = create_observation_sequence(4, 5).unwrap();
+        assert_eq!(seq.len(), 20);
+        for p in 0..4usize {
+            assert_eq!(seq[p * 5],     1, "profile {p} obs start");
+            assert_eq!(seq[p * 5 + 4], 5, "profile {p} obs end");
+        }
+    }
+
+    // ── convert_depth_to_pressure ────────────────────────────────────────────
+
+    #[test]
+    fn test_d2p_converts_nan_pressure() {
+        // pres=NaN, deph=100 m at 45°N → compute and mark pres_conv=1
+        let (cp, cpq, pc) = convert_depth_to_pressure(
+            vec![f32::NAN], vec!["".to_string()],
+            vec![100.0_f32], vec!["1".to_string()],
+            f32::NAN, vec![45.0_f64],
+        );
+        assert!(!cp[0].is_nan(), "pressure should be computed");
+        assert!(cp[0] > 0.0);
+        assert_eq!(cpq[0], "1"); // QC copied from deph_qc
+        assert_eq!(pc[0], 1);
+    }
+
+    #[test]
+    fn test_d2p_keeps_existing_pressure() {
+        // pres already set → unchanged, pres_conv=0
+        let (cp, cpq, pc) = convert_depth_to_pressure(
+            vec![101.5_f32], vec!["2".to_string()],
+            vec![100.0_f32], vec!["1".to_string()],
+            f32::NAN, vec![45.0_f64],
+        );
+        assert_eq!(cp[0], 101.5);
+        assert_eq!(cpq[0], "2");
+        assert_eq!(pc[0], 0);
+    }
+
+    #[test]
+    fn test_d2p_skips_nan_depth() {
+        // pres=NaN, deph=NaN → no conversion
+        let (cp, _, pc) = convert_depth_to_pressure(
+            vec![f32::NAN], vec!["".to_string()],
+            vec![f32::NAN], vec!["".to_string()],
+            f32::NAN, vec![45.0_f64],
+        );
+        assert!(cp[0].is_nan());
+        assert_eq!(pc[0], 0);
+    }
+
+    #[test]
+    fn test_d2p_qc_copied_from_deph() {
+        let (_, cpq, _) = convert_depth_to_pressure(
+            vec![f32::NAN], vec!["".to_string()],
+            vec![50.0_f32], vec!["4".to_string()],
+            f32::NAN, vec![60.0_f64],
+        );
+        assert_eq!(cpq[0], "4");
+    }
+
+    #[test]
+    fn test_d2p_multiple_entries() {
+        // entry 0: convert (pres NaN, deph valid)
+        // entry 1: keep (pres valid)
+        // entry 2: skip (both NaN)
+        let (cp, _, pc) = convert_depth_to_pressure(
+            vec![f32::NAN,   200.0_f32, f32::NAN],
+            vec!["".to_string(), "1".to_string(), "".to_string()],
+            vec![100.0_f32, 100.0_f32, f32::NAN],
+            vec!["1".to_string(), "1".to_string(), "".to_string()],
+            f32::NAN, vec![45.0_f64, 45.0, 45.0],
+        );
+        assert!(!cp[0].is_nan());
+        assert_eq!(cp[1], 200.0);
+        assert!(cp[2].is_nan());
+        assert_eq!(pc, vec![1, 0, 0]);
+    }
+
+    // ── convert_pressure_to_depth ────────────────────────────────────────────
+
+    #[test]
+    fn test_p2d_converts_nan_depth() {
+        // deph=NaN, pres=100 dbar at 45°N → compute and mark deph_conv=1
+        let (cd, cdq, dc) = convert_pressure_to_depth(
+            vec![f32::NAN], vec!["".to_string()],
+            vec![100.0_f32], vec!["1".to_string()],
+            f32::NAN, vec![45.0_f64],
+        );
+        assert!(!cd[0].is_nan(), "depth should be computed");
+        assert!(cd[0] > 0.0);
+        assert_eq!(cdq[0], "1"); // QC copied from pres_qc
+        assert_eq!(dc[0], 1);
+    }
+
+    #[test]
+    fn test_p2d_keeps_existing_depth() {
+        // deph already set → unchanged, deph_conv=0
+        let (cd, cdq, dc) = convert_pressure_to_depth(
+            vec![99.0_f32], vec!["2".to_string()],
+            vec![100.0_f32], vec!["1".to_string()],
+            f32::NAN, vec![45.0_f64],
+        );
+        assert_eq!(cd[0], 99.0);
+        assert_eq!(cdq[0], "2");
+        assert_eq!(dc[0], 0);
+    }
+
+    #[test]
+    fn test_p2d_skips_nan_pressure() {
+        // pres=NaN → no conversion
+        let (cd, _, dc) = convert_pressure_to_depth(
+            vec![f32::NAN], vec!["".to_string()],
+            vec![f32::NAN], vec!["".to_string()],
+            f32::NAN, vec![45.0_f64],
+        );
+        assert!(cd[0].is_nan());
+        assert_eq!(dc[0], 0);
+    }
+
+    // ── roundtrips ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_depth_pressure_roundtrip() {
+        // depth → pressure → depth should recover within 0.5 m at various depths/latitudes
+        for &(depth, lat) in &[(50.0_f32, 0.0_f64), (200.0, 45.0), (1000.0, 80.0)] {
+            let (cp, _, _) = convert_depth_to_pressure(
+                vec![f32::NAN], vec!["".to_string()],
+                vec![depth], vec!["1".to_string()],
+                f32::NAN, vec![lat],
+            );
+            let (cd, _, _) = convert_pressure_to_depth(
+                vec![f32::NAN], vec!["".to_string()],
+                vec![cp[0]], vec!["1".to_string()],
+                f32::NAN, vec![lat],
+            );
+            let err = (cd[0] - depth).abs();
+            assert!(err < 0.5, "depth={depth} lat={lat}: roundtrip error {err}");
+        }
+    }
+
+    #[test]
+    fn test_pressure_depth_roundtrip() {
+        // pressure → depth → pressure should recover within 0.5 dbar
+        for &(pres, lat) in &[(50.0_f32, 0.0_f64), (200.0, 45.0), (1000.0, 80.0)] {
+            let (cd, _, _) = convert_pressure_to_depth(
+                vec![f32::NAN], vec!["".to_string()],
+                vec![pres], vec!["1".to_string()],
+                f32::NAN, vec![lat],
+            );
+            let (cp, _, _) = convert_depth_to_pressure(
+                vec![f32::NAN], vec!["".to_string()],
+                vec![cd[0]], vec!["1".to_string()],
+                f32::NAN, vec![lat],
+            );
+            let err = (cp[0] - pres).abs();
+            assert!(err < 0.5, "pres={pres} lat={lat}: roundtrip error {err}");
+        }
+    }
+}

@@ -143,3 +143,102 @@ where
 
     Ok(pairs.len())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{check_duplicates, compute_output_pairs};
+    use std::path::PathBuf;
+
+    // ── compute_output_pairs ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_output_pairs_flat_into_dir() {
+        let files = vec![
+            PathBuf::from("/data/a/file1.nc"),
+            PathBuf::from("/data/b/file2.nc"),
+        ];
+        let out = PathBuf::from("/out");
+        let pairs = compute_output_pairs(&files, Some(&out), "parquet").unwrap();
+        assert_eq!(pairs[0], (PathBuf::from("/data/a/file1.nc"), PathBuf::from("/out/file1.parquet")));
+        assert_eq!(pairs[1], (PathBuf::from("/data/b/file2.nc"), PathBuf::from("/out/file2.parquet")));
+    }
+
+    #[test]
+    fn test_output_pairs_in_place() {
+        let files = vec![PathBuf::from("/data/sub/file.nc")];
+        let pairs = compute_output_pairs(&files, None, "parquet").unwrap();
+        assert_eq!(pairs[0].1, PathBuf::from("/data/sub/file.parquet"));
+    }
+
+    #[test]
+    fn test_output_pairs_yaml_extension() {
+        let files = vec![PathBuf::from("/data/file.nc")];
+        let pairs = compute_output_pairs(&files, None, "yaml").unwrap();
+        assert_eq!(pairs[0].1, PathBuf::from("/data/file.yaml"));
+    }
+
+    #[test]
+    fn test_output_pairs_preserves_stem_with_hyphens() {
+        // Oceanographic filenames like AR_PR_CT_ITP-71 contain hyphens and underscores
+        let files = vec![PathBuf::from("/data/AR_PR_CT_ITP-71.nc")];
+        let pairs = compute_output_pairs(&files, None, "parquet").unwrap();
+        assert_eq!(pairs[0].1, PathBuf::from("/data/AR_PR_CT_ITP-71.parquet"));
+    }
+
+    #[test]
+    fn test_output_pairs_empty_input() {
+        let pairs = compute_output_pairs(&[], None, "parquet").unwrap();
+        assert!(pairs.is_empty());
+    }
+
+    #[test]
+    fn test_output_pairs_src_preserved() {
+        // The src path in the pair must equal the original input
+        let f = PathBuf::from("/data/file.nc");
+        let pairs = compute_output_pairs(&[f.clone()], None, "parquet").unwrap();
+        assert_eq!(pairs[0].0, f);
+    }
+
+    // ── check_duplicates ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_check_duplicates_no_conflict() {
+        let pairs = vec![
+            (PathBuf::from("/a/f1.nc"), PathBuf::from("/out/f1.parquet")),
+            (PathBuf::from("/b/f2.nc"), PathBuf::from("/out/f2.parquet")),
+        ];
+        assert!(check_duplicates(&pairs).is_ok());
+    }
+
+    #[test]
+    fn test_check_duplicates_detects_conflict() {
+        let pairs = vec![
+            (PathBuf::from("/a/file.nc"), PathBuf::from("/out/file.parquet")),
+            (PathBuf::from("/b/file.nc"), PathBuf::from("/out/file.parquet")),
+        ];
+        let err = check_duplicates(&pairs).unwrap_err().to_string();
+        assert!(err.contains("Duplicate output filenames detected"), "got: {err}");
+    }
+
+    #[test]
+    fn test_check_duplicates_error_names_conflicting_sources() {
+        let pairs = vec![
+            (PathBuf::from("/a/file.nc"), PathBuf::from("/out/file.parquet")),
+            (PathBuf::from("/b/file.nc"), PathBuf::from("/out/file.parquet")),
+        ];
+        let err = check_duplicates(&pairs).unwrap_err().to_string();
+        // Both source paths should appear in the error so the user knows which files clash
+        assert!(err.contains("file.nc"), "got: {err}");
+    }
+
+    #[test]
+    fn test_check_duplicates_empty() {
+        assert!(check_duplicates(&[]).is_ok());
+    }
+
+    #[test]
+    fn test_check_duplicates_single_file() {
+        let pairs = vec![(PathBuf::from("/a/f.nc"), PathBuf::from("/out/f.parquet"))];
+        assert!(check_duplicates(&pairs).is_ok());
+    }
+}

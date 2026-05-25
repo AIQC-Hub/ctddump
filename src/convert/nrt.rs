@@ -209,3 +209,45 @@ pub fn run(args: &[String], nrt_config: NrtConfig, target: &str) -> Result<Confi
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::fill_nan_from;
+
+    #[test]
+    fn test_fill_nan_from_replaces_nans_with_fallback() {
+        let primary  = vec![1.0_f32, f32::NAN, 3.0];
+        let fallback = vec![10.0_f32, 20.0,    30.0];
+        assert_eq!(fill_nan_from(&primary, &fallback), vec![1.0, 20.0, 3.0]);
+    }
+
+    #[test]
+    fn test_fill_nan_from_no_nans_unchanged() {
+        let primary  = vec![1.0_f32, 2.0, 3.0];
+        let fallback = vec![10.0_f32, 20.0, 30.0];
+        assert_eq!(fill_nan_from(&primary, &fallback), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_fill_nan_from_all_nans_uses_fallback() {
+        let primary  = vec![f32::NAN, f32::NAN];
+        let fallback = vec![10.0_f32, 20.0];
+        assert_eq!(fill_nan_from(&primary, &fallback), vec![10.0, 20.0]);
+    }
+
+    #[test]
+    fn test_fill_nan_from_nan_fallback_stays_nan() {
+        // if both are NaN, result is NaN
+        let primary  = vec![f32::NAN];
+        let fallback = vec![f32::NAN];
+        assert!(fill_nan_from(&primary, &fallback)[0].is_nan());
+    }
+
+    #[test]
+    fn test_fill_nan_from_preserves_zeros() {
+        // 0.0 is not NaN; it must not be replaced
+        let primary  = vec![0.0_f32, f32::NAN];
+        let fallback = vec![99.0_f32, 99.0];
+        assert_eq!(fill_nan_from(&primary, &fallback), vec![0.0, 99.0]);
+    }
+}

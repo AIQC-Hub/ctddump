@@ -294,3 +294,145 @@ pub enum HeaderFormat {
         dest: PathBuf,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{CoraArgs, NrtArgs};
+    use crate::convert::cora_config::{CoraConfig, QcType};
+    use crate::convert::nrt_config::NrtConfig;
+
+    fn nrt_args(
+        deph_source: bool, no_deph_source: bool,
+        profile_coords: bool, no_profile_coords: bool,
+        pattern: Option<&str>,
+    ) -> NrtArgs {
+        NrtArgs { deph_source, no_deph_source, profile_coords, no_profile_coords,
+                  pattern: pattern.map(str::to_string) }
+    }
+
+    fn cora_args(
+        time_var: Option<&str>, qc_type: Option<QcType>,
+        time_qc: bool, no_time_qc: bool,
+        deph_source: bool, no_deph_source: bool,
+        pattern: Option<&str>,
+    ) -> CoraArgs {
+        CoraArgs { time_var: time_var.map(str::to_string), qc_type,
+                   time_qc, no_time_qc, deph_source, no_deph_source,
+                   pattern: pattern.map(str::to_string) }
+    }
+
+    // ── NrtArgs::apply_to ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_nrt_no_flags_leaves_config_unchanged() {
+        let mut cfg = NrtConfig::nrt_bo(); // deph=true, profile=true
+        nrt_args(false, false, false, false, None).apply_to(&mut cfg);
+        assert!(cfg.has_deph_source);
+        assert!(cfg.has_profile_coords);
+        assert!(cfg.pattern.is_none());
+    }
+
+    #[test]
+    fn test_nrt_deph_source_enables() {
+        let mut cfg = NrtConfig::nrt_ar(); // deph=false
+        nrt_args(true, false, false, false, None).apply_to(&mut cfg);
+        assert!(cfg.has_deph_source);
+    }
+
+    #[test]
+    fn test_nrt_no_deph_source_disables() {
+        let mut cfg = NrtConfig::nrt_bo(); // deph=true
+        nrt_args(false, true, false, false, None).apply_to(&mut cfg);
+        assert!(!cfg.has_deph_source);
+    }
+
+    #[test]
+    fn test_nrt_profile_coords_enables() {
+        let mut cfg = NrtConfig::nrt_ar(); // profile=false
+        nrt_args(false, false, true, false, None).apply_to(&mut cfg);
+        assert!(cfg.has_profile_coords);
+    }
+
+    #[test]
+    fn test_nrt_no_profile_coords_disables() {
+        let mut cfg = NrtConfig::nrt_bo(); // profile=true
+        nrt_args(false, false, false, true, None).apply_to(&mut cfg);
+        assert!(!cfg.has_profile_coords);
+    }
+
+    #[test]
+    fn test_nrt_pattern_sets_pattern() {
+        let mut cfg = NrtConfig::nrt_ar();
+        nrt_args(false, false, false, false, Some("MY_*.nc")).apply_to(&mut cfg);
+        assert_eq!(cfg.pattern.as_deref(), Some("MY_*.nc"));
+    }
+
+    #[test]
+    fn test_nrt_none_pattern_does_not_clear_existing() {
+        let mut cfg = NrtConfig::nrt_ar();
+        cfg.pattern = Some("OLD_*.nc".to_string());
+        nrt_args(false, false, false, false, None).apply_to(&mut cfg);
+        assert_eq!(cfg.pattern.as_deref(), Some("OLD_*.nc")); // unchanged
+    }
+
+    // ── CoraArgs::apply_to ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_cora_no_flags_leaves_config_unchanged() {
+        let mut cfg = CoraConfig::cora(); // time_var=TIME, qc=Int, time_qc=true, deph=true
+        cora_args(None, None, false, false, false, false, None).apply_to(&mut cfg);
+        assert_eq!(cfg.time_var, "TIME");
+        assert_eq!(cfg.qc_type, QcType::Int);
+        assert!(cfg.has_time_qc);
+        assert!(cfg.has_deph_source);
+    }
+
+    #[test]
+    fn test_cora_time_var_override() {
+        let mut cfg = CoraConfig::cora(); // time_var=TIME
+        cora_args(Some("JULD"), None, false, false, false, false, None).apply_to(&mut cfg);
+        assert_eq!(cfg.time_var, "JULD");
+    }
+
+    #[test]
+    fn test_cora_qc_type_override_to_char() {
+        let mut cfg = CoraConfig::cora(); // qc_type=Int
+        cora_args(None, Some(QcType::Char), false, false, false, false, None).apply_to(&mut cfg);
+        assert_eq!(cfg.qc_type, QcType::Char);
+    }
+
+    #[test]
+    fn test_cora_no_time_qc_disables() {
+        let mut cfg = CoraConfig::cora(); // has_time_qc=true
+        cora_args(None, None, false, true, false, false, None).apply_to(&mut cfg);
+        assert!(!cfg.has_time_qc);
+    }
+
+    #[test]
+    fn test_cora_time_qc_enables() {
+        let mut cfg = CoraConfig::cora_legacy(); // has_time_qc=false
+        cora_args(None, None, true, false, false, false, None).apply_to(&mut cfg);
+        assert!(cfg.has_time_qc);
+    }
+
+    #[test]
+    fn test_cora_deph_source_enables() {
+        let mut cfg = CoraConfig::cora_legacy(); // has_deph_source=false
+        cora_args(None, None, false, false, true, false, None).apply_to(&mut cfg);
+        assert!(cfg.has_deph_source);
+    }
+
+    #[test]
+    fn test_cora_no_deph_source_disables() {
+        let mut cfg = CoraConfig::cora(); // has_deph_source=true
+        cora_args(None, None, false, false, false, true, None).apply_to(&mut cfg);
+        assert!(!cfg.has_deph_source);
+    }
+
+    #[test]
+    fn test_cora_pattern_sets_pattern() {
+        let mut cfg = CoraConfig::cora();
+        cora_args(None, None, false, false, false, false, Some("CO_*.nc")).apply_to(&mut cfg);
+        assert_eq!(cfg.pattern.as_deref(), Some("CO_*.nc"));
+    }
+}
