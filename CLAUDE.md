@@ -21,6 +21,17 @@ Two permanent branches: `main` (stable releases) and `develop` (integration). `g
 | Cutting a release | `git flow release start/finish <version>` |
 | Urgent fix to `main` | `git flow hotfix start/finish <name>` |
 
+## System Dependencies
+
+The `netcdf` crate links against the HDF5 C library via `hdf5-metno-sys`. Install the development headers before building or running tests:
+
+| Platform | Command |
+|----------|---------|
+| Ubuntu / Debian | `sudo apt-get install libhdf5-dev libnetcdf-dev` |
+| macOS (Homebrew) | `brew install hdf5` |
+
+> **Note:** The CI runner ships HDF5 1.10.10, which emits `HDF5-DIAG` messages when reading NetCDF files that contain a compression attribute introduced in HDF5 1.12 (`_QuantizeBitGroomNumberOfSignificantDigits`). These messages are harmless — the data is read correctly — and do not affect test results.
+
 ## Commands
 
 ```bash
