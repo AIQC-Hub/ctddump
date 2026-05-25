@@ -31,11 +31,42 @@ pub enum Commands {
         #[command(subcommand)]
         format: HeaderFormat,
     },
-    /// Concatenate Parquet files
+    /// Concatenate files from a directory tree into a single file
     #[command(name = "concat")]
     Concat {
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
+        #[command(subcommand)]
+        subcommand: ConcatSubcommand,
+    },
+}
+
+// ── Concat subcommands ────────────────────────────────────────────────────────
+
+#[derive(Subcommand, Debug)]
+pub enum ConcatSubcommand {
+    /// Merge Parquet files into a single Parquet file
+    #[command(name = "convert")]
+    Convert {
+        /// Source directory to search for Parquet files
+        src_dir: PathBuf,
+        /// Output Parquet file
+        output: PathBuf,
+        /// Glob pattern to match filenames (default: *.parquet)
+        #[arg(long, value_name = "GLOB")]
+        pattern: Option<String>,
+        /// Do not re-assign profile_no and observation_no after merging
+        #[arg(long = "no-renumber")]
+        no_renumber: bool,
+    },
+    /// Merge header YAML files into a single YAML file
+    #[command(name = "header")]
+    Header {
+        /// Source directory to search for YAML files
+        src_dir: PathBuf,
+        /// Output YAML file
+        output: PathBuf,
+        /// Glob pattern to match filenames (default: *.yaml)
+        #[arg(long, value_name = "GLOB")]
+        pattern: Option<String>,
     },
 }
 

@@ -5,10 +5,12 @@ use clap::Parser;
 
 pub mod batch;
 pub mod cli;
+pub mod concat;
 pub mod convert;
 pub mod header;
 
-use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat};
+use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat, ConcatSubcommand};
+use concat::ConcatConfig;
 use convert::cora_config::CoraConfig;
 use convert::nrt_config::NrtConfig;
 
@@ -27,14 +29,7 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
         Commands::Convert { format } => dispatch_convert(format),
         Commands::Batch { subcommand } => dispatch_batch(subcommand),
         Commands::Header { format } => dispatch_header(format),
-        Commands::Concat { args } => {
-            println!("Calling Concat module with arguments: {:?}", args);
-            Ok(Config {
-                module: "concat".to_string(),
-                target: "".to_string(),
-                args,
-            })
-        }
+        Commands::Concat { subcommand } => dispatch_concat(subcommand),
     }
 }
 
@@ -173,6 +168,23 @@ fn dispatch_header(format: HeaderFormat) -> Result<Config, Box<dyn Error>> {
     match format {
         HeaderFormat::Nrt { src, dest } => header::nrt::run(&path_args(src, dest)),
         HeaderFormat::Cora { src, dest } => header::cora::run(&path_args(src, dest)),
+    }
+}
+
+fn dispatch_concat(subcommand: ConcatSubcommand) -> Result<Config, Box<dyn Error>> {
+    match subcommand {
+        ConcatSubcommand::Convert { src_dir, output, pattern, no_renumber } => {
+            let mut config = ConcatConfig::default();
+            if let Some(p) = pattern { config.pattern = p; }
+            if no_renumber { config.renumber = false; }
+            concat::run_concat_parquet(&src_dir, &output, &config)?;
+            Ok(Config { module: "concat".to_string(), target: "convert".to_string(), args: vec![] })
+        }
+        ConcatSubcommand::Header { src_dir, output, pattern } => {
+            let effective_pattern = pattern.as_deref().unwrap_or("*.yaml");
+            concat::run_concat_header(&src_dir, &output, effective_pattern)?;
+            Ok(Config { module: "concat".to_string(), target: "header".to_string(), args: vec![] })
+        }
     }
 }
 
