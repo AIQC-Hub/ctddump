@@ -10,11 +10,17 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Convert a NetCDF file to Parquet or YAML
+    /// Convert a NetCDF file to Parquet
     #[command(name = "convert")]
     Convert {
         #[command(subcommand)]
         format: ConvertFormat,
+    },
+    /// Extract metadata from a NetCDF file to YAML
+    #[command(name = "header")]
+    Header {
+        #[command(subcommand)]
+        format: HeaderFormat,
     },
     /// Concatenate Parquet files
     #[command(name = "concat")]
@@ -70,14 +76,6 @@ pub enum ConvertFormat {
         /// Output Parquet file
         dest: PathBuf,
     },
-    /// NRT metadata (.nc -> .yaml)
-    #[command(name = "nrt_head")]
-    NrtHead {
-        /// Source NetCDF file
-        src: PathBuf,
-        /// Output YAML file
-        dest: PathBuf,
-    },
     /// CORA current format (.nc -> .parquet)
     #[command(name = "cora")]
     Cora {
@@ -100,9 +98,21 @@ pub enum ConvertFormat {
         /// Output Parquet file
         dest: PathBuf,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum HeaderFormat {
+    /// NRT metadata (.nc -> .yaml)
+    #[command(name = "nrt")]
+    Nrt {
+        /// Source NetCDF file
+        src: PathBuf,
+        /// Output YAML file
+        dest: PathBuf,
+    },
     /// CORA metadata (.nc -> .yaml)
-    #[command(name = "cora_head")]
-    CoraHead {
+    #[command(name = "cora")]
+    Cora {
         /// Source NetCDF file
         src: PathBuf,
         /// Output YAML file

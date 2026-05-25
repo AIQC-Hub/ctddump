@@ -5,8 +5,9 @@ use clap::Parser;
 
 pub mod cli;
 pub mod convert;
+pub mod header;
 
-use cli::{Cli, Commands, ConvertFormat};
+use cli::{Cli, Commands, ConvertFormat, HeaderFormat};
 use convert::cora_config::CoraConfig;
 use convert::nrt_config::NrtConfig;
 
@@ -23,6 +24,7 @@ pub struct Config {
 pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
     match cli.command {
         Commands::Convert { format } => dispatch_convert(format),
+        Commands::Header { format } => dispatch_header(format),
         Commands::Concat { args } => {
             println!("Calling Concat module with arguments: {:?}", args);
             Ok(Config {
@@ -63,9 +65,6 @@ fn dispatch_convert(format: ConvertFormat) -> Result<Config, Box<dyn Error>> {
             let nrt_config = load_or_default(config, NrtConfig::nrt_gl)?;
             convert::nrt::run(&path_args(src, dest), nrt_config, "nrt_gl")
         }
-        ConvertFormat::NrtHead { src, dest } => {
-            convert::nrt_head::run(&path_args(src, dest))
-        }
         ConvertFormat::Cora { config, src, dest } => {
             let cora_config = load_or_default(config, CoraConfig::cora)?;
             convert::cora::run(&path_args(src, dest), cora_config, "cora")
@@ -74,9 +73,13 @@ fn dispatch_convert(format: ConvertFormat) -> Result<Config, Box<dyn Error>> {
             let cora_config = load_or_default(config, CoraConfig::cora_legacy)?;
             convert::cora::run(&path_args(src, dest), cora_config, "cora_legacy")
         }
-        ConvertFormat::CoraHead { src, dest } => {
-            convert::cora_head::run(&path_args(src, dest))
-        }
+    }
+}
+
+fn dispatch_header(format: HeaderFormat) -> Result<Config, Box<dyn Error>> {
+    match format {
+        HeaderFormat::Nrt { src, dest } => header::nrt::run(&path_args(src, dest)),
+        HeaderFormat::Cora { src, dest } => header::cora::run(&path_args(src, dest)),
     }
 }
 

@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **NRT** (Near Real Time): data from various regions — Arctic Sea (AR), Baltic Sea (BO), Mediterranean Sea (MO), and Global (GL)
 - **CORA** (Copernicus Ocean Reanalysis): historical re-processed CTD profiles (`cora` for current format, `cora_legacy` for older files)
 
+The CLI exposes three top-level commands: `convert` (NetCDF → Parquet), `header` (NetCDF → YAML metadata), and `concat` (future).
+
 ## Git Workflow
 
 This repository uses **gitflow** (`git-flow` AVH Edition is installed). Always use `git flow` commands to manage branches — do not create feature/release/hotfix branches manually.
@@ -66,6 +68,8 @@ scripts/fetch_test_data.sh
 
 Built with `clap` — every command and subcommand supports `-h`/`--help`.
 
+### `convert` — NetCDF → Parquet
+
 ```
 ctddump convert <subcommand> [--config <file.toml>] <src_file> <target_file>
 ```
@@ -76,10 +80,19 @@ ctddump convert <subcommand> [--config <file.toml>] <src_file> <target_file>
 | `nrt_bo` | NRT Baltic Sea `.nc` | `.parquet` | `NrtConfig` |
 | `nrt_mo` | NRT Mediterranean Sea `.nc` | `.parquet` | `NrtConfig` |
 | `nrt_gl` | NRT Global `.nc` | `.parquet` | `NrtConfig` |
-| `nrt_head` | Any NRT `.nc` | `.yaml` metadata | — |
 | `cora` | CORA `.nc` (current format) | `.parquet` | `CoraConfig` |
 | `cora_legacy` | CORA `.nc` (older format) | `.parquet` | `CoraConfig` |
-| `cora_head` | CORA `.nc` | `.yaml` metadata | — |
+
+### `header` — NetCDF → YAML metadata
+
+```
+ctddump header <subcommand> <src_file> <target_file>
+```
+
+| Subcommand | Input | Output |
+|------------|-------|--------|
+| `nrt` | Any NRT `.nc` | `.yaml` metadata |
+| `cora` | Any CORA `.nc` | `.yaml` metadata |
 
 ### Config files
 
@@ -103,17 +116,21 @@ has_deph_source = true  # whether DEPH variable exists in the source file
 
 Dispatch is handled by `clap` in two stages:
 
-1. **`src/cli.rs`** — defines the full CLI structure (`Cli`, `Commands`, `ConvertFormat`) using clap derive macros. Each format subcommand carries an optional `--config` path plus `src` and `dest` positional args.
-2. **`src/lib.rs`** — `run(cli)` matches on `ConvertFormat`, loads the TOML config (or falls back to the embedded default via `load_or_default()`), and calls the appropriate converter module.
+1. **`src/cli.rs`** — defines the full CLI structure (`Cli`, `Commands`, `ConvertFormat`, `HeaderFormat`) using clap derive macros. Each format subcommand carries an optional `--config` path (convert only) plus `src` and `dest` positional args.
+2. **`src/lib.rs`** — `run(cli)` dispatches to `dispatch_convert()` or `dispatch_header()`, loads the TOML config (or falls back to the embedded default via `load_or_default()`), and calls the appropriate module.
 
-Each converter module follows the same pattern:
+### Convert modules (`src/convert/`)
+Each converter follows the same pattern:
 - `run(args, config, target)` builds a `ConvertConfig` (src/dest paths) and calls `netcdf_to_parquet()`
 - The internal collection function opens the NetCDF, extracts variables using shared utilities from `common.rs`, assembles a Polars `DataFrame`, and writes Parquet via `ParquetWriter`
 
-### Converter modules
 - **`src/convert/nrt.rs`** — unified NRT converter for all four regions; behaviour controlled by `NrtConfig`
 - **`src/convert/cora.rs`** — unified CORA converter for current and legacy formats; behaviour controlled by `CoraConfig`
-- **`src/convert/nrt_head.rs`** / **`src/convert/cora_head.rs`** — metadata extraction to YAML
+
+### Header modules (`src/header/`)
+- **`src/header/nrt.rs`** — NRT metadata extraction to YAML
+- **`src/header/cora.rs`** — CORA metadata extraction to YAML
+- **`src/header/common.rs`** — shared utilities: `collect_dimensions()`, `collect_global_attributes()`, `collect_variables_and_metadata()`
 
 ### Key shared utilities (`src/convert/common.rs`)
 - `convert_time_value()` — converts days-since-1950-01-01 (standard oceanographic epoch) to Unix milliseconds

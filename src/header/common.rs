@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use netcdf;
 use serde::{Serialize, Deserialize};
 
-use super::common;
+use crate::convert::common;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VariableMetadata {
@@ -28,10 +28,9 @@ pub fn collect_global_attributes(file: &netcdf::File, attr_names: &[&str]) -> Ha
     for &attr_name in attr_names {
         let attr_val = match file.attribute(attr_name) {
             Some(attr) => {
-                // get_string_value returns Option<String>
                 common::get_string_value(attr.value().unwrap()).unwrap_or_else(|| "".to_string())
             }
-            None => "".to_string(), // Attribute missing
+            None => "".to_string(),
         };
 
         global_attributes.insert(attr_name.to_string(), attr_val);

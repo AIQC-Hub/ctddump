@@ -1,20 +1,6 @@
 use ctddump::{handle_dispatch, Config};
 
 #[test]
-fn test_convert_nrt_head() {
-    let args = vec!["convert".to_string(), "nrt_head".to_string(), "./tests/test_data/AR_PR_CT_ITP-71.nc".to_string(), "./tests/test_data/AR_PR_CT_ITP-71.yaml".to_string()];
-    let result = handle_dispatch(&args);
-
-    let expected = Config {
-        module: "convert".to_string(),
-        target: "nrt_head".to_string(),
-        args: vec!["./tests/test_data/AR_PR_CT_ITP-71.nc".to_string(), "./tests/test_data/AR_PR_CT_ITP-71.yaml".to_string()],
-    };
-
-    assert_eq!(result.unwrap(), expected);
-}
-
-#[test]
 fn test_convert_nrt_ar_1() {
     let args = vec!["convert".to_string(), "nrt_ar".to_string(), "./tests/test_data/AR_PR_CT_ITP-71.nc".to_string(), "./tests/test_data/AR_PR_CT_ITP-71.parquet".to_string()];
     let result = handle_dispatch(&args);
@@ -149,20 +135,6 @@ fn test_convert_nrt_gl_1() {
         module: "convert".to_string(),
         target: "nrt_gl".to_string(),
         args: vec!["./tests/test_data/GL_PR_CT_EXEC004K.nc".to_string(), "./tests/test_data/GL_PR_CT_EXEC004K.parquet".to_string()],
-    };
-
-    assert_eq!(result.unwrap(), expected);
-}
-
-#[test]
-fn test_convert_cora_head() {
-    let args = vec!["convert".to_string(), "cora_head".to_string(), "./tests/test_data/CO_DMQCGL01_20201010_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_20201010_PR_CT.yaml".to_string()];
-    let result = handle_dispatch(&args);
-
-    let expected = Config {
-        module: "convert".to_string(),
-        target: "cora_head".to_string(),
-        args: vec!["./tests/test_data/CO_DMQCGL01_20201010_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_20201010_PR_CT.yaml".to_string()],
     };
 
     assert_eq!(result.unwrap(), expected);
