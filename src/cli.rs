@@ -22,6 +22,12 @@ pub enum Commands {
         #[command(subcommand)]
         format: HeaderFormat,
     },
+    /// Batch-convert all NetCDF files in a directory tree to Parquet
+    #[command(name = "batch")]
+    Batch {
+        #[command(subcommand)]
+        format: BatchFormat,
+    },
     /// Concatenate Parquet files
     #[command(name = "concat")]
     Concat {
@@ -97,6 +103,61 @@ pub enum ConvertFormat {
         src: PathBuf,
         /// Output Parquet file
         dest: PathBuf,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum BatchFormat {
+    /// NRT Arctic Sea: batch convert .nc → .parquet
+    #[command(name = "nrt_ar")]
+    NrtAr {
+        #[arg(short, long)] config: Option<PathBuf>,
+        /// Output directory (flat). Defaults to same directory as each input file.
+        #[arg(short, long)] output: Option<PathBuf>,
+        /// Number of threads (defaults to all available CPU cores)
+        #[arg(short, long)] threads: Option<usize>,
+        /// Source directory to search recursively for .nc files
+        src_dir: PathBuf,
+    },
+    /// NRT Baltic Sea: batch convert .nc → .parquet
+    #[command(name = "nrt_bo")]
+    NrtBo {
+        #[arg(short, long)] config: Option<PathBuf>,
+        #[arg(short, long)] output: Option<PathBuf>,
+        #[arg(short, long)] threads: Option<usize>,
+        src_dir: PathBuf,
+    },
+    /// NRT Mediterranean Sea: batch convert .nc → .parquet
+    #[command(name = "nrt_mo")]
+    NrtMo {
+        #[arg(short, long)] config: Option<PathBuf>,
+        #[arg(short, long)] output: Option<PathBuf>,
+        #[arg(short, long)] threads: Option<usize>,
+        src_dir: PathBuf,
+    },
+    /// NRT Global: batch convert .nc → .parquet
+    #[command(name = "nrt_gl")]
+    NrtGl {
+        #[arg(short, long)] config: Option<PathBuf>,
+        #[arg(short, long)] output: Option<PathBuf>,
+        #[arg(short, long)] threads: Option<usize>,
+        src_dir: PathBuf,
+    },
+    /// CORA current format: batch convert .nc → .parquet
+    #[command(name = "cora")]
+    Cora {
+        #[arg(short, long)] config: Option<PathBuf>,
+        #[arg(short, long)] output: Option<PathBuf>,
+        #[arg(short, long)] threads: Option<usize>,
+        src_dir: PathBuf,
+    },
+    /// CORA legacy format: batch convert .nc → .parquet
+    #[command(name = "cora_legacy")]
+    CoraLegacy {
+        #[arg(short, long)] config: Option<PathBuf>,
+        #[arg(short, long)] output: Option<PathBuf>,
+        #[arg(short, long)] threads: Option<usize>,
+        src_dir: PathBuf,
     },
 }
 

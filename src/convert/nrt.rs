@@ -129,6 +129,15 @@ fn collect_nrt_data(
     Ok(df)
 }
 
+/// Convert a single NetCDF file to Parquet. Called by both `run` and the batch processor.
+pub fn convert_file(src: &str, dest: &str, config: &NrtConfig) -> Result<(), Box<dyn Error>> {
+    let convert_config = ConvertConfig {
+        src_file: src.to_string(),
+        target_file: dest.to_string(),
+    };
+    netcdf_to_parquet(&convert_config, config)
+}
+
 pub fn run(args: &[String], nrt_config: NrtConfig, target: &str) -> Result<Config, Box<dyn Error>> {
     let config = ConvertConfig::build(args).unwrap_or_else(|err| {
         eprintln!("Problem parsing arguments: {err}");

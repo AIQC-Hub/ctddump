@@ -3,11 +3,12 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+pub mod batch;
 pub mod cli;
 pub mod convert;
 pub mod header;
 
-use cli::{Cli, Commands, ConvertFormat, HeaderFormat};
+use cli::{Cli, Commands, ConvertFormat, BatchFormat, HeaderFormat};
 use convert::cora_config::CoraConfig;
 use convert::nrt_config::NrtConfig;
 
@@ -24,6 +25,7 @@ pub struct Config {
 pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
     match cli.command {
         Commands::Convert { format } => dispatch_convert(format),
+        Commands::Batch { format } => dispatch_batch(format),
         Commands::Header { format } => dispatch_header(format),
         Commands::Concat { args } => {
             println!("Calling Concat module with arguments: {:?}", args);
@@ -72,6 +74,53 @@ fn dispatch_convert(format: ConvertFormat) -> Result<Config, Box<dyn Error>> {
         ConvertFormat::CoraLegacy { config, src, dest } => {
             let cora_config = load_or_default(config, CoraConfig::cora_legacy)?;
             convert::cora::run(&path_args(src, dest), cora_config, "cora_legacy")
+        }
+    }
+}
+
+fn dispatch_batch(format: BatchFormat) -> Result<Config, Box<dyn Error>> {
+    match format {
+        BatchFormat::NrtAr { config, src_dir, output, threads } => {
+            let nrt_config = load_or_default(config, NrtConfig::nrt_ar)?;
+            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+                convert::nrt::convert_file(src, dest, &nrt_config)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "nrt_ar".to_string(), args: vec![] })
+        }
+        BatchFormat::NrtBo { config, src_dir, output, threads } => {
+            let nrt_config = load_or_default(config, NrtConfig::nrt_bo)?;
+            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+                convert::nrt::convert_file(src, dest, &nrt_config)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "nrt_bo".to_string(), args: vec![] })
+        }
+        BatchFormat::NrtMo { config, src_dir, output, threads } => {
+            let nrt_config = load_or_default(config, NrtConfig::nrt_mo)?;
+            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+                convert::nrt::convert_file(src, dest, &nrt_config)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "nrt_mo".to_string(), args: vec![] })
+        }
+        BatchFormat::NrtGl { config, src_dir, output, threads } => {
+            let nrt_config = load_or_default(config, NrtConfig::nrt_gl)?;
+            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+                convert::nrt::convert_file(src, dest, &nrt_config)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "nrt_gl".to_string(), args: vec![] })
+        }
+        BatchFormat::Cora { config, src_dir, output, threads } => {
+            let cora_config = load_or_default(config, CoraConfig::cora)?;
+            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+                convert::cora::convert_file(src, dest, &cora_config)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "cora".to_string(), args: vec![] })
+        }
+        BatchFormat::CoraLegacy { config, src_dir, output, threads } => {
+            let cora_config = load_or_default(config, CoraConfig::cora_legacy)?;
+            batch::run_batch(&src_dir, output.as_deref(), threads, |src, dest| {
+                convert::cora::convert_file(src, dest, &cora_config)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "cora_legacy".to_string(), args: vec![] })
         }
     }
 }

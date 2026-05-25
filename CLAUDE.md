@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **NRT** (Near Real Time): data from various regions — Arctic Sea (AR), Baltic Sea (BO), Mediterranean Sea (MO), and Global (GL)
 - **CORA** (Copernicus Ocean Reanalysis): historical re-processed CTD profiles (`cora` for current format, `cora_legacy` for older files)
 
-The CLI exposes three top-level commands: `convert` (NetCDF → Parquet), `header` (NetCDF → YAML metadata), and `concat` (future).
+The CLI exposes four top-level commands: `convert` (single-file NetCDF → Parquet), `batch` (directory-tree NetCDF → Parquet with multi-threading), `header` (NetCDF → YAML metadata), and `concat` (future).
 
 ## Git Workflow
 
@@ -76,6 +76,27 @@ ctddump convert <subcommand> [--config <file.toml>] <src_file> <target_file>
 | `cora` | CORA `.nc` (current format) | `.parquet` | `CoraConfig` |
 | `cora_legacy` | CORA `.nc` (older format) | `.parquet` | `CoraConfig` |
 
+### `batch` — directory-tree NetCDF → Parquet (multi-threaded)
+
+```
+ctddump batch <subcommand> [--config <file.toml>] [--output <dest_dir>] [--threads <n>] <src_dir>
+```
+
+Recursively finds all `.nc` files under `<src_dir>` and converts them in parallel.
+Output filenames keep the source stem and replace the extension with `.parquet`.
+If `--output` is omitted, each file is written alongside its source.
+If `--output` is given, all files land flat in that directory — an error is raised before
+conversion starts if any two sources would produce the same output filename.
+
+| Subcommand | Format |
+|------------|--------|
+| `nrt_ar` | NRT Arctic Sea |
+| `nrt_bo` | NRT Baltic Sea |
+| `nrt_mo` | NRT Mediterranean Sea |
+| `nrt_gl` | NRT Global |
+| `cora` | CORA current format |
+| `cora_legacy` | CORA legacy format |
+
 ### `header` — NetCDF → YAML metadata
 
 ```
@@ -109,16 +130,22 @@ has_deph_source = true  # whether DEPH variable exists in the source file
 
 Dispatch is handled by `clap` in two stages:
 
-1. **`src/cli.rs`** — defines the full CLI structure (`Cli`, `Commands`, `ConvertFormat`, `HeaderFormat`) using clap derive macros. Each format subcommand carries an optional `--config` path (convert only) plus `src` and `dest` positional args.
-2. **`src/lib.rs`** — `run(cli)` dispatches to `dispatch_convert()` or `dispatch_header()`, loads the TOML config (or falls back to the embedded default via `load_or_default()`), and calls the appropriate module.
+1. **`src/cli.rs`** — defines the full CLI structure (`Cli`, `Commands`, `ConvertFormat`, `BatchFormat`, `HeaderFormat`) using clap derive macros.
+2. **`src/lib.rs`** — `run(cli)` dispatches to `dispatch_convert()`, `dispatch_batch()`, or `dispatch_header()`, loads the TOML config (or falls back to the embedded default via `load_or_default()`), and calls the appropriate module.
 
 ### Convert modules (`src/convert/`)
 Each converter follows the same pattern:
 - `run(args, config, target)` builds a `ConvertConfig` (src/dest paths) and calls `netcdf_to_parquet()`
 - The internal collection function opens the NetCDF, extracts variables using shared utilities from `common.rs`, assembles a Polars `DataFrame`, and writes Parquet via `ParquetWriter`
 
-- **`src/convert/nrt.rs`** — unified NRT converter for all four regions; behaviour controlled by `NrtConfig`
-- **`src/convert/cora.rs`** — unified CORA converter for current and legacy formats; behaviour controlled by `CoraConfig`
+- **`src/convert/nrt.rs`** — unified NRT converter; exposes `convert_file()` (used by both `run` and batch) and `run()` (single-file CLI entry point)
+- **`src/convert/cora.rs`** — unified CORA converter; same structure as `nrt.rs`
+
+### Batch module (`src/batch.rs`)
+- `collect_nc_files()` — recursively walk a directory for `.nc` files (`walkdir`)
+- `compute_output_pairs()` — derive flat or in-place output paths
+- `check_duplicates()` — pre-flight duplicate detection
+- `run_batch()` — parallel execution via `rayon`; accepts an optional thread count
 
 ### Header modules (`src/header/`)
 - **`src/header/nrt.rs`** — NRT metadata extraction to YAML
