@@ -84,6 +84,22 @@ fn test_convert_nrt_bo_4() {
     assert_eq!(result.unwrap(), expected);
 }
 
+/// BO_PR_CT_KBH1723.nc has DEPLOY_LONGITUDE/DEPLOY_LATITUDE (no PRECISE_*)
+/// so this exercises the deployment-index expansion path.
+#[test]
+fn test_convert_nrt_bo_5() {
+    let args = vec!["convert".to_string(), "nrt_bo".to_string(), "./tests/test_data/BO_PR_CT_KBH1723.nc".to_string(), "./tests/test_data/BO_PR_CT_KBH1723.parquet".to_string()];
+    let result = handle_dispatch(&args);
+
+    let expected = Config {
+        module: "convert".to_string(),
+        target: "nrt_bo".to_string(),
+        args: vec!["./tests/test_data/BO_PR_CT_KBH1723.nc".to_string(), "./tests/test_data/BO_PR_CT_KBH1723.parquet".to_string()],
+    };
+
+    assert_eq!(result.unwrap(), expected);
+}
+
 #[test]
 fn test_convert_nrt_mo_1() {
     let args = vec!["convert".to_string(), "nrt_mo".to_string(), "./tests/test_data/MO_PR_CT_SicilyChannel_1990.nc".to_string(), "./tests/test_data/MO_PR_CT_SicilyChannel_1990.parquet".to_string()];

@@ -124,7 +124,8 @@ Each NRT and CORA subcommand accepts an optional `--config` / `-c` TOML file to 
 **NRT config** (`src/convert/nrt_config.rs`):
 ```toml
 has_deph_source = true      # whether DEPH variable exists in the source file
-has_precise_coords = false  # whether to use PRECISE_LONGITUDE/PRECISE_LATITUDE
+has_profile_coords = false  # whether to derive profile_longitude/profile_latitude
+                            # (tries PRECISE_* first, then DEPLOY_* via DEPLOYMENT index)
 ```
 
 **CORA config** (`src/convert/cora_config.rs`):
@@ -180,7 +181,8 @@ All converters produce a uniform, observation-level flat table with integer QC c
 | `profile_time` | `f64` | days since 1950-01-01 |
 | `profile_timestamp` | `Datetime(ms)` | Unix milliseconds |
 | `observation_no` | `u32` | |
-| `longitude` / `latitude` | `f32` or `f64` | NRT: f32, CORA: f64 |
+| `longitude` / `latitude` | `f32` or `f64` | NRT: f32, CORA: f64; NaN-filled from profile coords |
+| `profile_longitude` / `profile_latitude` | `f32` (NRT) / `f64` (CORA) | NRT: from `PRECISE_*` or expanded `DEPLOY_*`; NaN when `has_profile_coords = false`. CORA: always NaN (no profile source). |
 | `time_qc` / `position_qc` | `i8` | filled with `i8::MIN` if absent in source |
 | `filename` | `String` | source file stem |
 | `temp`, `psal`, `pres`, `deph` | `f32` | NaN where missing |

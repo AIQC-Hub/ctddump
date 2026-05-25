@@ -360,3 +360,65 @@ where
 
     (converted_deph, converted_deph_qc, deph_conv)
 }
+
+/// Expand a deployment-indexed coordinate variable (`DEPLOY_LATITUDE` or
+/// `DEPLOY_LONGITUDE`) into a flat `Vec<f32>` of length `time_len × obs_len`.
+///
+/// The `DEPLOYMENT` variable holds the 0-based TIME index at which each
+/// deployment begins. For each TIME step `t`, the active deployment is the
+/// one with the latest start index that is still ≤ `t`. Each TIME value is
+/// then repeated `obs_len` times to match the observation-level output.
+pub fn expand_deploy_coords(
+    file: &netcdf::File,
+    var_name: &str,
+    time_len: usize,
+    obs_len: usize,
+) -> Result<Vec<f32>, Box<dyn Error>> {
+    let vec_size = time_len * obs_len;
+
+    let deploy_var = match file.variable("DEPLOYMENT") {
+        Some(v) => v,
+        None => return Ok(vec![f32::NAN; vec_size]),
+    };
+    let deploy_indices: Vec<i32> = deploy_var.get::<i32, _>(..)?.iter().cloned().collect();
+
+    let coord_var = match file.variable(var_name) {
+        Some(v) => v,
+        None => return Ok(vec![f32::NAN; vec_size]),
+    };
+    let coord_values: Vec<f32> = coord_var.get::<f32, _>(..)?.iter().cloned().collect();
+
+    if deploy_indices.len() != coord_values.len() {
+        return Err(format!(
+            "DEPLOYMENT and {} have different lengths ({} vs {})",
+            var_name,
+            deploy_indices.len(),
+            coord_values.len()
+        )
+        .into());
+    }
+
+    // Sort deployments by their start TIME index (ascending)
+    let mut sorted: Vec<(usize, f32)> = deploy_indices
+        .iter()
+        .zip(coord_values.iter())
+        .map(|(&idx, &val)| (idx.max(0) as usize, val))
+        .collect();
+    sorted.sort_by_key(|&(idx, _)| idx);
+
+    let mut result = Vec::with_capacity(vec_size);
+    for t in 0..time_len {
+        // Latest deployment whose start index ≤ t
+        let value = sorted
+            .iter()
+            .rev()
+            .find(|&&(start, _)| start <= t)
+            .map(|&(_, val)| val)
+            .unwrap_or(f32::NAN);
+        for _ in 0..obs_len {
+            result.push(value);
+        }
+    }
+
+    Ok(result)
+}

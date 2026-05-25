@@ -97,6 +97,11 @@ fn collect_cora_data(
             (pres.clone(), pres_qc.clone(), pres_conv, deph, deph_qc, deph_conv)
         };
 
+    // CORA has no profile-specific coordinate source; add NaN columns so the
+    // output schema matches the NRT schema (profile_longitude / profile_latitude).
+    let profile_longitude: Vec<f64> = vec![f64::NAN; vec_size];
+    let profile_latitude: Vec<f64> = vec![f64::NAN; vec_size];
+
     let timestamp_series = Series::new("profile_timestamp".into(), timestamp);
     let df = DataFrame::new(vec![
         Series::new("platform_code".into(), platform_code),
@@ -106,6 +111,8 @@ fn collect_cora_data(
         Series::new("observation_no".into(), obs_no),
         Series::new("longitude".into(), longitude),
         Series::new("latitude".into(), latitude),
+        Series::new("profile_longitude".into(), profile_longitude),
+        Series::new("profile_latitude".into(), profile_latitude),
         Series::new("time_qc".into(), time_qc),
         Series::new("position_qc".into(), position_qc),
         Series::new("filename".into(), filename),

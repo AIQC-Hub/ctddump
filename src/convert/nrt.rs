@@ -32,6 +32,43 @@ fn netcdf_to_parquet(
     Ok(())
 }
 
+/// Resolve profile-level coordinates from the best available source:
+///   1. PRECISE_LONGITUDE / PRECISE_LATITUDE (preferred)
+///   2. DEPLOY_LONGITUDE / DEPLOY_LATITUDE expanded via the DEPLOYMENT index
+///   3. NaN — if neither source exists
+///
+/// Returns (profile_longitude, profile_latitude), each of length time_len × obs_len.
+fn get_profile_coords(
+    file: &netcdf::File,
+    time_len: usize,
+    obs_len: usize,
+) -> Result<(Vec<f32>, Vec<f32>), Box<dyn Error>> {
+    let vec_size = time_len * obs_len;
+
+    if file.variable("PRECISE_LONGITUDE").is_some() {
+        let lon = common::get_coordinate_value(file, "PRECISE_LONGITUDE".to_string(), time_len, obs_len, f32::NAN)?;
+        let lat = common::get_coordinate_value(file, "PRECISE_LATITUDE".to_string(), time_len, obs_len, f32::NAN)?;
+        return Ok((lon, lat));
+    }
+
+    if file.variable("DEPLOY_LONGITUDE").is_some() {
+        let lon = common::expand_deploy_coords(file, "DEPLOY_LONGITUDE", time_len, obs_len)?;
+        let lat = common::expand_deploy_coords(file, "DEPLOY_LATITUDE", time_len, obs_len)?;
+        return Ok((lon, lat));
+    }
+
+    Ok((vec![f32::NAN; vec_size], vec![f32::NAN; vec_size]))
+}
+
+/// Fill NaN values in `primary` from `fallback`.
+fn fill_nan_from(primary: &[f32], fallback: &[f32]) -> Vec<f32> {
+    primary
+        .iter()
+        .zip(fallback.iter())
+        .map(|(&p, &f)| if p.is_nan() { f } else { p })
+        .collect()
+}
+
 fn collect_nrt_data(
     src_file: &str,
     config: &NrtConfig,
@@ -51,15 +88,22 @@ fn collect_nrt_data(
     let time: Vec<f64> = common::get_coordinate_value(&file, "TIME".to_string(), time_len, obs_len, f64::NAN)?;
     let timestamp: Vec<i64> = common::convert_time_value(&time)?;
 
-    // Coordinates: use PRECISE_* if configured
+    // Standard coordinates (always read)
     let longitude_raw: Vec<f32> = common::get_coordinate_value(&file, "LONGITUDE".to_string(), time_len, obs_len, f32::NAN)?;
     let latitude_raw: Vec<f32> = common::get_coordinate_value(&file, "LATITUDE".to_string(), time_len, obs_len, f32::NAN)?;
-    let (longitude, latitude) = if config.has_precise_coords {
-        let prc_lon = common::get_coordinate_value(&file, "PRECISE_LONGITUDE".to_string(), time_len, obs_len, longitude_raw[0])?;
-        let prc_lat = common::get_coordinate_value(&file, "PRECISE_LATITUDE".to_string(), time_len, obs_len, latitude_raw[0])?;
-        (prc_lon, prc_lat)
+
+    // Profile-level coordinates (PRECISE_* preferred over DEPLOY_*).
+    // Cross-fill is only applied when profile coords are enabled; otherwise
+    // profile columns are left as NaN so the absence of a profile source is clear.
+    let (longitude, latitude, profile_longitude, profile_latitude) = if config.has_profile_coords {
+        let (plon_raw, plat_raw) = get_profile_coords(&file, time_len, obs_len)?;
+        let lon  = fill_nan_from(&longitude_raw, &plon_raw);
+        let lat  = fill_nan_from(&latitude_raw,  &plat_raw);
+        let plon = fill_nan_from(&plon_raw, &longitude_raw);
+        let plat = fill_nan_from(&plat_raw, &latitude_raw);
+        (lon, lat, plon, plat)
     } else {
-        (longitude_raw, latitude_raw)
+        (longitude_raw, latitude_raw, vec![f32::NAN; vec_size], vec![f32::NAN; vec_size])
     };
 
     let time_qc: Vec<i8> = common::get_coordinate_value(&file, "TIME_QC".to_string(), time_len, obs_len, i8::MIN)?;
@@ -83,22 +127,29 @@ fn collect_nrt_data(
     let pres: Vec<f32> = common::get_var_float_value(&file, "PRES".to_string(), pres_fill, vec_size)?;
     let pres_qc: Vec<i8> = common::get_qc_value(&file, "PRES_QC".to_string(), vec_size)?;
 
-    // PRES / DEPH conversion
+    // PRES / DEPH conversion.
+    // When profile coords are enabled, use profile_latitude (already cross-filled
+    // from latitude where NaN) for better accuracy. When disabled, profile_latitude
+    // is all-NaN, so fall back to the standard latitude to avoid NaN conversions.
+    let conversion_latitude = if config.has_profile_coords {
+        profile_latitude.clone()
+    } else {
+        latitude.clone()
+    };
+
     let (converted_pres, converted_pres_qc, pres_conv, converted_deph, converted_deph_qc, deph_conv) =
         if config.has_deph_source {
-            // Bidirectional: read DEPH from file, fill gaps in each direction
             let deph_fill = common::get_float_fill_value(&file, "DEPH".to_string());
             let deph: Vec<f32> = common::get_var_float_value(&file, "DEPH".to_string(), deph_fill, vec_size)?;
             let deph_qc: Vec<i8> = common::get_qc_value(&file, "DEPH_QC".to_string(), vec_size)?;
-            let (cp, cpq, pc) = common::convert_depth_to_pressure(pres.clone(), pres_qc.clone(), deph.clone(), deph_qc.clone(), pres_fill, latitude.clone());
-            let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), deph_fill, latitude.clone());
+            let (cp, cpq, pc) = common::convert_depth_to_pressure(pres.clone(), pres_qc.clone(), deph.clone(), deph_qc.clone(), pres_fill, conversion_latitude.clone());
+            let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), deph_fill, conversion_latitude.clone());
             (cp, cpq, pc, cd, cdq, dc)
         } else {
-            // No DEPH in source: derive depth from pressure only
             let deph = vec![pres_fill; vec_size];
             let deph_qc = vec![i8::MIN; vec_size];
             let pres_conv = vec![0_i8; vec_size];
-            let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), pres_fill, latitude.clone());
+            let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), pres_fill, conversion_latitude.clone());
             (pres.clone(), pres_qc.clone(), pres_conv, cd, cdq, dc)
         };
 
@@ -111,6 +162,8 @@ fn collect_nrt_data(
         Series::new("observation_no".into(), obs_no),
         Series::new("longitude".into(), longitude),
         Series::new("latitude".into(), latitude),
+        Series::new("profile_longitude".into(), profile_longitude),
+        Series::new("profile_latitude".into(), profile_latitude),
         Series::new("time_qc".into(), time_qc),
         Series::new("position_qc".into(), position_qc),
         Series::new("filename".into(), filename),
