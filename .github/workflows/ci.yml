@@ -30,6 +30,16 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      - name: Locate HDF5 installation
+        run: |
+          echo "=== pkg-config ==="
+          pkg-config --modversion hdf5 2>/dev/null || echo "hdf5 not found via pkg-config"
+          pkg-config --modversion hdf5-serial 2>/dev/null || echo "hdf5-serial not found via pkg-config"
+          echo "=== .pc files ==="
+          find /usr -name "hdf5*.pc" 2>/dev/null
+          echo "=== libhdf5 headers ==="
+          find /usr -name "hdf5.h" 2>/dev/null
+
       - name: Download test data
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
