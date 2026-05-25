@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
@@ -117,7 +118,7 @@ fn renumber(lf: LazyFrame) -> LazyFrame {
 /// numbers are globally unique and sequential within each platform.
 ///
 /// Returns the number of input files merged.
-pub fn run_concat(
+pub fn run_concat_parquet(
     src_dir: &Path,
     output_file: &Path,
     config: &ConcatConfig,
@@ -154,6 +155,62 @@ pub fn run_concat(
     let mut out_file = std::fs::File::create(output_file)
         .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
     ParquetWriter::new(&mut out_file).finish(&mut result)?;
+
+    Ok(n)
+}
+
+/// Concatenate all YAML header files matching `pattern` under `src_dir` into a
+/// single YAML file at `output_file`.
+///
+/// Each input file is expected to be a YAML mapping whose top-level keys are
+/// file stems (as written by `ctddump header`).  The merged output is a single
+/// mapping containing every key from every input file.  An error is returned
+/// before writing if any two input files share the same top-level key.
+///
+/// Returns the number of input files merged.
+pub fn run_concat_header(
+    src_dir: &Path,
+    output_file: &Path,
+    pattern: &str,
+) -> Result<usize, Box<dyn Error>> {
+    let files = collect_parquet_files(src_dir, pattern)?;
+    let n = files.len();
+
+    let mut combined: HashMap<String, serde_yaml::Value> = HashMap::new();
+    let mut duplicates: Vec<String> = Vec::new();
+
+    for file in &files {
+        let content = std::fs::read_to_string(file)
+            .map_err(|e| format!("Cannot read {}: {}", file.display(), e))?;
+        let map: HashMap<String, serde_yaml::Value> = serde_yaml::from_str(&content)
+            .map_err(|e| format!("Cannot parse {}: {}", file.display(), e))?;
+        for (key, value) in map {
+            if combined.contains_key(&key) {
+                duplicates.push(format!("  key '{}' in {}", key, file.display()));
+            } else {
+                combined.insert(key, value);
+            }
+        }
+    }
+
+    if !duplicates.is_empty() {
+        return Err(format!(
+            "Duplicate keys detected in YAML files:\n{}",
+            duplicates.join("\n")
+        )
+        .into());
+    }
+
+    if let Some(parent) = output_file.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Cannot create output directory: {}", e))?;
+        }
+    }
+
+    let out_file = std::fs::File::create(output_file)
+        .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
+    serde_yaml::to_writer(out_file, &combined)?;
 
     Ok(n)
 }

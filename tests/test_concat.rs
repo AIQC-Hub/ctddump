@@ -14,13 +14,25 @@ fn setup_src(files: &[&str]) -> (tempfile::TempDir, std::path::PathBuf) {
     (dir, path)
 }
 
-/// Convert a set of NC files to Parquet inside a temp dir and return the dir.
+/// Batch-convert NC files to Parquet, return the output dir.
 fn make_parquet_dir(nc_files: &[&str], subcommand: &str) -> tempfile::TempDir {
     let out_dir = tempfile::tempdir().unwrap();
     let (_src_guard, src_dir) = setup_src(nc_files);
-
     let args: Vec<String> = vec![
         "batch".to_string(), "convert".to_string(), subcommand.to_string(),
+        "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
+        src_dir.to_str().unwrap().to_string(),
+    ];
+    handle_dispatch(&args).unwrap();
+    out_dir
+}
+
+/// Batch-extract header YAML files, return the output dir.
+fn make_yaml_dir(nc_files: &[&str], subcommand: &str) -> tempfile::TempDir {
+    let out_dir = tempfile::tempdir().unwrap();
+    let (_src_guard, src_dir) = setup_src(nc_files);
+    let args: Vec<String> = vec![
+        "batch".to_string(), "header".to_string(), subcommand.to_string(),
         "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
         src_dir.to_str().unwrap().to_string(),
     ];
@@ -33,10 +45,10 @@ fn read_parquet(path: &std::path::Path) -> DataFrame {
     ParquetReader::new(f).finish().unwrap()
 }
 
-// ── basic merge ───────────────────────────────────────────────────────────────
+// ── concat convert: basic merge ───────────────────────────────────────────────
 
 #[test]
-fn test_concat_merges_files_into_one() {
+fn test_concat_convert_merges_files_into_one() {
     let parquet_dir = make_parquet_dir(
         &["./tests/test_data/AR_PR_CT_ITP-71.nc", "./tests/test_data/AR_PR_CT_58KN.nc"],
         "nrt_ar",
@@ -44,24 +56,23 @@ fn test_concat_merges_files_into_one() {
     let output = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
 
     let args = vec![
-        "concat".to_string(),
+        "concat".to_string(), "convert".to_string(),
         parquet_dir.path().to_str().unwrap().to_string(),
         output.path().to_str().unwrap().to_string(),
     ];
     assert!(handle_dispatch(&args).is_ok());
     assert!(output.path().exists());
 
-    // Row count must equal the sum of the two individual files
     let combined = read_parquet(output.path());
     let itp71 = read_parquet(&parquet_dir.path().join("AR_PR_CT_ITP-71.parquet"));
     let kn58  = read_parquet(&parquet_dir.path().join("AR_PR_CT_58KN.parquet"));
     assert_eq!(combined.height(), itp71.height() + kn58.height());
 }
 
-// ── profile_no renumbering ────────────────────────────────────────────────────
+// ── concat convert: profile_no renumbering ────────────────────────────────────
 
 #[test]
-fn test_concat_renumber_profile_no_starts_at_one() {
+fn test_concat_convert_renumber_profile_no_starts_at_one() {
     let parquet_dir = make_parquet_dir(
         &["./tests/test_data/AR_PR_CT_ITP-71.nc", "./tests/test_data/AR_PR_CT_58KN.nc"],
         "nrt_ar",
@@ -69,20 +80,19 @@ fn test_concat_renumber_profile_no_starts_at_one() {
     let output = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
 
     let args = vec![
-        "concat".to_string(),
+        "concat".to_string(), "convert".to_string(),
         parquet_dir.path().to_str().unwrap().to_string(),
         output.path().to_str().unwrap().to_string(),
     ];
     assert!(handle_dispatch(&args).is_ok());
 
     let df = read_parquet(output.path());
-    let profile_no = df.column("profile_no").unwrap();
-    let min = profile_no.min::<u32>().unwrap().unwrap();
+    let min = df.column("profile_no").unwrap().min::<u32>().unwrap().unwrap();
     assert_eq!(min, 1, "profile_no should start at 1");
 }
 
 #[test]
-fn test_concat_renumber_observation_no_starts_at_one_per_profile() {
+fn test_concat_convert_renumber_observation_no_starts_at_one() {
     let parquet_dir = make_parquet_dir(
         &["./tests/test_data/AR_PR_CT_ITP-71.nc"],
         "nrt_ar",
@@ -90,22 +100,21 @@ fn test_concat_renumber_observation_no_starts_at_one_per_profile() {
     let output = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
 
     let args = vec![
-        "concat".to_string(),
+        "concat".to_string(), "convert".to_string(),
         parquet_dir.path().to_str().unwrap().to_string(),
         output.path().to_str().unwrap().to_string(),
     ];
     assert!(handle_dispatch(&args).is_ok());
 
     let df = read_parquet(output.path());
-    let obs_no = df.column("observation_no").unwrap();
-    let min = obs_no.min::<u32>().unwrap().unwrap();
+    let min = df.column("observation_no").unwrap().min::<u32>().unwrap().unwrap();
     assert_eq!(min, 1, "observation_no should start at 1");
 }
 
-// ── --no-renumber ─────────────────────────────────────────────────────────────
+// ── concat convert: --no-renumber ─────────────────────────────────────────────
 
 #[test]
-fn test_concat_no_renumber_preserves_row_count() {
+fn test_concat_convert_no_renumber_preserves_row_count() {
     let parquet_dir = make_parquet_dir(
         &["./tests/test_data/AR_PR_CT_ITP-71.nc", "./tests/test_data/AR_PR_CT_58KN.nc"],
         "nrt_ar",
@@ -113,7 +122,7 @@ fn test_concat_no_renumber_preserves_row_count() {
     let output = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
 
     let args = vec![
-        "concat".to_string(),
+        "concat".to_string(), "convert".to_string(),
         "--no-renumber".to_string(),
         parquet_dir.path().to_str().unwrap().to_string(),
         output.path().to_str().unwrap().to_string(),
@@ -126,11 +135,10 @@ fn test_concat_no_renumber_preserves_row_count() {
     assert_eq!(combined.height(), itp71.height() + kn58.height());
 }
 
-// ── --pattern ────────────────────────────────────────────────────────────────
+// ── concat convert: --pattern ─────────────────────────────────────────────────
 
 #[test]
-fn test_concat_pattern_selects_subset() {
-    // Put two different parquet files in the dir; pattern selects only one
+fn test_concat_convert_pattern_selects_subset() {
     let parquet_dir = make_parquet_dir(
         &["./tests/test_data/AR_PR_CT_ITP-71.nc", "./tests/test_data/AR_PR_CT_58KN.nc"],
         "nrt_ar",
@@ -138,7 +146,7 @@ fn test_concat_pattern_selects_subset() {
     let output = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
 
     let args = vec![
-        "concat".to_string(),
+        "concat".to_string(), "convert".to_string(),
         "--pattern".to_string(), "AR_PR_CT_ITP-71.parquet".to_string(),
         parquet_dir.path().to_str().unwrap().to_string(),
         output.path().to_str().unwrap().to_string(),
@@ -146,23 +154,102 @@ fn test_concat_pattern_selects_subset() {
     assert!(handle_dispatch(&args).is_ok());
 
     let combined = read_parquet(output.path());
-    let itp71   = read_parquet(&parquet_dir.path().join("AR_PR_CT_ITP-71.parquet"));
+    let itp71 = read_parquet(&parquet_dir.path().join("AR_PR_CT_ITP-71.parquet"));
     assert_eq!(combined.height(), itp71.height());
 }
 
-// ── error cases ───────────────────────────────────────────────────────────────
+// ── concat convert: error cases ───────────────────────────────────────────────
 
 #[test]
-fn test_concat_empty_dir_error() {
+fn test_concat_convert_empty_dir_error() {
     let src_dir = tempfile::tempdir().unwrap();
     let output  = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
 
     let args = vec![
-        "concat".to_string(),
+        "concat".to_string(), "convert".to_string(),
         src_dir.path().to_str().unwrap().to_string(),
         output.path().to_str().unwrap().to_string(),
     ];
     let result = handle_dispatch(&args);
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("No files matching"));
+}
+
+// ── concat header: basic merge ────────────────────────────────────────────────
+
+#[test]
+fn test_concat_header_merges_yaml_files() {
+    let yaml_dir = make_yaml_dir(
+        &["./tests/test_data/AR_PR_CT_ITP-71.nc", "./tests/test_data/AR_PR_CT_58KN.nc"],
+        "nrt",
+    );
+    let output = tempfile::NamedTempFile::with_suffix(".yaml").unwrap();
+
+    let args = vec![
+        "concat".to_string(), "header".to_string(),
+        yaml_dir.path().to_str().unwrap().to_string(),
+        output.path().to_str().unwrap().to_string(),
+    ];
+    assert!(handle_dispatch(&args).is_ok());
+    assert!(output.path().exists());
+
+    // Output must contain both file stem keys
+    let content = fs::read_to_string(output.path()).unwrap();
+    assert!(content.contains("AR_PR_CT_ITP-71"), "missing ITP-71 key");
+    assert!(content.contains("AR_PR_CT_58KN"),   "missing 58KN key");
+}
+
+#[test]
+fn test_concat_header_pattern_selects_subset() {
+    let yaml_dir = make_yaml_dir(
+        &["./tests/test_data/AR_PR_CT_ITP-71.nc", "./tests/test_data/AR_PR_CT_58KN.nc"],
+        "nrt",
+    );
+    let output = tempfile::NamedTempFile::with_suffix(".yaml").unwrap();
+
+    let args = vec![
+        "concat".to_string(), "header".to_string(),
+        "--pattern".to_string(), "AR_PR_CT_ITP-71.yaml".to_string(),
+        yaml_dir.path().to_str().unwrap().to_string(),
+        output.path().to_str().unwrap().to_string(),
+    ];
+    assert!(handle_dispatch(&args).is_ok());
+
+    let content = fs::read_to_string(output.path()).unwrap();
+    assert!( content.contains("AR_PR_CT_ITP-71"), "missing ITP-71 key");
+    assert!(!content.contains("AR_PR_CT_58KN"),   "58KN should not be present");
+}
+
+#[test]
+fn test_concat_header_empty_dir_error() {
+    let src_dir = tempfile::tempdir().unwrap();
+    let output  = tempfile::NamedTempFile::with_suffix(".yaml").unwrap();
+
+    let args = vec![
+        "concat".to_string(), "header".to_string(),
+        src_dir.path().to_str().unwrap().to_string(),
+        output.path().to_str().unwrap().to_string(),
+    ];
+    let result = handle_dispatch(&args);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("No files matching"));
+}
+
+#[test]
+fn test_concat_header_duplicate_key_error() {
+    // Two copies of the same YAML file → same top-level key → duplicate error
+    let yaml_dir = make_yaml_dir(&["./tests/test_data/AR_PR_CT_ITP-71.nc"], "nrt");
+    // Write a duplicate of the produced YAML under a different filename but same key inside
+    let src_yaml = yaml_dir.path().join("AR_PR_CT_ITP-71.yaml");
+    fs::copy(&src_yaml, yaml_dir.path().join("AR_PR_CT_ITP-71_copy.yaml")).unwrap();
+
+    let output = tempfile::NamedTempFile::with_suffix(".yaml").unwrap();
+    let args = vec![
+        "concat".to_string(), "header".to_string(),
+        yaml_dir.path().to_str().unwrap().to_string(),
+        output.path().to_str().unwrap().to_string(),
+    ];
+    let result = handle_dispatch(&args);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Duplicate keys"));
 }
