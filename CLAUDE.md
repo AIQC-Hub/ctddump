@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `ctddump` is a Rust CLI tool for converting oceanographic CTD (Conductivity, Temperature, Depth) data from NetCDF format to Parquet (data) or YAML (metadata). It targets data from two oceanographic repositories:
 - **NRT** (Near Real Time): data from various regions — Arctic Sea (AR), Baltic Sea (BO), Mediterranean Sea (MO), and Global (GL)
-- **CORA** (Copernicus Ocean Reanalysis): historical re-processed CTD profiles (`cora` and `cora2` for older files)
+- **CORA** (Copernicus Ocean Reanalysis): historical re-processed CTD profiles (`cora` for current format, `cora_legacy` for older files)
 
 ## Git Workflow
 
@@ -42,10 +42,14 @@ cargo test test_netcdf_nrt_ar_1
 cargo build --features trace
 
 # Run the binary
-cargo run -- <module> [args...]
+cargo run -- <command> [subcommand] [options] <src_file> <target_file>
 # e.g.:
 cargo run -- convert nrt_ar input.nc output.parquet
+cargo run -- convert nrt_bo --config custom.toml input.nc output.parquet
 cargo run -- convert nrt_head input.nc output.yaml
+cargo run -- --help
+cargo run -- convert --help
+cargo run -- convert nrt_ar --help
 ```
 
 ### Test Data
@@ -60,44 +64,82 @@ scripts/fetch_test_data.sh
 
 ## CLI Interface
 
+Built with `clap` — every command and subcommand supports `-h`/`--help`.
+
 ```
-ctddump <module> [subcommand] <src_file> <target_file>
+ctddump convert <subcommand> [--config <file.toml>] <src_file> <target_file>
 ```
 
-| Module | Subcommand | Input | Output |
-|--------|------------|-------|--------|
-| `convert` | `nrt_ar` | NRT Arctic Sea `.nc` | `.parquet` |
-| `convert` | `nrt_bo` | NRT Baltic Sea `.nc` | `.parquet` |
-| `convert` | `nrt_mo` | NRT Mediterranean Sea `.nc` | `.parquet` |
-| `convert` | `nrt_gl` | NRT Global `.nc` | `.parquet` |
-| `convert` | `nrt_head` | Any NRT `.nc` | `.yaml` metadata |
-| `convert` | `cora` | CORA `.nc` (current format) | `.parquet` |
-| `convert` | `cora_legacy` | CORA `.nc` (older format) | `.parquet` |
-| `convert` | `cora_head` | CORA `.nc` | `.yaml` metadata |
+| Subcommand | Input | Output | Config struct |
+|------------|-------|--------|---------------|
+| `nrt_ar` | NRT Arctic Sea `.nc` | `.parquet` | `NrtConfig` |
+| `nrt_bo` | NRT Baltic Sea `.nc` | `.parquet` | `NrtConfig` |
+| `nrt_mo` | NRT Mediterranean Sea `.nc` | `.parquet` | `NrtConfig` |
+| `nrt_gl` | NRT Global `.nc` | `.parquet` | `NrtConfig` |
+| `nrt_head` | Any NRT `.nc` | `.yaml` metadata | — |
+| `cora` | CORA `.nc` (current format) | `.parquet` | `CoraConfig` |
+| `cora_legacy` | CORA `.nc` (older format) | `.parquet` | `CoraConfig` |
+| `cora_head` | CORA `.nc` | `.yaml` metadata | — |
+
+### Config files
+
+Each NRT and CORA subcommand accepts an optional `--config` / `-c` TOML file to override the embedded defaults. Omitting `--config` uses the embedded default for that subcommand.
+
+**NRT config** (`src/netcdf/nrt_config.rs`):
+```toml
+has_deph_source = true      # whether DEPH variable exists in the source file
+has_precise_coords = false  # whether to use PRECISE_LONGITUDE/PRECISE_LATITUDE
+```
+
+**CORA config** (`src/netcdf/cora_config.rs`):
+```toml
+time_var = "TIME"    # time variable name ("TIME" or "JULD" for legacy)
+qc_type = "int"      # QC storage type: "int" (i8) or "char" (converted to i8)
+has_time_qc = true   # whether TIME_QC / POSITION_QC variables exist
+has_deph_source = true  # whether DEPH variable exists in the source file
+```
 
 ## Architecture
 
-Dispatch flows through two levels:
+Dispatch is handled by `clap` in two stages:
 
-1. **`src/lib.rs`** — `handle_dispatch()` parses `args[0]` as a module (`convert`, `concat`) and delegates to the module's `run()` or sub-dispatcher.
-2. **`src/netcdf.rs`** — `handle_target_dispatch()` parses `args[0]` as a format target (e.g., `nrt_ar`) and calls the corresponding submodule's `run()`.
+1. **`src/cli.rs`** — defines the full CLI structure (`Cli`, `Commands`, `ConvertFormat`) using clap derive macros. Each format subcommand carries an optional `--config` path plus `src` and `dest` positional args.
+2. **`src/lib.rs`** — `run(cli)` matches on `ConvertFormat`, loads the TOML config (or falls back to the embedded default via `load_or_default()`), and calls the appropriate converter module.
 
-Each converter submodule (e.g., `src/netcdf/nrt_ar.rs`) follows the same pattern:
-- `run(args)` builds a `ConvertConfig` (src path, target path) and calls `netcdf_to_parquet()` or `netcdf_to_yaml()`
-- The internal collection function opens the NetCDF, extracts variables using shared utilities from `common.rs`, assembles a Polars `DataFrame`, then writes Parquet via `ParquetWriter`
+Each converter module follows the same pattern:
+- `run(args, config, target)` builds a `ConvertConfig` (src/dest paths) and calls `netcdf_to_parquet()`
+- The internal collection function opens the NetCDF, extracts variables using shared utilities from `common.rs`, assembles a Polars `DataFrame`, and writes Parquet via `ParquetWriter`
+
+### Converter modules
+- **`src/netcdf/nrt.rs`** — unified NRT converter for all four regions; behaviour controlled by `NrtConfig`
+- **`src/netcdf/cora.rs`** — unified CORA converter for current and legacy formats; behaviour controlled by `CoraConfig`
+- **`src/netcdf/nrt_head.rs`** / **`src/netcdf/cora_head.rs`** — metadata extraction to YAML
 
 ### Key shared utilities (`src/netcdf/common.rs`)
 - `convert_time_value()` — converts days-since-1950-01-01 (standard oceanographic epoch) to Unix milliseconds
-- `get_coordinate_value()` — reads a 1-D or scalar variable and tiles it to `time_len × obs_len`
+- `get_coordinate_value()` — reads a 1-D or scalar variable and tiles it to `time_len × obs_len`; returns fill values if the variable is absent
 - `get_var_float_value()` — reads float data, replacing fill values with NaN
-- `get_qc_value()` — reads quality-control byte arrays
+- `get_qc_value()` — reads QC flags stored as `i8`
+- `get_qc_value_from_char()` — reads QC flags stored as ASCII digit chars and converts to `i8`
 - `get_char_value()` / `get_char_value2()` / `get_char_vector3()` — read NetCDF `char` arrays (stored as `i8`) into `Vec<String>` with different dimension layouts
 - `convert_depth_to_pressure()` / `convert_pressure_to_depth()` — bidirectional conversion using the `gsw` crate (TEOS-10 standard)
 
-### Output DataFrame schema (parquet converters)
-All converters produce a flat, observation-level table where NRT and CORA formats differ slightly:
-- **NRT**: integer QC codes (`i8`), includes `pres_conv`/`deph_conv` flags indicating derived values
-- **CORA**: character QC codes (`String`), uses `N_PROF × N_LEVELS` dimension layout
+### Output DataFrame schema
+All converters produce a uniform, observation-level flat table with integer QC codes (`i8`):
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `platform_code` | `String` | |
+| `profile_no` | `u32` | |
+| `profile_time` | `f64` | days since 1950-01-01 |
+| `profile_timestamp` | `Datetime(ms)` | Unix milliseconds |
+| `observation_no` | `u32` | |
+| `longitude` / `latitude` | `f32` or `f64` | NRT: f32, CORA: f64 |
+| `time_qc` / `position_qc` | `i8` | filled with `i8::MIN` if absent in source |
+| `filename` | `String` | source file stem |
+| `temp`, `psal`, `pres`, `deph` | `f32` | NaN where missing |
+| `temp_qc`, `psal_qc`, `pres_qc`, `deph_qc` | `i8` | |
+| `pres_conv`, `deph_conv` | `i8` | `1` = value was derived by conversion |
 
 ### `trace` feature
 `#[cfg(feature = "trace")]` guards are available for debug logging. Enable with `cargo build --features trace`.
