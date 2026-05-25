@@ -51,7 +51,7 @@ impl Module {
 // Parse the first command-line argument into the correct enum variant
 fn parse_module(arg: &str) -> Option<Module> {
     match arg {
-        "netcdf" => Some(Module::Convert),
+        "convert" => Some(Module::Convert),
         "concat" => Some(Module::Concat),
         _ => None,
     }

@@ -11,7 +11,7 @@ fn main() {
         }
         Err(e) => {
             eprintln!("Error: {}", e);
-            eprintln!("Available modules: netcdf, concat");
+            eprintln!("Available modules: convert, concat");
         }
     }
 }

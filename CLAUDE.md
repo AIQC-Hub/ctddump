@@ -44,8 +44,8 @@ cargo build --features trace
 # Run the binary
 cargo run -- <module> [args...]
 # e.g.:
-cargo run -- netcdf nrt_ar input.nc output.parquet
-cargo run -- netcdf nrt_head input.nc output.yaml
+cargo run -- convert nrt_ar input.nc output.parquet
+cargo run -- convert nrt_head input.nc output.yaml
 ```
 
 ### Test Data
@@ -66,20 +66,20 @@ ctddump <module> [subcommand] <src_file> <target_file>
 
 | Module | Subcommand | Input | Output |
 |--------|------------|-------|--------|
-| `netcdf` | `nrt_ar` | NRT Arctic Sea `.nc` | `.parquet` |
-| `netcdf` | `nrt_bo` | NRT Baltic Sea `.nc` | `.parquet` |
-| `netcdf` | `nrt_mo` | NRT Mediterranean Sea `.nc` | `.parquet` |
-| `netcdf` | `nrt_gl` | NRT Global `.nc` | `.parquet` |
-| `netcdf` | `nrt_head` | Any NRT `.nc` | `.yaml` metadata |
-| `netcdf` | `cora` | CORA `.nc` | `.parquet` |
-| `netcdf` | `cora2` | Older CORA `.nc` | `.parquet` |
-| `netcdf` | `cora_head` | CORA `.nc` | `.yaml` metadata |
+| `convert` | `nrt_ar` | NRT Arctic Sea `.nc` | `.parquet` |
+| `convert` | `nrt_bo` | NRT Baltic Sea `.nc` | `.parquet` |
+| `convert` | `nrt_mo` | NRT Mediterranean Sea `.nc` | `.parquet` |
+| `convert` | `nrt_gl` | NRT Global `.nc` | `.parquet` |
+| `convert` | `nrt_head` | Any NRT `.nc` | `.yaml` metadata |
+| `convert` | `cora` | CORA `.nc` | `.parquet` |
+| `convert` | `cora2` | Older CORA `.nc` | `.parquet` |
+| `convert` | `cora_head` | CORA `.nc` | `.yaml` metadata |
 
 ## Architecture
 
 Dispatch flows through two levels:
 
-1. **`src/lib.rs`** — `handle_dispatch()` parses `args[0]` as a module (`netcdf`, `concat`) and delegates to the module's `run()` or sub-dispatcher.
+1. **`src/lib.rs`** — `handle_dispatch()` parses `args[0]` as a module (`convert`, `concat`) and delegates to the module's `run()` or sub-dispatcher.
 2. **`src/netcdf.rs`** — `handle_target_dispatch()` parses `args[0]` as a format target (e.g., `nrt_ar`) and calls the corresponding submodule's `run()`.
 
 Each converter submodule (e.g., `src/netcdf/nrt_ar.rs`) follows the same pattern:

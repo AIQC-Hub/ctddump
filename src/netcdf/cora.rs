@@ -101,7 +101,7 @@ pub fn run(args: &[String]) -> Result<Config, Box<dyn Error>> {
     match netcdf_to_parquet(&config) {
         Ok(_config) => {
             Ok(Config {
-                module: "netcdf".to_string(),
+                module: "convert".to_string(),
                 target: "cora".to_string(),
                 args: args.to_vec(),
             })
