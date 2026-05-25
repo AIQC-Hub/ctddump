@@ -71,8 +71,8 @@ ctddump <module> [subcommand] <src_file> <target_file>
 | `convert` | `nrt_mo` | NRT Mediterranean Sea `.nc` | `.parquet` |
 | `convert` | `nrt_gl` | NRT Global `.nc` | `.parquet` |
 | `convert` | `nrt_head` | Any NRT `.nc` | `.yaml` metadata |
-| `convert` | `cora` | CORA `.nc` | `.parquet` |
-| `convert` | `cora2` | Older CORA `.nc` | `.parquet` |
+| `convert` | `cora` | CORA `.nc` (current format) | `.parquet` |
+| `convert` | `cora_legacy` | CORA `.nc` (older format) | `.parquet` |
 | `convert` | `cora_head` | CORA `.nc` | `.yaml` metadata |
 
 ## Architecture

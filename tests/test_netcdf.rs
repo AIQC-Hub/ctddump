@@ -169,13 +169,13 @@ fn test_netcdf_cora_head() {
 }
 
 #[test]
-fn test_netcdf_cora_ar_1() {
-    let args = vec!["convert".to_string(), "cora".to_string(), "./tests/test_data/CO_DMQCGL01_20201010_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_20201010_PR_CT.parquet".to_string()];
+fn test_netcdf_cora_legacy_1() {
+    let args = vec!["convert".to_string(), "cora_legacy".to_string(), "./tests/test_data/CO_DMQCGL01_20201010_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_20201010_PR_CT.parquet".to_string()];
     let result = handle_dispatch(&args);
 
     let expected = Config {
         module: "convert".to_string(),
-        target: "cora".to_string(),
+        target: "cora_legacy".to_string(),
         args: vec!["./tests/test_data/CO_DMQCGL01_20201010_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_20201010_PR_CT.parquet".to_string()],
     };
 
@@ -183,13 +183,13 @@ fn test_netcdf_cora_ar_1() {
 }
 
 #[test]
-fn test_netcdf_cora_bo_1() {
-    let args = vec!["convert".to_string(), "cora".to_string(), "./tests/test_data/CO_DMQCGL01_20201005_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_20201005_PR_CT.parquet".to_string()];
+fn test_netcdf_cora_legacy_2() {
+    let args = vec!["convert".to_string(), "cora_legacy".to_string(), "./tests/test_data/CO_DMQCGL01_20201005_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_20201005_PR_CT.parquet".to_string()];
     let result = handle_dispatch(&args);
 
     let expected = Config {
         module: "convert".to_string(),
-        target: "cora".to_string(),
+        target: "cora_legacy".to_string(),
         args: vec!["./tests/test_data/CO_DMQCGL01_20201005_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_20201005_PR_CT.parquet".to_string()],
     };
 
@@ -197,13 +197,13 @@ fn test_netcdf_cora_bo_1() {
 }
 
 #[test]
-fn test_netcdf_cora2_bo_1() {
-    let args = vec!["convert".to_string(), "cora2".to_string(), "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.parquet".to_string()];
+fn test_netcdf_cora_1() {
+    let args = vec!["convert".to_string(), "cora".to_string(), "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.parquet".to_string()];
     let result = handle_dispatch(&args);
 
     let expected = Config {
         module: "convert".to_string(),
-        target: "cora2".to_string(),
+        target: "cora".to_string(),
         args: vec!["./tests/test_data/CO_DMQCGL01_19861204_PR_CT.nc".to_string(), "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.parquet".to_string()],
     };
 

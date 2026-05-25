@@ -12,7 +12,7 @@ pub mod nrt_mo;
 pub mod nrt_gl;
 pub mod cora_head;
 pub mod cora;
-pub mod cora2;
+pub mod cora_legacy;
 
 #[derive(Debug)]
 struct UnknownTargetError;
@@ -34,7 +34,7 @@ enum Target {
     NrtGl,
     CoraHead,
     Cora,
-    Cora2,
+    CoraLegacy,
 }
 
 impl Target {
@@ -61,8 +61,8 @@ impl Target {
             Target::Cora => {
                 cora::run(args)
             },
-            Target::Cora2 => {
-                cora2::run(args)
+            Target::CoraLegacy => {
+                cora_legacy::run(args)
             },
         }
     }
@@ -77,7 +77,7 @@ fn parse_target(arg: &str) -> Option<Target> {
         "nrt_gl" => Some(Target::NrtGl),
         "cora_head" => Some(Target::CoraHead),
         "cora" => Some(Target::Cora),
-        "cora2" => Some(Target::Cora2),
+        "cora_legacy" => Some(Target::CoraLegacy),
         _ => None,
     }
 }
