@@ -106,8 +106,8 @@ fn collect_nrt_data(
         (longitude_raw, latitude_raw, vec![f32::NAN; vec_size], vec![f32::NAN; vec_size])
     };
 
-    let time_qc: Vec<i8> = common::get_coordinate_value(&file, "TIME_QC".to_string(), time_len, obs_len, i8::MIN)?;
-    let position_qc: Vec<i8> = common::get_coordinate_value(&file, "POSITION_QC".to_string(), time_len, obs_len, i8::MIN)?;
+    let time_qc: Vec<String> = common::get_qc_coordinate_value(&file, "TIME_QC".to_string(), time_len, obs_len)?;
+    let position_qc: Vec<String> = common::get_qc_coordinate_value(&file, "POSITION_QC".to_string(), time_len, obs_len)?;
 
     let basename = common::get_base_file_name(src_file)?;
     let filename: Vec<String> = vec![basename; vec_size];
@@ -115,17 +115,17 @@ fn collect_nrt_data(
     // TEMP
     let temp_fill = common::get_float_fill_value(&file, "TEMP".to_string());
     let temp: Vec<f32> = common::get_var_float_value(&file, "TEMP".to_string(), temp_fill, vec_size)?;
-    let temp_qc: Vec<i8> = common::get_qc_value(&file, "TEMP_QC".to_string(), vec_size)?;
+    let temp_qc: Vec<String> = common::get_qc_value(&file, "TEMP_QC".to_string(), vec_size)?;
 
     // PSAL
     let psal_fill = common::get_float_fill_value(&file, "PSAL".to_string());
     let psal: Vec<f32> = common::get_var_float_value(&file, "PSAL".to_string(), psal_fill, vec_size)?;
-    let psal_qc: Vec<i8> = common::get_qc_value(&file, "PSAL_QC".to_string(), vec_size)?;
+    let psal_qc: Vec<String> = common::get_qc_value(&file, "PSAL_QC".to_string(), vec_size)?;
 
     // PRES
     let pres_fill = common::get_float_fill_value(&file, "PRES".to_string());
     let pres: Vec<f32> = common::get_var_float_value(&file, "PRES".to_string(), pres_fill, vec_size)?;
-    let pres_qc: Vec<i8> = common::get_qc_value(&file, "PRES_QC".to_string(), vec_size)?;
+    let pres_qc: Vec<String> = common::get_qc_value(&file, "PRES_QC".to_string(), vec_size)?;
 
     // PRES / DEPH conversion.
     // When profile coords are enabled, use profile_latitude (already cross-filled
@@ -141,13 +141,13 @@ fn collect_nrt_data(
         if config.has_deph_source {
             let deph_fill = common::get_float_fill_value(&file, "DEPH".to_string());
             let deph: Vec<f32> = common::get_var_float_value(&file, "DEPH".to_string(), deph_fill, vec_size)?;
-            let deph_qc: Vec<i8> = common::get_qc_value(&file, "DEPH_QC".to_string(), vec_size)?;
+            let deph_qc: Vec<String> = common::get_qc_value(&file, "DEPH_QC".to_string(), vec_size)?;
             let (cp, cpq, pc) = common::convert_depth_to_pressure(pres.clone(), pres_qc.clone(), deph.clone(), deph_qc.clone(), pres_fill, conversion_latitude.clone());
             let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), deph_fill, conversion_latitude.clone());
             (cp, cpq, pc, cd, cdq, dc)
         } else {
             let deph = vec![pres_fill; vec_size];
-            let deph_qc = vec![i8::MIN; vec_size];
+            let deph_qc: Vec<String> = vec!["".to_string(); vec_size];
             let pres_conv = vec![0_i8; vec_size];
             let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), pres_fill, conversion_latitude.clone());
             (pres.clone(), pres_qc.clone(), pres_conv, cd, cdq, dc)

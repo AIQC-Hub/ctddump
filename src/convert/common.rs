@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::path::Path;
 
-use num_traits::{Bounded, Float, FromPrimitive};
+use num_traits::{Float, FromPrimitive};
 use chrono::{Duration, TimeZone, Utc};
 use netcdf;
 use netcdf::{NcTypeDescriptor, types::NcVariableType};
@@ -164,24 +164,46 @@ where
     Ok(var_val_clean)
 }
 
-pub fn get_qc_value<T>(
+/// Convert a raw i8 QC byte (0–9) to its single-digit string.
+/// Any value outside 0–9 (including `i8::MIN` used as "missing") maps to `""`.
+fn i8_to_qc_string(v: i8) -> String {
+    if (0..=9).contains(&v) {
+        char::from(b'0' + v as u8).to_string()
+    } else {
+        String::new()
+    }
+}
+
+/// Read an integer QC variable (stored as `i8`) and return each flag as a
+/// single-character string ("0"–"9"). Missing or out-of-range values → `""`.
+pub fn get_qc_value(
     file: &netcdf::File,
     var_name: String,
     vec_size: usize,
-) -> Result<Vec<T>, Box<dyn Error>>
-where
-    T: Bounded + Clone + Copy + netcdf::NcTypeDescriptor,
+) -> Result<Vec<String>, Box<dyn Error>>
 {
     let var_temp = match file.variable(&var_name) {
         Some(var) => var,
-        None => {
-            return Ok(vec![T::min_value(); vec_size]);
-        }
+        None => return Ok(vec![String::new(); vec_size]),
     };
 
-    let qc_value: Vec<T> = var_temp.get::<T, _>(..)?.iter().cloned().collect();
+    let raw: Vec<i8> = var_temp.get::<i8, _>(..)?.iter().cloned().collect();
+    Ok(raw.iter().map(|&v| i8_to_qc_string(v)).collect())
+}
 
-    Ok(qc_value)
+/// Read a coordinate-tiled QC variable (e.g., `TIME_QC`, `POSITION_QC`) stored
+/// as `i8` and return each flag as a single-character string.
+/// The variable is tiled from `time_len` to `time_len × obs_len` like other
+/// coordinates. Missing variable → all `""`.
+pub fn get_qc_coordinate_value(
+    file: &netcdf::File,
+    var_name: String,
+    time_len: usize,
+    obs_len: usize,
+) -> Result<Vec<String>, Box<dyn Error>>
+{
+    let raw: Vec<i8> = get_coordinate_value(file, var_name, time_len, obs_len, i8::MIN)?;
+    Ok(raw.iter().map(|&v| i8_to_qc_string(v)).collect())
 }
 
 pub fn get_char_value (
@@ -269,35 +291,34 @@ pub fn get_char_vector3(
     Ok(result)
 }
 
-/// Reads a NetCDF char QC variable and converts each character digit ('0'–'9')
-/// to its integer equivalent as `i8`. Returns `i8::MIN` for missing or non-digit chars.
+/// Reads a NetCDF char QC variable and returns each character as a `String`.
+/// Space (`' '`) and null (`'\0'`) are treated as missing and map to `""`.
+/// All other characters (digits `'0'`–`'9'`, letters `'A'`, `'B'`, …) are
+/// kept as-is so that non-numeric ARGO QC codes are preserved faithfully.
 pub fn get_qc_value_from_char(
     file: &netcdf::File,
     var_name: String,
     vec_size: usize,
-) -> Result<Vec<i8>, Box<dyn Error>> {
+) -> Result<Vec<String>, Box<dyn Error>> {
     let char_vals = get_char_value(file, var_name, vec_size)?;
-    let int_vals: Vec<i8> = char_vals
+    let result: Vec<String> = char_vals
         .iter()
-        .map(|s| {
-            s.chars()
-                .next()
-                .and_then(|c| c.to_digit(10))
-                .map(|d| d as i8)
-                .unwrap_or(i8::MIN)
+        .map(|s| match s.chars().next() {
+            Some(c) if c != '\0' && c != ' ' => c.to_string(),
+            _ => String::new(),
         })
         .collect();
-    Ok(int_vals)
+    Ok(result)
 }
 
 pub fn convert_depth_to_pressure<T>(
     pres: Vec<f32>,
-    pres_qc: Vec<i8>,
+    pres_qc: Vec<String>,
     deph: Vec<f32>,
-    deph_qc: Vec<i8>,
+    deph_qc: Vec<String>,
     fill_value: f32,
     latitude: Vec<T>,
-) -> (Vec<f32>, Vec<i8>, Vec<i8>)
+) -> (Vec<f32>, Vec<String>, Vec<i8>)
 where
     T: Into<f64> + Copy,
 {
@@ -312,7 +333,7 @@ where
             match p_from_z(depth_in_meters, latitude[i].into(), None, None) {
                 Ok(pressure_value) => {
                     converted_pres[i] = pressure_value as f32;
-                    converted_pres_qc[i] = deph_qc[i];
+                    converted_pres_qc[i] = deph_qc[i].clone();
                     pres_conv[i] = 1;  // Mark conversion status
                 }
                 Err(_) => {
@@ -328,12 +349,12 @@ where
 
 pub fn convert_pressure_to_depth<T>(
     deph: Vec<f32>,
-    deph_qc: Vec<i8>,
+    deph_qc: Vec<String>,
     pres: Vec<f32>,
-    pres_qc: Vec<i8>,
+    pres_qc: Vec<String>,
     fill_value: f32,
     latitude: Vec<T>,
-) -> (Vec<f32>, Vec<i8>, Vec<i8>)
+) -> (Vec<f32>, Vec<String>, Vec<i8>)
 where
     T: Into<f64> + Copy,
 {
@@ -353,7 +374,7 @@ where
             );
 
             converted_deph[i] = z_value as f32 * -1.0_f32;
-            converted_deph_qc[i] = pres_qc[i];
+            converted_deph_qc[i] = pres_qc[i].clone();
             deph_conv[i] = 1;
         }
     }

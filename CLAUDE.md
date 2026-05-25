@@ -166,13 +166,14 @@ Each converter follows the same pattern:
 - `convert_time_value()` — converts days-since-1950-01-01 (standard oceanographic epoch) to Unix milliseconds
 - `get_coordinate_value()` — reads a 1-D or scalar variable and tiles it to `time_len × obs_len`; returns fill values if the variable is absent
 - `get_var_float_value()` — reads float data, replacing fill values with NaN
-- `get_qc_value()` — reads QC flags stored as `i8`
-- `get_qc_value_from_char()` — reads QC flags stored as ASCII digit chars and converts to `i8`
+- `get_qc_value()` — reads QC flags stored as `i8`, returns `Vec<String>` ("0"–"9"; `""` for missing)
+- `get_qc_coordinate_value()` — like `get_qc_value` but tiles a coordinate-dimension variable (e.g., `TIME_QC`)
+- `get_qc_value_from_char()` — reads QC flags stored as ASCII chars, returns `Vec<String>` (char as-is; `""` for space/null)
 - `get_char_value()` / `get_char_value2()` / `get_char_vector3()` — read NetCDF `char` arrays (stored as `i8`) into `Vec<String>` with different dimension layouts
 - `convert_depth_to_pressure()` / `convert_pressure_to_depth()` — bidirectional conversion using the `gsw` crate (TEOS-10 standard)
 
 ### Output DataFrame schema
-All converters produce a uniform, observation-level flat table with integer QC codes (`i8`):
+All converters produce a uniform, observation-level flat table:
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -183,10 +184,10 @@ All converters produce a uniform, observation-level flat table with integer QC c
 | `observation_no` | `u32` | |
 | `longitude` / `latitude` | `f32` or `f64` | NRT: f32, CORA: f64; NaN-filled from profile coords |
 | `profile_longitude` / `profile_latitude` | `f32` (NRT) / `f64` (CORA) | NRT: from `PRECISE_*` or expanded `DEPLOY_*`; NaN when `has_profile_coords = false`. CORA: always NaN (no profile source). |
-| `time_qc` / `position_qc` | `i8` | filled with `i8::MIN` if absent in source |
+| `time_qc` / `position_qc` | `String` | `""` if absent in source |
 | `filename` | `String` | source file stem |
 | `temp`, `psal`, `pres`, `deph` | `f32` | NaN where missing |
-| `temp_qc`, `psal_qc`, `pres_qc`, `deph_qc` | `i8` | |
+| `temp_qc`, `psal_qc`, `pres_qc`, `deph_qc` | `String` | single-char flag (e.g., `"1"`, `"A"`); `""` if missing |
 | `pres_conv`, `deph_conv` | `i8` | `1` = value was derived by conversion |
 
 ### `trace` feature

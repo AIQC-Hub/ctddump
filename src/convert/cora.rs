@@ -50,16 +50,16 @@ fn collect_cora_data(
     let latitude: Vec<f64> = common::get_coordinate_value(&file, "LATITUDE".to_string(), n_profs, n_levels, f64::NAN)?;
 
     // TIME_QC / POSITION_QC: only read when the source format has them as i8.
-    // Legacy files may store these as char or omit them; fill with i8::MIN in that case.
-    let time_qc: Vec<i8> = if config.has_time_qc {
-        common::get_coordinate_value(&file, "TIME_QC".to_string(), n_profs, n_levels, i8::MIN)?
+    // Legacy files may store these as char or omit them; fill with "" in that case.
+    let time_qc: Vec<String> = if config.has_time_qc {
+        common::get_qc_coordinate_value(&file, "TIME_QC".to_string(), n_profs, n_levels)?
     } else {
-        vec![i8::MIN; vec_size]
+        vec!["".to_string(); vec_size]
     };
-    let position_qc: Vec<i8> = if config.has_time_qc {
-        common::get_coordinate_value(&file, "POSITION_QC".to_string(), n_profs, n_levels, i8::MIN)?
+    let position_qc: Vec<String> = if config.has_time_qc {
+        common::get_qc_coordinate_value(&file, "POSITION_QC".to_string(), n_profs, n_levels)?
     } else {
-        vec![i8::MIN; vec_size]
+        vec!["".to_string(); vec_size]
     };
 
     let basename = common::get_base_file_name(src_file)?;
@@ -68,30 +68,30 @@ fn collect_cora_data(
     // TEMP
     let temp_fill = common::get_float_fill_value(&file, "TEMP".to_string());
     let temp: Vec<f32> = common::get_var_float_value(&file, "TEMP".to_string(), temp_fill, vec_size)?;
-    let temp_qc: Vec<i8> = read_qc(&file, "TEMP_QC", vec_size, &config.qc_type)?;
+    let temp_qc: Vec<String> = read_qc(&file, "TEMP_QC", vec_size, &config.qc_type)?;
 
     // PSAL
     let psal_fill = common::get_float_fill_value(&file, "PSAL".to_string());
     let psal: Vec<f32> = common::get_var_float_value(&file, "PSAL".to_string(), psal_fill, vec_size)?;
-    let psal_qc: Vec<i8> = read_qc(&file, "PSAL_QC", vec_size, &config.qc_type)?;
+    let psal_qc: Vec<String> = read_qc(&file, "PSAL_QC", vec_size, &config.qc_type)?;
 
     // PRES
     let pres_fill = common::get_float_fill_value(&file, "PRES".to_string());
     let pres: Vec<f32> = common::get_var_float_value(&file, "PRES".to_string(), pres_fill, vec_size)?;
-    let pres_qc: Vec<i8> = read_qc(&file, "PRES_QC", vec_size, &config.qc_type)?;
+    let pres_qc: Vec<String> = read_qc(&file, "PRES_QC", vec_size, &config.qc_type)?;
 
     // DEPH: bidirectional conversion if source has DEPH; otherwise fill with NaN
     let (converted_pres, converted_pres_qc, pres_conv, converted_deph, converted_deph_qc, deph_conv) =
         if config.has_deph_source {
             let deph_fill = common::get_float_fill_value(&file, "DEPH".to_string());
             let deph: Vec<f32> = common::get_var_float_value(&file, "DEPH".to_string(), deph_fill, vec_size)?;
-            let deph_qc: Vec<i8> = read_qc(&file, "DEPH_QC", vec_size, &config.qc_type)?;
+            let deph_qc: Vec<String> = read_qc(&file, "DEPH_QC", vec_size, &config.qc_type)?;
             let (cp, cpq, pc) = common::convert_depth_to_pressure(pres.clone(), pres_qc.clone(), deph.clone(), deph_qc.clone(), pres_fill, latitude.clone());
             let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), deph_fill, latitude.clone());
             (cp, cpq, pc, cd, cdq, dc)
         } else {
             let deph = vec![f32::NAN; vec_size];
-            let deph_qc = vec![i8::MIN; vec_size];
+            let deph_qc: Vec<String> = vec!["".to_string(); vec_size];
             let pres_conv = vec![0_i8; vec_size];
             let deph_conv = vec![0_i8; vec_size];
             (pres.clone(), pres_qc.clone(), pres_conv, deph, deph_qc, deph_conv)
@@ -131,13 +131,13 @@ fn collect_cora_data(
     Ok(df)
 }
 
-/// Read a QC variable as `i8`, converting from char if needed.
+/// Read a QC variable as a `String` per flag, converting from char if needed.
 fn read_qc(
     file: &netcdf::File,
     var_name: &str,
     vec_size: usize,
     qc_type: &QcType,
-) -> Result<Vec<i8>, Box<dyn Error>> {
+) -> Result<Vec<String>, Box<dyn Error>> {
     match qc_type {
         QcType::Int => common::get_qc_value(file, var_name.to_string(), vec_size),
         QcType::Char => common::get_qc_value_from_char(file, var_name.to_string(), vec_size),

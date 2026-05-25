@@ -3,14 +3,15 @@ use std::error::Error;
 use std::path::Path;
 
 /// How QC flags are stored in the NetCDF source file.
-/// All formats produce `i8` in the output; char QC is converted automatically.
+/// All formats produce `String` in the output; both storage types are converted
+/// to single-character strings (e.g., `"1"`, `"4"`, `"A"`). Missing → `""`.
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum QcType {
-    /// QC flags are stored as bytes (`i8`).
+    /// QC flags are stored as bytes (`i8`). Digits 0–9 are written as `"0"`–`"9"`.
     Int,
-    /// QC flags are stored as ASCII digit characters ('0'–'9').
-    /// They are converted to `i8` during conversion.
+    /// QC flags are stored as ASCII characters ('0'–'9', 'A', 'B', …).
+    /// Each character is written as a one-character string verbatim.
     Char,
 }
 
