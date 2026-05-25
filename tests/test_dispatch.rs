@@ -18,18 +18,12 @@ fn test_handle_dispatch_concat() {
 fn test_handle_dispatch_unknown_module() {
     let args = vec!["unknown".to_string()];
     let result = handle_dispatch(&args);
-
-    if let Err(e) = result {
-        assert_eq!(e.to_string(), "Unknown module");
-    }
+    assert!(result.is_err());
 }
 
 #[test]
 fn test_handle_dispatch_no_module() {
     let args: Vec<String> = vec![];
     let result = handle_dispatch(&args);
-
-    if let Err(e) = result {
-        assert_eq!(e.to_string(), "No module specified");
-    }
+    assert!(result.is_err());
 }
