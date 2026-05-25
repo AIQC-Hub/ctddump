@@ -269,6 +269,27 @@ pub fn get_char_vector3(
     Ok(result)
 }
 
+/// Reads a NetCDF char QC variable and converts each character digit ('0'–'9')
+/// to its integer equivalent as `i8`. Returns `i8::MIN` for missing or non-digit chars.
+pub fn get_qc_value_from_char(
+    file: &netcdf::File,
+    var_name: String,
+    vec_size: usize,
+) -> Result<Vec<i8>, Box<dyn Error>> {
+    let char_vals = get_char_value(file, var_name, vec_size)?;
+    let int_vals: Vec<i8> = char_vals
+        .iter()
+        .map(|s| {
+            s.chars()
+                .next()
+                .and_then(|c| c.to_digit(10))
+                .map(|d| d as i8)
+                .unwrap_or(i8::MIN)
+        })
+        .collect();
+    Ok(int_vals)
+}
+
 pub fn convert_depth_to_pressure<T>(
     pres: Vec<f32>,
     pres_qc: Vec<i8>,

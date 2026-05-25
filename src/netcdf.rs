@@ -2,14 +2,12 @@ use std::error::Error;
 
 pub mod common;
 pub mod common_head;
+pub mod nrt_config;
+pub mod nrt;
 pub mod nrt_head;
-pub mod nrt_ar;
-pub mod nrt_bo;
-pub mod nrt_mo;
-pub mod nrt_gl;
-pub mod cora_head;
+pub mod cora_config;
 pub mod cora;
-pub mod cora_legacy;
+pub mod cora_head;
 
 #[derive(Debug)]
 pub struct ConvertConfig {

@@ -29,6 +29,9 @@ pub enum ConvertFormat {
     /// NRT Arctic Sea (.nc -> .parquet)
     #[command(name = "nrt_ar")]
     NrtAr {
+        /// Optional TOML config file to override default NRT settings
+        #[arg(short, long)]
+        config: Option<PathBuf>,
         /// Source NetCDF file
         src: PathBuf,
         /// Output Parquet file
@@ -37,6 +40,9 @@ pub enum ConvertFormat {
     /// NRT Baltic Sea (.nc -> .parquet)
     #[command(name = "nrt_bo")]
     NrtBo {
+        /// Optional TOML config file to override default NRT settings
+        #[arg(short, long)]
+        config: Option<PathBuf>,
         /// Source NetCDF file
         src: PathBuf,
         /// Output Parquet file
@@ -45,6 +51,9 @@ pub enum ConvertFormat {
     /// NRT Mediterranean Sea (.nc -> .parquet)
     #[command(name = "nrt_mo")]
     NrtMo {
+        /// Optional TOML config file to override default NRT settings
+        #[arg(short, long)]
+        config: Option<PathBuf>,
         /// Source NetCDF file
         src: PathBuf,
         /// Output Parquet file
@@ -53,6 +62,9 @@ pub enum ConvertFormat {
     /// NRT Global (.nc -> .parquet)
     #[command(name = "nrt_gl")]
     NrtGl {
+        /// Optional TOML config file to override default NRT settings
+        #[arg(short, long)]
+        config: Option<PathBuf>,
         /// Source NetCDF file
         src: PathBuf,
         /// Output Parquet file
@@ -69,6 +81,9 @@ pub enum ConvertFormat {
     /// CORA current format (.nc -> .parquet)
     #[command(name = "cora")]
     Cora {
+        /// Optional TOML config file to override default CORA settings
+        #[arg(short, long)]
+        config: Option<PathBuf>,
         /// Source NetCDF file
         src: PathBuf,
         /// Output Parquet file
@@ -77,6 +92,9 @@ pub enum ConvertFormat {
     /// CORA legacy format (.nc -> .parquet)
     #[command(name = "cora_legacy")]
     CoraLegacy {
+        /// Optional TOML config file to override default CORA legacy settings
+        #[arg(short, long)]
+        config: Option<PathBuf>,
         /// Source NetCDF file
         src: PathBuf,
         /// Output Parquet file

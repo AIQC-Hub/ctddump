@@ -7,6 +7,8 @@ pub mod cli;
 pub mod netcdf;
 
 use cli::{Cli, Commands, ConvertFormat};
+use netcdf::cora_config::CoraConfig;
+use netcdf::nrt_config::NrtConfig;
 
 // A struct to hold the configuration after parsing the arguments
 #[derive(Debug, PartialEq)]
@@ -45,14 +47,53 @@ pub fn handle_dispatch(args: &[String]) -> Result<Config, Box<dyn Error>> {
 
 fn dispatch_convert(format: ConvertFormat) -> Result<Config, Box<dyn Error>> {
     match format {
-        ConvertFormat::NrtAr { src, dest } => netcdf::nrt_ar::run(&path_args(src, dest)),
-        ConvertFormat::NrtBo { src, dest } => netcdf::nrt_bo::run(&path_args(src, dest)),
-        ConvertFormat::NrtMo { src, dest } => netcdf::nrt_mo::run(&path_args(src, dest)),
-        ConvertFormat::NrtGl { src, dest } => netcdf::nrt_gl::run(&path_args(src, dest)),
-        ConvertFormat::NrtHead { src, dest } => netcdf::nrt_head::run(&path_args(src, dest)),
-        ConvertFormat::Cora { src, dest } => netcdf::cora::run(&path_args(src, dest)),
-        ConvertFormat::CoraLegacy { src, dest } => netcdf::cora_legacy::run(&path_args(src, dest)),
-        ConvertFormat::CoraHead { src, dest } => netcdf::cora_head::run(&path_args(src, dest)),
+        ConvertFormat::NrtAr { config, src, dest } => {
+            let nrt_config = load_or_default(config, NrtConfig::nrt_ar)?;
+            netcdf::nrt::run(&path_args(src, dest), nrt_config, "nrt_ar")
+        }
+        ConvertFormat::NrtBo { config, src, dest } => {
+            let nrt_config = load_or_default(config, NrtConfig::nrt_bo)?;
+            netcdf::nrt::run(&path_args(src, dest), nrt_config, "nrt_bo")
+        }
+        ConvertFormat::NrtMo { config, src, dest } => {
+            let nrt_config = load_or_default(config, NrtConfig::nrt_mo)?;
+            netcdf::nrt::run(&path_args(src, dest), nrt_config, "nrt_mo")
+        }
+        ConvertFormat::NrtGl { config, src, dest } => {
+            let nrt_config = load_or_default(config, NrtConfig::nrt_gl)?;
+            netcdf::nrt::run(&path_args(src, dest), nrt_config, "nrt_gl")
+        }
+        ConvertFormat::NrtHead { src, dest } => {
+            netcdf::nrt_head::run(&path_args(src, dest))
+        }
+        ConvertFormat::Cora { config, src, dest } => {
+            let cora_config = load_or_default(config, CoraConfig::cora)?;
+            netcdf::cora::run(&path_args(src, dest), cora_config, "cora")
+        }
+        ConvertFormat::CoraLegacy { config, src, dest } => {
+            let cora_config = load_or_default(config, CoraConfig::cora_legacy)?;
+            netcdf::cora::run(&path_args(src, dest), cora_config, "cora_legacy")
+        }
+        ConvertFormat::CoraHead { src, dest } => {
+            netcdf::cora_head::run(&path_args(src, dest))
+        }
+    }
+}
+
+/// Returns a config loaded from `path` if provided, or the embedded default otherwise.
+fn load_or_default<T, F>(path: Option<PathBuf>, default: F) -> Result<T, Box<dyn Error>>
+where
+    F: Fn() -> T,
+    T: for<'de> serde::Deserialize<'de>,
+{
+    match path {
+        Some(p) => {
+            let content = std::fs::read_to_string(&p)
+                .map_err(|e| format!("Cannot read config file {}: {}", p.display(), e))?;
+            toml::from_str(&content)
+                .map_err(|e| format!("Invalid config file {}: {}", p.display(), e).into())
+        }
+        None => Ok(default()),
     }
 }
 

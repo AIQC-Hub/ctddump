@@ -7,17 +7,23 @@ use polars::prelude::*;
 use crate::Config;
 use super::ConvertConfig;
 use super::common;
-use super::cora_config::{CoraConfig, QcType};
+use super::nrt_config::NrtConfig;
 
 fn netcdf_to_parquet(
     convert_config: &ConvertConfig,
-    cora_config: &CoraConfig,
+    nrt_config: &NrtConfig,
 ) -> Result<(), Box<dyn Error>> {
-    let df = collect_cora_data(&convert_config.src_file, cora_config)?;
+    let df = collect_nrt_data(&convert_config.src_file, nrt_config)?;
 
+    // Filter rows where all of temp, psal, pres (and deph if sourced) are NaN
     let mask = df.column("temp")?.is_not_nan()?
         | df.column("psal")?.is_not_nan()?
         | df.column("pres")?.is_not_nan()?;
+    let mask = if nrt_config.has_deph_source {
+        mask | df.column("deph")?.is_not_nan()?
+    } else {
+        mask
+    };
     let mut filtered = df.filter(&mask)?;
 
     let mut out_file = std::fs::File::create(&convert_config.target_file)?;
@@ -26,41 +32,38 @@ fn netcdf_to_parquet(
     Ok(())
 }
 
-fn collect_cora_data(
+fn collect_nrt_data(
     src_file: &str,
-    config: &CoraConfig,
+    config: &NrtConfig,
 ) -> Result<DataFrame, Box<dyn Error>> {
     let file = netcdf::open(src_file)?;
 
-    let n_profs = file.dimension("N_PROF").unwrap().len();
-    let n_levels = file.dimension("N_LEVELS").unwrap().len();
-    let string32 = file.dimension("STRING32").unwrap().len();
-    let vec_size = n_profs * n_levels;
+    let time_len = file.dimension("TIME").unwrap().len();
+    let obs_len = file.dimension("DEPTH").unwrap().len();
+    let vec_size = time_len * obs_len;
 
     // Keys
-    let platform_code: Vec<String> = common::get_char_value2(&file, "PLATFORM_NUMBER".to_string(), n_levels, n_profs, string32)?;
-    let profile_no: Vec<u32> = common::create_profile_no_sequence(n_profs, n_levels)?;
-    let obs_no: Vec<u32> = common::create_observation_sequence(n_profs, n_levels)?;
+    let platform_code: Vec<String> = common::create_platform_code(&file, vec_size)?;
+    let profile_no: Vec<u32> = common::create_profile_no_sequence(time_len, obs_len)?;
+    let obs_no: Vec<u32> = common::create_observation_sequence(time_len, obs_len)?;
 
-    // Time (variable name from config)
-    let time: Vec<f64> = common::get_coordinate_value(&file, config.time_var.clone(), n_profs, n_levels, f64::NAN)?;
+    // Time
+    let time: Vec<f64> = common::get_coordinate_value(&file, "TIME".to_string(), time_len, obs_len, f64::NAN)?;
     let timestamp: Vec<i64> = common::convert_time_value(&time)?;
 
-    let longitude: Vec<f64> = common::get_coordinate_value(&file, "LONGITUDE".to_string(), n_profs, n_levels, f64::NAN)?;
-    let latitude: Vec<f64> = common::get_coordinate_value(&file, "LATITUDE".to_string(), n_profs, n_levels, f64::NAN)?;
+    // Coordinates: use PRECISE_* if configured
+    let longitude_raw: Vec<f32> = common::get_coordinate_value(&file, "LONGITUDE".to_string(), time_len, obs_len, f32::NAN)?;
+    let latitude_raw: Vec<f32> = common::get_coordinate_value(&file, "LATITUDE".to_string(), time_len, obs_len, f32::NAN)?;
+    let (longitude, latitude) = if config.has_precise_coords {
+        let prc_lon = common::get_coordinate_value(&file, "PRECISE_LONGITUDE".to_string(), time_len, obs_len, longitude_raw[0])?;
+        let prc_lat = common::get_coordinate_value(&file, "PRECISE_LATITUDE".to_string(), time_len, obs_len, latitude_raw[0])?;
+        (prc_lon, prc_lat)
+    } else {
+        (longitude_raw, latitude_raw)
+    };
 
-    // TIME_QC / POSITION_QC: only read when the source format has them as i8.
-    // Legacy files may store these as char or omit them; fill with i8::MIN in that case.
-    let time_qc: Vec<i8> = if config.has_time_qc {
-        common::get_coordinate_value(&file, "TIME_QC".to_string(), n_profs, n_levels, i8::MIN)?
-    } else {
-        vec![i8::MIN; vec_size]
-    };
-    let position_qc: Vec<i8> = if config.has_time_qc {
-        common::get_coordinate_value(&file, "POSITION_QC".to_string(), n_profs, n_levels, i8::MIN)?
-    } else {
-        vec![i8::MIN; vec_size]
-    };
+    let time_qc: Vec<i8> = common::get_coordinate_value(&file, "TIME_QC".to_string(), time_len, obs_len, i8::MIN)?;
+    let position_qc: Vec<i8> = common::get_coordinate_value(&file, "POSITION_QC".to_string(), time_len, obs_len, i8::MIN)?;
 
     let basename = common::get_base_file_name(src_file)?;
     let filename: Vec<String> = vec![basename; vec_size];
@@ -68,33 +71,35 @@ fn collect_cora_data(
     // TEMP
     let temp_fill = common::get_float_fill_value(&file, "TEMP".to_string());
     let temp: Vec<f32> = common::get_var_float_value(&file, "TEMP".to_string(), temp_fill, vec_size)?;
-    let temp_qc: Vec<i8> = read_qc(&file, "TEMP_QC", vec_size, &config.qc_type)?;
+    let temp_qc: Vec<i8> = common::get_qc_value(&file, "TEMP_QC".to_string(), vec_size)?;
 
     // PSAL
     let psal_fill = common::get_float_fill_value(&file, "PSAL".to_string());
     let psal: Vec<f32> = common::get_var_float_value(&file, "PSAL".to_string(), psal_fill, vec_size)?;
-    let psal_qc: Vec<i8> = read_qc(&file, "PSAL_QC", vec_size, &config.qc_type)?;
+    let psal_qc: Vec<i8> = common::get_qc_value(&file, "PSAL_QC".to_string(), vec_size)?;
 
     // PRES
     let pres_fill = common::get_float_fill_value(&file, "PRES".to_string());
     let pres: Vec<f32> = common::get_var_float_value(&file, "PRES".to_string(), pres_fill, vec_size)?;
-    let pres_qc: Vec<i8> = read_qc(&file, "PRES_QC", vec_size, &config.qc_type)?;
+    let pres_qc: Vec<i8> = common::get_qc_value(&file, "PRES_QC".to_string(), vec_size)?;
 
-    // DEPH: bidirectional conversion if source has DEPH; otherwise fill with NaN
+    // PRES / DEPH conversion
     let (converted_pres, converted_pres_qc, pres_conv, converted_deph, converted_deph_qc, deph_conv) =
         if config.has_deph_source {
+            // Bidirectional: read DEPH from file, fill gaps in each direction
             let deph_fill = common::get_float_fill_value(&file, "DEPH".to_string());
             let deph: Vec<f32> = common::get_var_float_value(&file, "DEPH".to_string(), deph_fill, vec_size)?;
-            let deph_qc: Vec<i8> = read_qc(&file, "DEPH_QC", vec_size, &config.qc_type)?;
+            let deph_qc: Vec<i8> = common::get_qc_value(&file, "DEPH_QC".to_string(), vec_size)?;
             let (cp, cpq, pc) = common::convert_depth_to_pressure(pres.clone(), pres_qc.clone(), deph.clone(), deph_qc.clone(), pres_fill, latitude.clone());
             let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), deph_fill, latitude.clone());
             (cp, cpq, pc, cd, cdq, dc)
         } else {
-            let deph = vec![f32::NAN; vec_size];
+            // No DEPH in source: derive depth from pressure only
+            let deph = vec![pres_fill; vec_size];
             let deph_qc = vec![i8::MIN; vec_size];
             let pres_conv = vec![0_i8; vec_size];
-            let deph_conv = vec![0_i8; vec_size];
-            (pres.clone(), pres_qc.clone(), pres_conv, deph, deph_qc, deph_conv)
+            let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), pres_fill, latitude.clone());
+            (pres.clone(), pres_qc.clone(), pres_conv, cd, cdq, dc)
         };
 
     let timestamp_series = Series::new("profile_timestamp".into(), timestamp);
@@ -124,26 +129,13 @@ fn collect_cora_data(
     Ok(df)
 }
 
-/// Read a QC variable as `i8`, converting from char if needed.
-fn read_qc(
-    file: &netcdf::File,
-    var_name: &str,
-    vec_size: usize,
-    qc_type: &QcType,
-) -> Result<Vec<i8>, Box<dyn Error>> {
-    match qc_type {
-        QcType::Int => common::get_qc_value(file, var_name.to_string(), vec_size),
-        QcType::Char => common::get_qc_value_from_char(file, var_name.to_string(), vec_size),
-    }
-}
-
-pub fn run(args: &[String], cora_config: CoraConfig, target: &str) -> Result<Config, Box<dyn Error>> {
+pub fn run(args: &[String], nrt_config: NrtConfig, target: &str) -> Result<Config, Box<dyn Error>> {
     let config = ConvertConfig::build(args).unwrap_or_else(|err| {
         eprintln!("Problem parsing arguments: {err}");
         process::exit(1);
     });
 
-    match netcdf_to_parquet(&config, &cora_config) {
+    match netcdf_to_parquet(&config, &nrt_config) {
         Ok(_) => Ok(Config {
             module: "convert".to_string(),
             target: target.to_string(),

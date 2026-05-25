@@ -1,0 +1,57 @@
+use serde::{Deserialize, Serialize};
+use std::error::Error;
+use std::path::Path;
+
+/// How QC flags are stored in the NetCDF source file.
+/// All formats produce `i8` in the output; char QC is converted automatically.
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum QcType {
+    /// QC flags are stored as bytes (`i8`).
+    Int,
+    /// QC flags are stored as ASCII digit characters ('0'–'9').
+    /// They are converted to `i8` during conversion.
+    Char,
+}
+
+/// Configuration that describes the structure of a CORA NetCDF source file.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct CoraConfig {
+    /// Name of the time variable (`"TIME"` for current format, `"JULD"` for legacy).
+    pub time_var: String,
+    /// Storage type of QC flags in the source file.
+    pub qc_type: QcType,
+    /// Whether the source file contains TIME_QC and POSITION_QC variables.
+    pub has_time_qc: bool,
+    /// Whether the source file contains a DEPH variable.
+    /// If `false`, only PRES is present and depth is not converted.
+    pub has_deph_source: bool,
+}
+
+impl CoraConfig {
+    /// Current CORA format: integer QC, TIME variable, DEPH present.
+    pub fn cora() -> Self {
+        Self {
+            time_var: "TIME".to_string(),
+            qc_type: QcType::Int,
+            has_time_qc: true,
+            has_deph_source: true,
+        }
+    }
+
+    /// Legacy CORA format: char QC, JULD variable, no DEPH.
+    pub fn cora_legacy() -> Self {
+        Self {
+            time_var: "JULD".to_string(),
+            qc_type: QcType::Char,
+            has_time_qc: false,
+            has_deph_source: false,
+        }
+    }
+
+    /// Load config from a TOML file.
+    pub fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
+        let content = std::fs::read_to_string(path)?;
+        Ok(toml::from_str(&content)?)
+    }
+}
