@@ -7,52 +7,44 @@ use netcdf;
 use serde::{Serialize, Deserialize};
 
 use crate::Config;
-use super::common;
-use super::ConvertConfig;
-use super::common_head;
+use crate::convert::common;
+use super::HeaderConfig;
+use super::common as header_common;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct NetCDFHeader {
     global_attributes: HashMap<String, String>,
     dimensions: HashMap<String, usize>,
-    variables: HashMap<String, common_head::VariableMetadata>,
+    variables: HashMap<String, header_common::VariableMetadata>,
 }
 
-fn netcdf_to_yaml(config: &ConvertConfig) -> Result<(), Box<dyn std::error::Error>> {
+fn netcdf_to_yaml(config: &HeaderConfig) -> Result<(), Box<dyn std::error::Error>> {
     let src_file = &config.src_file;
     let target_file = &config.target_file;
     let mut metadata: HashMap<String, NetCDFHeader> = HashMap::new();
 
-    // Get the file name (without directories) and then remove the extension
-    let filename = common::get_base_file_name(&src_file)?;
+    let filename = common::get_base_file_name(src_file)?;
 
-    // Extract dimensions and variables metadata
     let header = collect_netcdf_metadata(src_file)?;
     metadata.insert(filename, header);
 
-    // Write metadata to YAML
     let yaml_file = File::create(target_file)?;
     serde_yaml::to_writer(yaml_file, &metadata)?;
 
     Ok(())
 }
 
-
-/// Collects metadata and data from the NetCDF file.
-/// Returns a tuple containing the NetCDF metadata and a Polars DataFrame.
-fn collect_netcdf_metadata (
-    src_file: &String,
+fn collect_netcdf_metadata(
+    src_file: &str,
 ) -> Result<NetCDFHeader, Box<dyn std::error::Error>> {
-    // Open the NetCDF file
     let file = netcdf::open(src_file)?;
 
     let attr_names = vec!["title", "platform_code", "platform_name",
                           "time_coverage_start", "data_mode"];
 
-    // Collect metadata using the extracted functions
-    let dimensions = common_head::collect_dimensions(&file);
-    let global_attributes = common_head::collect_global_attributes(&file, &attr_names);
-    let variables = common_head::collect_variables_and_metadata(&file);
+    let dimensions = header_common::collect_dimensions(&file);
+    let global_attributes = header_common::collect_global_attributes(&file, &attr_names);
+    let variables = header_common::collect_variables_and_metadata(&file);
 
     Ok(NetCDFHeader {
         global_attributes,
@@ -61,22 +53,29 @@ fn collect_netcdf_metadata (
     })
 }
 
+/// Extract metadata from a single NetCDF file to YAML. Called by both `run` and the batch processor.
+pub fn extract_file(src: &str, dest: &str) -> Result<(), Box<dyn Error>> {
+    let config = HeaderConfig {
+        src_file: src.to_string(),
+        target_file: dest.to_string(),
+    };
+    netcdf_to_yaml(&config)
+}
+
 pub fn run(args: &[String]) -> Result<Config, Box<dyn Error>> {
-    let config = ConvertConfig::build(args).unwrap_or_else(|err| {
+    let config = HeaderConfig::build(args).unwrap_or_else(|err| {
         eprintln!("Problem parsing arguments: {err}");
         process::exit(1);
     });
 
     match netcdf_to_yaml(&config) {
-        Ok(_config) => {
-            Ok(Config {
-                module: "netcdf".to_string(),
-                target: "nrt_head".to_string(),
-                args: args.to_vec(),
-            })
-        }
+        Ok(_) => Ok(Config {
+            module: "header".to_string(),
+            target: "nrt".to_string(),
+            args: args.to_vec(),
+        }),
         Err(e) => {
-            eprintln!("Conversion failed: {}", e);
+            eprintln!("Header extraction failed: {}", e);
             process::exit(1);
         }
     }

@@ -1,9 +1,11 @@
 [package]
 name = "ctddump"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
+toml = "0.8"
 num-traits = "0.2"
 chrono = "0.4"
 netcdf = { version = "0.10", features = ["ndarray"] }
@@ -11,6 +13,12 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 polars = { version = "0.43", features = ["ndarray", "parquet", "dtype-i8"] }
 gsw = "0.2.2"
+walkdir = "2"
+rayon = "1"
+glob = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
 
 [features]
 trace = []

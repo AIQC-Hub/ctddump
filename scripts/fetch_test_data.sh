@@ -37,18 +37,17 @@ fi
 
 mkdir -p "$TARGET_DIR"
 
-TMP_ZIP="$(mktemp -t cdtdump-test-data.XXXXXX.zip)"
-trap 'rm -f "$TMP_ZIP"' EXIT
+TMP_DIR="$(mktemp -d -t cdtdump-test-data.XXXXXX)"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo "Downloading test-data.zip from release '$VERSION' of $REPO ..."
 gh release download "$VERSION" \
   --repo "$REPO" \
-  --pattern 'test-data.zip' \
-  --output "$TMP_ZIP" \
-  --clobber
+  --pattern 'test_data.zip' \
+  --dir "$TMP_DIR"
 
 echo "Extracting to $TARGET_DIR ..."
-unzip -q -o "$TMP_ZIP" -d "$TARGET_DIR"
+unzip -q -o "$TMP_DIR/test_data.zip" -d "$TARGET_DIR"
 
 n_files="$(find "$TARGET_DIR" -type f | wc -l | tr -d ' ')"
 echo "Done. $n_files files placed in $TARGET_DIR"
