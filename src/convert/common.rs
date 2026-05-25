@@ -382,6 +382,48 @@ where
     (converted_deph, converted_deph_qc, deph_conv)
 }
 
+/// Pure algorithm for expanding deployment-indexed coordinates.
+///
+/// Given parallel slices of deployment start indices and coordinate values,
+/// builds a flat `Vec<f32>` of length `time_len × obs_len`.  For each TIME
+/// step `t` the active deployment is the one with the latest start index that
+/// is still ≤ `t`; if no deployment covers `t` yet the value is `NaN`.  Each
+/// TIME value is repeated `obs_len` times to match the observation-level output.
+///
+/// Negative indices are clamped to 0.  Input need not be sorted.
+fn expand_coords_from_indices(
+    deploy_indices: &[i32],
+    coord_values: &[f32],
+    time_len: usize,
+    obs_len: usize,
+) -> Vec<f32> {
+    let vec_size = time_len * obs_len;
+
+    // Sort deployments by their start TIME index (ascending)
+    let mut sorted: Vec<(usize, f32)> = deploy_indices
+        .iter()
+        .zip(coord_values.iter())
+        .map(|(&idx, &val)| (idx.max(0) as usize, val))
+        .collect();
+    sorted.sort_by_key(|&(idx, _)| idx);
+
+    let mut result = Vec::with_capacity(vec_size);
+    for t in 0..time_len {
+        // Latest deployment whose start index ≤ t
+        let value = sorted
+            .iter()
+            .rev()
+            .find(|&&(start, _)| start <= t)
+            .map(|&(_, val)| val)
+            .unwrap_or(f32::NAN);
+        for _ in 0..obs_len {
+            result.push(value);
+        }
+    }
+
+    result
+}
+
 /// Expand a deployment-indexed coordinate variable (`DEPLOY_LATITUDE` or
 /// `DEPLOY_LONGITUDE`) into a flat `Vec<f32>` of length `time_len × obs_len`.
 ///
@@ -419,29 +461,7 @@ pub fn expand_deploy_coords(
         .into());
     }
 
-    // Sort deployments by their start TIME index (ascending)
-    let mut sorted: Vec<(usize, f32)> = deploy_indices
-        .iter()
-        .zip(coord_values.iter())
-        .map(|(&idx, &val)| (idx.max(0) as usize, val))
-        .collect();
-    sorted.sort_by_key(|&(idx, _)| idx);
-
-    let mut result = Vec::with_capacity(vec_size);
-    for t in 0..time_len {
-        // Latest deployment whose start index ≤ t
-        let value = sorted
-            .iter()
-            .rev()
-            .find(|&&(start, _)| start <= t)
-            .map(|&(_, val)| val)
-            .unwrap_or(f32::NAN);
-        for _ in 0..obs_len {
-            result.push(value);
-        }
-    }
-
-    Ok(result)
+    Ok(expand_coords_from_indices(&deploy_indices, &coord_values, time_len, obs_len))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -732,5 +752,78 @@ mod tests {
             let err = (cp[0] - pres).abs();
             assert!(err < 0.5, "pres={pres} lat={lat}: roundtrip error {err}");
         }
+    }
+
+    // ── expand_coords_from_indices ───────────────────────────────────────────
+
+    #[test]
+    fn test_expand_single_deployment_covers_all_times() {
+        // One deployment starts at t=0 → same coordinate for every time step
+        let result = expand_coords_from_indices(&[0], &[10.5_f32], 4, 1);
+        assert_eq!(result, vec![10.5, 10.5, 10.5, 10.5]);
+    }
+
+    #[test]
+    fn test_expand_two_deployments_boundary() {
+        // Deployment 0 starts at t=0 (lon=1.0), deployment 1 starts at t=3 (lon=2.0)
+        // obs_len=1 for simplicity: result length = 5
+        let result = expand_coords_from_indices(&[0, 3], &[1.0_f32, 2.0], 5, 1);
+        assert_eq!(result, vec![1.0, 1.0, 1.0, 2.0, 2.0]);
+    }
+
+    #[test]
+    fn test_expand_obs_tiling() {
+        // With obs_len=3 each time-step value must repeat 3 times
+        // One deployment at t=0 (lon=5.0), 2 time steps → [5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
+        let result = expand_coords_from_indices(&[0], &[5.0_f32], 2, 3);
+        assert_eq!(result, vec![5.0, 5.0, 5.0, 5.0, 5.0, 5.0]);
+    }
+
+    #[test]
+    fn test_expand_obs_tiling_two_deployments() {
+        // Deployment 0 at t=0 (lon=1.0), deployment 1 at t=2 (lon=3.0), obs_len=2, time_len=4
+        // t=0 → [1.0,1.0], t=1 → [1.0,1.0], t=2 → [3.0,3.0], t=3 → [3.0,3.0]
+        let result = expand_coords_from_indices(&[0, 2], &[1.0_f32, 3.0], 4, 2);
+        assert_eq!(result, vec![1.0, 1.0, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0]);
+    }
+
+    #[test]
+    fn test_expand_unsorted_input_sorted_correctly() {
+        // Supply indices in reverse order — algorithm must sort before resolving
+        // deployment B starts at t=0 (lon=20.0), deployment A starts at t=3 (lon=10.0)
+        // → t=0..2 use 20.0, t=3..4 use 10.0
+        let result = expand_coords_from_indices(&[3, 0], &[10.0_f32, 20.0], 5, 1);
+        assert_eq!(result, vec![20.0, 20.0, 20.0, 10.0, 10.0]);
+    }
+
+    #[test]
+    fn test_expand_deployment_starts_after_t0_nan_early() {
+        // First deployment starts at t=2 → t=0 and t=1 have no active deployment → NaN
+        let result = expand_coords_from_indices(&[2], &[7.0_f32], 4, 1);
+        assert!(result[0].is_nan(), "t=0 should be NaN");
+        assert!(result[1].is_nan(), "t=1 should be NaN");
+        assert_eq!(result[2], 7.0);
+        assert_eq!(result[3], 7.0);
+    }
+
+    #[test]
+    fn test_expand_three_deployments() {
+        // Deployments: t=0 → 1.0, t=2 → 2.0, t=4 → 3.0, time_len=6, obs_len=1
+        let result = expand_coords_from_indices(&[0, 2, 4], &[1.0_f32, 2.0, 3.0], 6, 1);
+        assert_eq!(result, vec![1.0, 1.0, 2.0, 2.0, 3.0, 3.0]);
+    }
+
+    #[test]
+    fn test_expand_negative_index_clamped_to_zero() {
+        // A negative index is clamped to 0 and behaves like a deployment at t=0
+        let result = expand_coords_from_indices(&[-5], &[99.0_f32], 3, 1);
+        assert_eq!(result, vec![99.0, 99.0, 99.0]);
+    }
+
+    #[test]
+    fn test_expand_result_length() {
+        // Result must always equal time_len × obs_len
+        let result = expand_coords_from_indices(&[0, 3], &[1.0_f32, 2.0], 5, 4);
+        assert_eq!(result.len(), 20);
     }
 }
