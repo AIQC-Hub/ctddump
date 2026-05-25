@@ -6,7 +6,7 @@ use chrono::{Duration, TimeZone, Utc};
 use netcdf;
 use netcdf::{NcTypeDescriptor, types::NcVariableType};
 use gsw::conversions::{p_from_z, z_from_p};
-use crate::netcdf::common;
+use crate::convert::common;
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]

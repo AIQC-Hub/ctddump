@@ -36,7 +36,7 @@ cargo build
 cargo test
 
 # Run a single test by name
-cargo test test_netcdf_nrt_ar_1
+cargo test test_convert_nrt_ar_1
 
 # Build with trace feature enabled
 cargo build --features trace
@@ -85,13 +85,13 @@ ctddump convert <subcommand> [--config <file.toml>] <src_file> <target_file>
 
 Each NRT and CORA subcommand accepts an optional `--config` / `-c` TOML file to override the embedded defaults. Omitting `--config` uses the embedded default for that subcommand.
 
-**NRT config** (`src/netcdf/nrt_config.rs`):
+**NRT config** (`src/convert/nrt_config.rs`):
 ```toml
 has_deph_source = true      # whether DEPH variable exists in the source file
 has_precise_coords = false  # whether to use PRECISE_LONGITUDE/PRECISE_LATITUDE
 ```
 
-**CORA config** (`src/netcdf/cora_config.rs`):
+**CORA config** (`src/convert/cora_config.rs`):
 ```toml
 time_var = "TIME"    # time variable name ("TIME" or "JULD" for legacy)
 qc_type = "int"      # QC storage type: "int" (i8) or "char" (converted to i8)
@@ -111,11 +111,11 @@ Each converter module follows the same pattern:
 - The internal collection function opens the NetCDF, extracts variables using shared utilities from `common.rs`, assembles a Polars `DataFrame`, and writes Parquet via `ParquetWriter`
 
 ### Converter modules
-- **`src/netcdf/nrt.rs`** — unified NRT converter for all four regions; behaviour controlled by `NrtConfig`
-- **`src/netcdf/cora.rs`** — unified CORA converter for current and legacy formats; behaviour controlled by `CoraConfig`
-- **`src/netcdf/nrt_head.rs`** / **`src/netcdf/cora_head.rs`** — metadata extraction to YAML
+- **`src/convert/nrt.rs`** — unified NRT converter for all four regions; behaviour controlled by `NrtConfig`
+- **`src/convert/cora.rs`** — unified CORA converter for current and legacy formats; behaviour controlled by `CoraConfig`
+- **`src/convert/nrt_head.rs`** / **`src/convert/cora_head.rs`** — metadata extraction to YAML
 
-### Key shared utilities (`src/netcdf/common.rs`)
+### Key shared utilities (`src/convert/common.rs`)
 - `convert_time_value()` — converts days-since-1950-01-01 (standard oceanographic epoch) to Unix milliseconds
 - `get_coordinate_value()` — reads a 1-D or scalar variable and tiles it to `time_len × obs_len`; returns fill values if the variable is absent
 - `get_var_float_value()` — reads float data, replacing fill values with NaN
