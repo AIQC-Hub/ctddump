@@ -96,7 +96,8 @@ fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn 
         BatchConvertFormat::NrtAr { config, nrt_args, src_dir, output, threads } => {
             let mut nrt_config = load_or_default(config, NrtConfig::nrt_ar)?;
             nrt_args.apply_to(&mut nrt_config);
-            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
+            let pattern = nrt_config.pattern.as_deref().unwrap_or("AR_PR_CT_*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", pattern, |src, dest| {
                 convert::nrt::convert_file(src, dest, &nrt_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "nrt_ar".to_string(), args: vec![] })
@@ -104,7 +105,8 @@ fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn 
         BatchConvertFormat::NrtBo { config, nrt_args, src_dir, output, threads } => {
             let mut nrt_config = load_or_default(config, NrtConfig::nrt_bo)?;
             nrt_args.apply_to(&mut nrt_config);
-            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
+            let pattern = nrt_config.pattern.as_deref().unwrap_or("BO_PR_CT_*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", pattern, |src, dest| {
                 convert::nrt::convert_file(src, dest, &nrt_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "nrt_bo".to_string(), args: vec![] })
@@ -112,7 +114,8 @@ fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn 
         BatchConvertFormat::NrtMo { config, nrt_args, src_dir, output, threads } => {
             let mut nrt_config = load_or_default(config, NrtConfig::nrt_mo)?;
             nrt_args.apply_to(&mut nrt_config);
-            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
+            let pattern = nrt_config.pattern.as_deref().unwrap_or("MO_PR_CT_*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", pattern, |src, dest| {
                 convert::nrt::convert_file(src, dest, &nrt_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "nrt_mo".to_string(), args: vec![] })
@@ -120,7 +123,8 @@ fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn 
         BatchConvertFormat::NrtGl { config, nrt_args, src_dir, output, threads } => {
             let mut nrt_config = load_or_default(config, NrtConfig::nrt_gl)?;
             nrt_args.apply_to(&mut nrt_config);
-            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
+            let pattern = nrt_config.pattern.as_deref().unwrap_or("GL_PR_CT_*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", pattern, |src, dest| {
                 convert::nrt::convert_file(src, dest, &nrt_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "nrt_gl".to_string(), args: vec![] })
@@ -128,7 +132,8 @@ fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn 
         BatchConvertFormat::Cora { config, cora_args, src_dir, output, threads } => {
             let mut cora_config = load_or_default(config, CoraConfig::cora)?;
             cora_args.apply_to(&mut cora_config);
-            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
+            let pattern = cora_config.pattern.as_deref().unwrap_or("*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", pattern, |src, dest| {
                 convert::cora::convert_file(src, dest, &cora_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "cora".to_string(), args: vec![] })
@@ -136,7 +141,8 @@ fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn 
         BatchConvertFormat::CoraLegacy { config, cora_args, src_dir, output, threads } => {
             let mut cora_config = load_or_default(config, CoraConfig::cora_legacy)?;
             cora_args.apply_to(&mut cora_config);
-            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", |src, dest| {
+            let pattern = cora_config.pattern.as_deref().unwrap_or("*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", pattern, |src, dest| {
                 convert::cora::convert_file(src, dest, &cora_config)
             })?;
             Ok(Config { module: "batch".to_string(), target: "cora_legacy".to_string(), args: vec![] })
@@ -146,14 +152,16 @@ fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn 
 
 fn dispatch_batch_header(format: BatchHeaderFormat) -> Result<Config, Box<dyn Error>> {
     match format {
-        BatchHeaderFormat::Nrt { src_dir, output, threads } => {
-            batch::run_batch(&src_dir, output.as_deref(), threads, "yaml", |src, dest| {
+        BatchHeaderFormat::Nrt { src_dir, output, threads, pattern } => {
+            let effective_pattern = pattern.as_deref().unwrap_or("*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "yaml", effective_pattern, |src, dest| {
                 header::nrt::extract_file(src, dest)
             })?;
             Ok(Config { module: "batch".to_string(), target: "header_nrt".to_string(), args: vec![] })
         }
-        BatchHeaderFormat::Cora { src_dir, output, threads } => {
-            batch::run_batch(&src_dir, output.as_deref(), threads, "yaml", |src, dest| {
+        BatchHeaderFormat::Cora { src_dir, output, threads, pattern } => {
+            let effective_pattern = pattern.as_deref().unwrap_or("*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "yaml", effective_pattern, |src, dest| {
                 header::cora::extract_file(src, dest)
             })?;
             Ok(Config { module: "batch".to_string(), target: "header_cora".to_string(), args: vec![] })

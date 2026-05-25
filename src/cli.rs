@@ -58,6 +58,9 @@ pub struct NrtArgs {
     /// Do not derive profile coordinate columns
     #[arg(long = "no-profile-coords", overrides_with = "profile_coords")]
     pub no_profile_coords: bool,
+    /// Glob pattern matched against filenames for batch file selection (e.g. "AR_PR_CT_*.nc")
+    #[arg(long = "pattern", value_name = "GLOB")]
+    pub pattern: Option<String>,
 }
 
 impl NrtArgs {
@@ -68,6 +71,7 @@ impl NrtArgs {
         else if self.no_deph_source { config.has_deph_source = false; }
         if self.profile_coords         { config.has_profile_coords = true; }
         else if self.no_profile_coords { config.has_profile_coords = false; }
+        if let Some(ref p) = self.pattern { config.pattern = Some(p.clone()); }
     }
 }
 
@@ -96,6 +100,9 @@ pub struct CoraArgs {
     /// Source has no DEPH variable
     #[arg(long = "no-deph-source", overrides_with = "deph_source")]
     pub no_deph_source: bool,
+    /// Glob pattern matched against filenames for batch file selection (e.g. "CO_*.nc")
+    #[arg(long = "pattern", value_name = "GLOB")]
+    pub pattern: Option<String>,
 }
 
 impl CoraArgs {
@@ -108,6 +115,7 @@ impl CoraArgs {
         else if self.no_time_qc { config.has_time_qc = false; }
         if self.deph_source         { config.has_deph_source = true; }
         else if self.no_deph_source { config.has_deph_source = false; }
+        if let Some(ref p) = self.pattern { config.pattern = Some(p.clone()); }
     }
 }
 
@@ -253,6 +261,8 @@ pub enum BatchHeaderFormat {
         #[arg(short, long)] output: Option<PathBuf>,
         /// Number of threads (defaults to all available CPU cores)
         #[arg(short, long)] threads: Option<usize>,
+        /// Glob pattern matched against filenames [default: "*.nc"]
+        #[arg(long = "pattern", value_name = "GLOB")] pattern: Option<String>,
         /// Source directory to search recursively for .nc files
         src_dir: PathBuf,
     },
@@ -261,6 +271,8 @@ pub enum BatchHeaderFormat {
     Cora {
         #[arg(short, long)] output: Option<PathBuf>,
         #[arg(short, long)] threads: Option<usize>,
+        /// Glob pattern matched against filenames [default: "*.nc"]
+        #[arg(long = "pattern", value_name = "GLOB")] pattern: Option<String>,
         src_dir: PathBuf,
     },
 }

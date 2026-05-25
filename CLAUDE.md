@@ -80,6 +80,8 @@ NRT subcommand flags: `--deph-source` / `--no-deph-source`, `--profile-coords` /
 
 CORA subcommand flags: `--time-var <VAR>`, `--qc-type <int|char>`, `--time-qc` / `--no-time-qc`, `--deph-source` / `--no-deph-source`
 
+Note: `--pattern` is not relevant for single-file `convert`; it is ignored in that context.
+
 ### `batch` — directory-tree NetCDF → Parquet or YAML (multi-threaded)
 
 ```
@@ -92,23 +94,23 @@ If `--output` is omitted, each file is written alongside its source.
 If `--output` is given, all files land flat in that directory — an error is raised before
 conversion starts if any two sources would produce the same output filename.
 
-**`batch convert`** — NetCDF → Parquet (same per-format flags as `convert`, plus `--output`, `--threads`):
+**`batch convert`** — NetCDF → Parquet (same per-format flags as `convert`, plus `--output`, `--threads`, `--pattern`):
 
-| Subcommand | Format |
-|------------|--------|
-| `nrt_ar` | NRT Arctic Sea |
-| `nrt_bo` | NRT Baltic Sea |
-| `nrt_mo` | NRT Mediterranean Sea |
-| `nrt_gl` | NRT Global |
-| `cora` | CORA current format |
-| `cora_legacy` | CORA legacy format |
+| Subcommand | Format | Default pattern |
+|------------|--------|-----------------|
+| `nrt_ar` | NRT Arctic Sea | `AR_PR_CT_*.nc` |
+| `nrt_bo` | NRT Baltic Sea | `BO_PR_CT_*.nc` |
+| `nrt_mo` | NRT Mediterranean Sea | `MO_PR_CT_*.nc` |
+| `nrt_gl` | NRT Global | `GL_PR_CT_*.nc` |
+| `cora` | CORA current format | `*.nc` |
+| `cora_legacy` | CORA legacy format | `*.nc` |
 
-**`batch header`** — NetCDF → YAML metadata:
+**`batch header`** — NetCDF → YAML metadata (flags: `--output`, `--threads`, `--pattern`):
 
-| Subcommand | Format |
-|------------|--------|
-| `nrt` | Any NRT `.nc` |
-| `cora` | Any CORA `.nc` |
+| Subcommand | Format | Default pattern |
+|------------|--------|-----------------|
+| `nrt` | Any NRT `.nc` | `*.nc` |
+| `cora` | Any CORA `.nc` | `*.nc` |
 
 ### `header` — NetCDF → YAML metadata
 
@@ -139,6 +141,7 @@ Individual flags override whatever `--config` sets for that field only.
 |------|-------------|-------------------|
 | `--deph-source` / `--no-deph-source` | `has_deph_source` | `true` for BO/GL, `false` for AR/MO |
 | `--profile-coords` / `--no-profile-coords` | `has_profile_coords` | `true` for BO, `false` for AR/MO/GL |
+| `--pattern <GLOB>` | `pattern` | see table above |
 
 **CORA flags** (`cora` and `cora_legacy` subcommands):
 
@@ -148,6 +151,9 @@ Individual flags override whatever `--config` sets for that field only.
 | `--qc-type <int\|char>` | `qc_type` | `int` | `char` |
 | `--time-qc` / `--no-time-qc` | `has_time_qc` | `true` | `false` |
 | `--deph-source` / `--no-deph-source` | `has_deph_source` | `true` | `false` |
+| `--pattern <GLOB>` | `pattern` | `*.nc` |
+
+The `--pattern` glob is matched against filenames only (not full paths). Supports `*`, `?`, and `[…]`.
 
 **TOML config file format** (for `--config`):
 
@@ -155,12 +161,14 @@ Individual flags override whatever `--config` sets for that field only.
 # NRT
 has_deph_source = true
 has_profile_coords = false
+pattern = "AR_PR_CT_*.nc"   # optional; omit to use the subcommand built-in default
 
 # CORA
 time_var = "TIME"
-qc_type = "int"       # "int" or "char"
+qc_type = "int"             # "int" or "char"
 has_time_qc = true
 has_deph_source = true
+pattern = "*.nc"            # optional
 ```
 
 ## Architecture

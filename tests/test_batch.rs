@@ -191,5 +191,50 @@ fn test_batch_empty_dir_error() {
     let result = handle_dispatch(&args);
     assert!(result.is_err());
     let msg = result.unwrap_err().to_string();
-    assert!(msg.contains("No .nc files found"), "got: {msg}");
+    assert!(msg.contains("No files matching"), "got: {msg}");
+}
+
+// ── pattern selection ─────────────────────────────────────────────────────────
+
+/// Default pattern for nrt_ar is "AR_PR_CT_*.nc"; a CORA file in the same
+/// directory must not be converted.
+#[test]
+fn test_batch_default_pattern_filters() {
+    let (_src_guard, src_dir) = setup_src(&[
+        "./tests/test_data/AR_PR_CT_ITP-71.nc",
+        "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.nc",
+    ]);
+    let out_dir = tempfile::tempdir().unwrap();
+
+    let args = vec![
+        "batch".to_string(), "convert".to_string(), "nrt_ar".to_string(),
+        "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
+        src_dir.to_str().unwrap().to_string(),
+    ];
+    assert!(handle_dispatch(&args).is_ok());
+
+    assert!(out_dir.path().join("AR_PR_CT_ITP-71.parquet").exists());
+    assert!(!out_dir.path().join("CO_DMQCGL01_19861204_PR_CT.parquet").exists());
+}
+
+/// --pattern overrides the default; here we narrow two AR files down to one
+/// using an exact filename.
+#[test]
+fn test_batch_pattern_override() {
+    let (_src_guard, src_dir) = setup_src(&[
+        "./tests/test_data/AR_PR_CT_ITP-71.nc",
+        "./tests/test_data/AR_PR_CT_58KN.nc",
+    ]);
+    let out_dir = tempfile::tempdir().unwrap();
+
+    let args = vec![
+        "batch".to_string(), "convert".to_string(), "nrt_ar".to_string(),
+        "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
+        "--pattern".to_string(), "AR_PR_CT_ITP-71.nc".to_string(),
+        src_dir.to_str().unwrap().to_string(),
+    ];
+    assert!(handle_dispatch(&args).is_ok());
+
+    assert!(out_dir.path().join("AR_PR_CT_ITP-71.parquet").exists());
+    assert!(!out_dir.path().join("AR_PR_CT_58KN.parquet").exists());
 }

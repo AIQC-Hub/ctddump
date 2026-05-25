@@ -2,21 +2,36 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
+use glob::Pattern;
 use rayon::prelude::*;
 use walkdir::WalkDir;
 
-/// Recursively collect all `.nc` files under `src_dir`.
-pub fn collect_nc_files(src_dir: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+/// Recursively collect all files under `src_dir` whose filename matches `pattern`.
+/// `pattern` is a glob matched against the filename only (not the full path).
+pub fn collect_nc_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    let glob_pat = Pattern::new(pattern)
+        .map_err(|e| format!("Invalid pattern '{}': {}", pattern, e))?;
+
     let files: Vec<PathBuf> = WalkDir::new(src_dir)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "nc"))
+        .filter(|e| {
+            e.path()
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map_or(false, |name| glob_pat.matches(name))
+        })
         .map(|e| e.path().to_path_buf())
         .collect();
 
     if files.is_empty() {
-        return Err(format!("No .nc files found under {}", src_dir.display()).into());
+        return Err(format!(
+            "No files matching '{}' found under {}",
+            pattern,
+            src_dir.display()
+        )
+        .into());
     }
 
     Ok(files)
@@ -71,8 +86,9 @@ pub fn check_duplicates(pairs: &[(PathBuf, PathBuf)]) -> Result<(), Box<dyn Erro
     Ok(())
 }
 
-/// Walk `src_dir`, process every `.nc` file using `process_fn`, and write results to
-/// the same directory (if `output_dir` is `None`) or flat into `output_dir`.
+/// Walk `src_dir`, select files matching `pattern` (filename glob), process each
+/// using `process_fn`, and write results to the same directory (if `output_dir`
+/// is `None`) or flat into `output_dir`.
 /// `output_ext` controls the extension of output files (`"parquet"` or `"yaml"`).
 ///
 /// Returns the number of files successfully processed.
@@ -82,12 +98,13 @@ pub fn run_batch<F>(
     output_dir: Option<&Path>,
     threads: Option<usize>,
     output_ext: &str,
+    pattern: &str,
     process_fn: F,
 ) -> Result<usize, Box<dyn Error>>
 where
     F: Fn(&str, &str) -> Result<(), Box<dyn Error>> + Sync + Send,
 {
-    let nc_files = collect_nc_files(src_dir)?;
+    let nc_files = collect_nc_files(src_dir, pattern)?;
     let pairs = compute_output_pairs(&nc_files, output_dir, output_ext)?;
     check_duplicates(&pairs)?;
 

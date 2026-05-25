@@ -22,24 +22,28 @@ pub struct NrtConfig {
     /// observation, the value from the other pair is used as a fallback.
     /// `PRECISE_*` takes priority over `DEPLOY_*` if both are present.
     pub has_profile_coords: bool,
+    /// Glob pattern matched against filenames (not full paths) during batch processing.
+    /// `None` means "use the subcommand's built-in default" (e.g. `"AR_PR_CT_*.nc"`).
+    #[serde(default)]
+    pub pattern: Option<String>,
 }
 
 impl NrtConfig {
     /// Arctic Sea (AR): PRES-only source, standard coordinates.
     pub fn nrt_ar() -> Self {
-        Self { has_deph_source: false, has_profile_coords: false }
+        Self { has_deph_source: false, has_profile_coords: false, pattern: None }
     }
     /// Baltic Sea (BO): DEPH source present, profile coordinates enabled.
     pub fn nrt_bo() -> Self {
-        Self { has_deph_source: true, has_profile_coords: true }
+        Self { has_deph_source: true, has_profile_coords: true, pattern: None }
     }
     /// Mediterranean Sea (MO): PRES-only source, standard coordinates.
     pub fn nrt_mo() -> Self {
-        Self { has_deph_source: false, has_profile_coords: false }
+        Self { has_deph_source: false, has_profile_coords: false, pattern: None }
     }
     /// Global (GL): DEPH source present, standard coordinates.
     pub fn nrt_gl() -> Self {
-        Self { has_deph_source: true, has_profile_coords: false }
+        Self { has_deph_source: true, has_profile_coords: false, pattern: None }
     }
 
     /// Load config from a TOML file.
