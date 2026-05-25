@@ -36,4 +36,6 @@ jobs:
         run: scripts/fetch_test_data.sh
 
       - name: Run tests
-        run: cargo test 2> >(grep -v "^HDF5-DIAG\|^  #[0-9]\+\|^    major:\|^    minor:" >&2)
+        shell: bash
+        run: |
+          cargo test 2> >(grep -vE '^HDF5-DIAG|^  #[0-9]+|^    (major|minor):' >&2)
