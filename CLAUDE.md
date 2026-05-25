@@ -12,21 +12,14 @@ The CLI exposes three top-level commands: `convert` (NetCDF → Parquet), `heade
 
 ## Git Workflow
 
-This repository uses **gitflow** (`git-flow` AVH Edition is installed). Always use `git flow` commands to manage branches — do not create feature/release/hotfix branches manually.
+Two permanent branches: `main` (stable releases) and `develop` (integration). `git-flow` AVH Edition is installed but only used when it adds real value.
 
-| Task | Command |
-|------|---------|
-| Start a feature | `git flow feature start <name>` |
-| Finish a feature | `git flow feature finish <name>` |
-| Start a release | `git flow release start <version>` |
-| Finish a release | `git flow release finish <version>` |
-| Start a hotfix | `git flow hotfix start <name>` |
-| Finish a hotfix | `git flow hotfix finish <name>` |
-
-Branch configuration (from `.git/config`):
-- Stable branch: `main`
-- Development branch: `develop`
-- Prefixes: `feature/`, `release/`, `hotfix/`
+| Situation | Approach |
+|-----------|----------|
+| Normal day-to-day changes | Commit directly to `develop` |
+| Large feature spanning multiple sessions | `git flow feature start/finish <name>` |
+| Cutting a release | `git flow release start/finish <version>` |
+| Urgent fix to `main` | `git flow hotfix start/finish <name>` |
 
 ## Commands
 
