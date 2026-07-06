@@ -41,7 +41,7 @@ Fixtures in `tests/` are not committed. Fetch them with `scripts/fetch_test_data
 ## CLI notes (non-obvious behavior)
 
 - **Config priority:** `built-in default < --config <TOML> < individual CLI flags`. `--config`/`-c` sets any subset of fields; per-field flags override it for that field only.
-- **NRT region defaults:** `has_deph_source` is `true` for BO/GL, `false` for AR/MO. `has_profile_coords` is `true` for BO only, `false` for AR/MO/GL.
+- **NRT region defaults:** `has_deph_source` is `true` for BO/GL, `false` for AR/MO. `has_profile_coords` is `true` for BO only, `false` for AR/MO/GL. **DEPH is auto-detected:** NRT always reads DEPH and does the bidirectional PRES↔DEPH conversion when the file contains a `DEPH` variable, regardless of `has_deph_source` — the flag only forces DEPH handling on for files where the variable might otherwise be skipped. This matters for AR/MO files that ship DEPH instead of PRES (without it both `pres` and `deph` would be all-NaN). When DEPH is absent the sourced/derived branches are equivalent, so PRES-only output is unchanged. CORA does **not** auto-detect (its `cora_legacy` default deliberately ignores a present DEPH).
 - **CORA `cora` vs `cora_legacy` defaults:** `time_var` `TIME`/`JULD`; `qc_type` `int`/`char`; `has_time_qc` `true`/`false`; `has_deph_source` `true`/`false`.
 - **`--pattern`** matches filenames only (not paths); supports `*`, `?`, `[…]`. Ignored by single-file `convert`.
 - **`batch` output:** without `--output`, each result is written beside its source; with `--output`, all land flat in that dir and a duplicate-output-name collision is an error raised before conversion starts.

@@ -1,4 +1,5 @@
 use ctddump::{handle_dispatch, Config};
+use polars::prelude::*;
 
 #[test]
 fn test_convert_nrt_ar_1() {
@@ -196,4 +197,46 @@ fn test_convert_cora_1() {
     };
 
     assert_eq!(result.unwrap(), expected);
+}
+
+/// Regression: an NRT file that ships DEPH but no PRES must still populate `pres`
+/// (derived from DEPH) even when the region default has `has_deph_source = false`.
+///
+/// `GL_PR_CT_EXEC004K` is a DEPH-only file; converting it with the `nrt_ar` config
+/// (whose default is `has_deph_source = false`) previously left `pres` and `deph`
+/// entirely NaN because DEPH was never read. The converter now uses DEPH whenever
+/// the file actually contains it.
+#[test]
+fn test_convert_nrt_ar_deph_only_generates_pres() {
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("ar_deph_only.parquet");
+    let args = vec![
+        "convert".to_string(),
+        "nrt_ar".to_string(),
+        "./tests/test_data/GL_PR_CT_EXEC004K.nc".to_string(),
+        dest.to_str().unwrap().to_string(),
+    ];
+    handle_dispatch(&args).expect("conversion should succeed");
+
+    let df = ParquetReader::new(std::fs::File::open(&dest).unwrap())
+        .finish()
+        .unwrap();
+    assert!(df.height() > 0, "expected non-empty output");
+
+    // pres must be fully populated (derived from DEPH), not all-NaN.
+    let pres = df.column("pres").unwrap().f32().unwrap();
+    let pres_nan = pres.into_iter().filter(|v| v.map_or(true, |x| x.is_nan())).count();
+    assert_eq!(pres_nan, 0, "pres should be generated from DEPH, not NaN");
+
+    // deph (the real source) must also be present.
+    let deph = df.column("deph").unwrap().f32().unwrap();
+    let deph_nan = deph.into_iter().filter(|v| v.map_or(true, |x| x.is_nan())).count();
+    assert_eq!(deph_nan, 0, "deph should be read from the source");
+
+    // Every pres value here is conversion-derived, so pres_conv must be 1.
+    let conv = df.column("pres_conv").unwrap().i8().unwrap();
+    assert!(
+        conv.into_iter().all(|v| v == Some(1)),
+        "all pres values are derived from DEPH, so pres_conv must be 1"
+    );
 }

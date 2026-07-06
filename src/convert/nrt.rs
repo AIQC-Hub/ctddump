@@ -18,12 +18,18 @@ fn netcdf_to_parquet(
     let obs_len = file.dimension("DEPTH").unwrap().len();
     let basename = common::get_base_file_name(&convert_config.src_file)?;
 
+    // Use DEPH whenever the file actually contains it, even if the region default
+    // (`has_deph_source`) is `false`. Some AR/MO files ship DEPH instead of PRES;
+    // ignoring it would leave both `pres` and `deph` empty. When DEPH is absent the
+    // sourced/derived branches are equivalent, so this never changes PRES-only output.
+    let has_deph = nrt_config.has_deph_source || file.variable("DEPH").is_some();
+
     let out_file = std::fs::File::create(&convert_config.target_file)?;
 
     // Stream the file in TIME chunks, writing each chunk as a Parquet row group so
     // the full dense TIME × DEPTH grid is never materialized at once. An empty
     // (zero-row) chunk defines the schema, guaranteeing it matches the real chunks.
-    let empty = collect_nrt_chunk(&file, nrt_config, &basename, 0, 0, obs_len)?;
+    let empty = collect_nrt_chunk(&file, nrt_config, has_deph, &basename, 0, 0, obs_len)?;
     let schema = empty.schema();
     let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
 
@@ -33,13 +39,13 @@ fn netcdf_to_parquet(
         writer.write_batch(&empty)?;
     }
     for (t0, tc) in chunks {
-        let df = collect_nrt_chunk(&file, nrt_config, &basename, t0, tc, obs_len)?;
+        let df = collect_nrt_chunk(&file, nrt_config, has_deph, &basename, t0, tc, obs_len)?;
 
         // Filter rows where all of temp, psal, pres (and deph if sourced) are NaN
         let mask = df.column("temp")?.is_not_nan()?
             | df.column("psal")?.is_not_nan()?
             | df.column("pres")?.is_not_nan()?;
-        let mask = if nrt_config.has_deph_source {
+        let mask = if has_deph {
             mask | df.column("deph")?.is_not_nan()?
         } else {
             mask
@@ -94,6 +100,7 @@ fn fill_nan_from(primary: &[f32], fallback: &[f32]) -> Vec<f32> {
 fn collect_nrt_chunk(
     file: &netcdf::File,
     config: &NrtConfig,
+    has_deph: bool,
     basename: &str,
     time_offset: usize,
     time_count: usize,
@@ -159,7 +166,7 @@ fn collect_nrt_chunk(
     };
 
     let (converted_pres, converted_pres_qc, pres_conv, converted_deph, converted_deph_qc, deph_conv) =
-        if config.has_deph_source {
+        if has_deph {
             let deph_fill = common::get_float_fill_value(file, "DEPH");
             let deph: Vec<f32> = common::get_var_float_value_chunk(file, "DEPH", deph_fill, time_offset, time_count, obs_len)?;
             let deph_qc: Vec<String> = common::get_qc_value_chunk(file, "DEPH_QC", time_offset, time_count, obs_len)?;
