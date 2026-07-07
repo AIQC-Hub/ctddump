@@ -131,6 +131,7 @@ fn build_and_write_range(
             let f = std::fs::File::create(temp_path)
                 .map_err(|e| format!("Cannot create temp file {}: {}", temp_path.display(), e))?;
             ParquetWriter::new(f)
+                .set_parallel(false)
                 .finish(&mut df)
                 .map_err(|e| e.to_string())?;
             Ok(())
@@ -385,7 +386,7 @@ pub fn run_concat_parquet(
         // No renumbering: stream each file straight through as its own row group.
         let out_file = std::fs::File::create(output_file)
             .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
-        let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
+        let mut writer = ParquetWriter::new(out_file).set_parallel(false).batched(&schema)?;
         for path in &files {
             let mut lf = LazyFrame::scan_parquet(path, ScanArgsParquet::default())?;
             if config.drop_na_pres {
@@ -440,7 +441,7 @@ pub fn run_concat_parquet(
             // Concatenate the per-range temp files in ascending range order.
             let out_file = std::fs::File::create(output_file)
                 .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
-            let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
+            let mut writer = ParquetWriter::new(out_file).set_parallel(false).batched(&schema)?;
             let mut wrote_any = false;
             for tmp in &temp_paths {
                 if !tmp.exists() {
@@ -470,7 +471,7 @@ pub fn run_concat_parquet(
     // Sequential path: one writer, ranges assembled and written in ascending order.
     let out_file = std::fs::File::create(output_file)
         .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
-    let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
+    let mut writer = ParquetWriter::new(out_file).set_parallel(false).batched(&schema)?;
 
     if ranges.is_empty() {
         // Every input was empty: still emit a valid, empty Parquet file.

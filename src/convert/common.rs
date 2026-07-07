@@ -97,6 +97,23 @@ pub fn create_observation_sequence(time_len: usize, obs_len: usize) -> Result<Ve
     Ok(obs_repeated)
 }
 
+/// Keep only the elements where `keep[i]` is `true`, consuming `v`. `v` and `keep`
+/// must have the same length.
+///
+/// Converters drop all-NaN observation rows this way — on the raw column vectors,
+/// *before* building the `DataFrame` — instead of Polars' `DataFrame::filter` /
+/// `take`, which leak memory per call in the pinned Polars version (each gather of
+/// the string columns retains memory that is never released). On a batch of many
+/// files this leak accumulates without bound; filtering the vectors here avoids it
+/// entirely and also keeps the dense all-NaN levels out of Polars.
+pub fn retain_by_mask<T>(v: Vec<T>, keep: &[bool]) -> Vec<T> {
+    debug_assert_eq!(v.len(), keep.len());
+    v.into_iter()
+        .zip(keep.iter())
+        .filter_map(|(x, &k)| k.then_some(x))
+        .collect()
+}
+
 pub fn convert_time_value(time_values: &Vec<f64>) -> Result<Vec<i64>, Box<dyn Error>> {
     let reference_date = Utc.with_ymd_and_hms(1950, 1, 1, 0, 0, 0)
         .single() // Get the single result

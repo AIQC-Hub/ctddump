@@ -24,9 +24,13 @@ fn netcdf_to_parquet(
     // Stream the file in N_PROF chunks, writing each as a Parquet row group so the
     // full dense N_PROF × N_LEVELS grid is never materialized at once. An empty
     // (zero-row) chunk defines the schema, guaranteeing it matches the real chunks.
+    // `collect_cora_chunk` already drops all-NaN rows (on the raw vectors, not via
+    // Polars' leaky `filter`), and `set_parallel(false)` avoids the parquet writer's
+    // parallel-encoding path, which leaks memory per call in this Polars version —
+    // both leaks accumulate without bound across a large batch of files.
     let empty = collect_cora_chunk(&file, cora_config, &basename, 0, 0, n_levels, string32)?;
     let schema = empty.schema();
-    let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
+    let mut writer = ParquetWriter::new(out_file).set_parallel(false).batched(&schema)?;
 
     let chunks = common::time_chunks(n_profs, n_levels);
     if chunks.is_empty() {
@@ -34,12 +38,7 @@ fn netcdf_to_parquet(
     }
     for (p0, pc) in chunks {
         let df = collect_cora_chunk(&file, cora_config, &basename, p0, pc, n_levels, string32)?;
-
-        let mask = df.column("temp")?.is_not_nan()?
-            | df.column("psal")?.is_not_nan()?
-            | df.column("pres")?.is_not_nan()?;
-        let filtered = df.filter(&mask)?;
-        writer.write_batch(&filtered)?;
+        writer.write_batch(&df)?;
     }
     writer.finish()?;
 
@@ -120,6 +119,36 @@ fn collect_cora_chunk(
     // output schema matches the NRT schema (profile_longitude / profile_latitude).
     let profile_longitude: Vec<f64> = vec![f64::NAN; vec_size];
     let profile_latitude: Vec<f64> = vec![f64::NAN; vec_size];
+
+    // Drop rows where temp, psal and pres are all missing — on the raw vectors,
+    // before building the DataFrame, to avoid Polars' leaky row-gather (see
+    // common::retain_by_mask).
+    let keep: Vec<bool> = (0..vec_size)
+        .map(|i| !temp[i].is_nan() || !psal[i].is_nan() || !converted_pres[i].is_nan())
+        .collect();
+
+    let platform_code = common::retain_by_mask(platform_code, &keep);
+    let profile_no = common::retain_by_mask(profile_no, &keep);
+    let time = common::retain_by_mask(time, &keep);
+    let timestamp = common::retain_by_mask(timestamp, &keep);
+    let obs_no = common::retain_by_mask(obs_no, &keep);
+    let longitude = common::retain_by_mask(longitude, &keep);
+    let latitude = common::retain_by_mask(latitude, &keep);
+    let profile_longitude = common::retain_by_mask(profile_longitude, &keep);
+    let profile_latitude = common::retain_by_mask(profile_latitude, &keep);
+    let time_qc = common::retain_by_mask(time_qc, &keep);
+    let position_qc = common::retain_by_mask(position_qc, &keep);
+    let filename = common::retain_by_mask(filename, &keep);
+    let temp = common::retain_by_mask(temp, &keep);
+    let temp_qc = common::retain_by_mask(temp_qc, &keep);
+    let psal = common::retain_by_mask(psal, &keep);
+    let psal_qc = common::retain_by_mask(psal_qc, &keep);
+    let converted_pres = common::retain_by_mask(converted_pres, &keep);
+    let converted_pres_qc = common::retain_by_mask(converted_pres_qc, &keep);
+    let pres_conv = common::retain_by_mask(pres_conv, &keep);
+    let converted_deph = common::retain_by_mask(converted_deph, &keep);
+    let converted_deph_qc = common::retain_by_mask(converted_deph_qc, &keep);
+    let deph_conv = common::retain_by_mask(deph_conv, &keep);
 
     let timestamp_series = Series::new("profile_timestamp".into(), timestamp);
     let df = DataFrame::new(vec![

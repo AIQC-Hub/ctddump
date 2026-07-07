@@ -29,9 +29,13 @@ fn netcdf_to_parquet(
     // Stream the file in TIME chunks, writing each chunk as a Parquet row group so
     // the full dense TIME × DEPTH grid is never materialized at once. An empty
     // (zero-row) chunk defines the schema, guaranteeing it matches the real chunks.
+    // `collect_nrt_chunk` already drops all-NaN rows (on the raw vectors, not via
+    // Polars' leaky `filter`), and `set_parallel(false)` avoids the parquet writer's
+    // parallel-encoding path, which leaks memory per call in this Polars version —
+    // both leaks accumulate without bound across a large batch of files.
     let empty = collect_nrt_chunk(&file, nrt_config, has_deph, &basename, 0, 0, obs_len)?;
     let schema = empty.schema();
-    let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
+    let mut writer = ParquetWriter::new(out_file).set_parallel(false).batched(&schema)?;
 
     let chunks = common::time_chunks(time_len, obs_len);
     if chunks.is_empty() {
@@ -40,18 +44,7 @@ fn netcdf_to_parquet(
     }
     for (t0, tc) in chunks {
         let df = collect_nrt_chunk(&file, nrt_config, has_deph, &basename, t0, tc, obs_len)?;
-
-        // Filter rows where all of temp, psal, pres (and deph if sourced) are NaN
-        let mask = df.column("temp")?.is_not_nan()?
-            | df.column("psal")?.is_not_nan()?
-            | df.column("pres")?.is_not_nan()?;
-        let mask = if has_deph {
-            mask | df.column("deph")?.is_not_nan()?
-        } else {
-            mask
-        };
-        let filtered = df.filter(&mask)?;
-        writer.write_batch(&filtered)?;
+        writer.write_batch(&df)?;
     }
     writer.finish()?;
 
@@ -180,6 +173,41 @@ fn collect_nrt_chunk(
             let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), pres_fill, conversion_latitude.clone());
             (pres.clone(), pres_qc.clone(), pres_conv, cd, cdq, dc)
         };
+
+    // Drop rows where temp, psal and pres (plus deph, when sourced) are all missing
+    // — on the raw vectors, before building the DataFrame, to avoid Polars' leaky
+    // row-gather (see common::retain_by_mask).
+    let keep: Vec<bool> = (0..vec_size)
+        .map(|i| {
+            !temp[i].is_nan()
+                || !psal[i].is_nan()
+                || !converted_pres[i].is_nan()
+                || (has_deph && !converted_deph[i].is_nan())
+        })
+        .collect();
+
+    let platform_code = common::retain_by_mask(platform_code, &keep);
+    let profile_no = common::retain_by_mask(profile_no, &keep);
+    let time = common::retain_by_mask(time, &keep);
+    let timestamp = common::retain_by_mask(timestamp, &keep);
+    let obs_no = common::retain_by_mask(obs_no, &keep);
+    let longitude = common::retain_by_mask(longitude, &keep);
+    let latitude = common::retain_by_mask(latitude, &keep);
+    let profile_longitude = common::retain_by_mask(profile_longitude, &keep);
+    let profile_latitude = common::retain_by_mask(profile_latitude, &keep);
+    let time_qc = common::retain_by_mask(time_qc, &keep);
+    let position_qc = common::retain_by_mask(position_qc, &keep);
+    let filename = common::retain_by_mask(filename, &keep);
+    let temp = common::retain_by_mask(temp, &keep);
+    let temp_qc = common::retain_by_mask(temp_qc, &keep);
+    let psal = common::retain_by_mask(psal, &keep);
+    let psal_qc = common::retain_by_mask(psal_qc, &keep);
+    let converted_pres = common::retain_by_mask(converted_pres, &keep);
+    let converted_pres_qc = common::retain_by_mask(converted_pres_qc, &keep);
+    let pres_conv = common::retain_by_mask(pres_conv, &keep);
+    let converted_deph = common::retain_by_mask(converted_deph, &keep);
+    let converted_deph_qc = common::retain_by_mask(converted_deph_qc, &keep);
+    let deph_conv = common::retain_by_mask(deph_conv, &keep);
 
     let timestamp_series = Series::new("profile_timestamp".into(), timestamp);
     let df = DataFrame::new(vec![
