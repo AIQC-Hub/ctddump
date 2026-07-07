@@ -111,6 +111,48 @@ fn test_concat_convert_renumber_observation_no_starts_at_one() {
     assert_eq!(min, 1, "observation_no should start at 1");
 }
 
+// ── concat convert: --no-pres-sort ────────────────────────────────────────────
+
+/// Write a single-profile Parquet file whose observations are in *descending* pres
+/// order (i.e. not sorted by pressure), then merge it with and without
+/// `--no-pres-sort` and check the resulting per-observation `pres` order.
+#[test]
+fn test_concat_convert_no_pres_sort_preserves_source_order() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // One platform, one profile (shared timestamp/lon/lat); pres runs 30 -> 10.
+    let mut df = df!(
+        "platform_code"     => ["P", "P", "P"],
+        "profile_timestamp" => [1000i64, 1000, 1000],
+        "longitude"         => [10.0f64, 10.0, 10.0],
+        "latitude"          => [60.0f64, 60.0, 60.0],
+        "pres"              => [30.0f32, 20.0, 10.0],
+        "profile_no"        => [0u32, 0, 0],
+        "observation_no"    => [0u32, 0, 0],
+    )
+    .unwrap();
+    let src = dir.path().join("in.parquet");
+    ParquetWriter::new(std::fs::File::create(&src).unwrap())
+        .finish(&mut df)
+        .unwrap();
+
+    let run = |extra: &[&str]| -> Vec<f32> {
+        let out = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
+        let mut args = vec!["concat".to_string(), "convert".to_string()];
+        args.extend(extra.iter().map(|s| s.to_string()));
+        args.push(dir.path().to_str().unwrap().to_string());
+        args.push(out.path().to_str().unwrap().to_string());
+        assert!(handle_dispatch(&args).is_ok());
+        let df = read_parquet(out.path());
+        df.column("pres").unwrap().f32().unwrap().into_no_null_iter().collect()
+    };
+
+    // Default: sorted ascending by pres.
+    assert_eq!(run(&[]), vec![10.0, 20.0, 30.0]);
+    // --no-pres-sort: keep the original (descending) source order.
+    assert_eq!(run(&["--no-pres-sort"]), vec![30.0, 20.0, 10.0]);
+}
+
 // ── concat convert: --no-renumber ─────────────────────────────────────────────
 
 #[test]

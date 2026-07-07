@@ -110,7 +110,7 @@ ctddump concat convert [OPTIONS] <src_dir> <output_file>
 ctddump concat header  [OPTIONS] <src_dir> <output_file>
 ```
 
-`concat convert` merges Parquet files and re-assigns `profile_no` and `observation_no` by default (pass `--no-renumber` to skip).
+`concat convert` merges Parquet files and re-assigns `profile_no` and `observation_no` by default (pass `--no-renumber` to skip). Renumbering sorts rows by `platform_code, profile_timestamp, longitude, latitude, pres`; pass `--no-pres-sort` to sort without `pres`, keeping each profile's observations in their original source order instead of reordering them by pressure.
 
 `concat header` merges YAML header files — each file contributes its top-level keys to the combined output. An error is raised if any two files share the same key.
 
@@ -120,6 +120,9 @@ ctddump concat convert /data/parquet merged.parquet
 
 # Merge without renumbering
 ctddump concat convert --no-renumber /data/parquet merged.parquet
+
+# Merge, but keep each profile's observations in their original order (don't sort by pres)
+ctddump concat convert --no-pres-sort /data/parquet merged.parquet
 
 # Merge only a subset
 ctddump concat convert --pattern "AR_PR_CT_*.parquet" /data/parquet merged.parquet

@@ -15,6 +15,13 @@ pub struct ConcatConfig {
     pub pattern: String,
     /// Re-assign `profile_no` and `observation_no` after merging (default: `true`).
     pub renumber: bool,
+    /// Include `pres` as the final sort key when renumbering (default: `true`).
+    ///
+    /// When `false`, rows are sorted by `platform_code, profile_timestamp,
+    /// longitude, latitude` only and the sort is stable, so observations keep
+    /// their original per-profile order from the source files instead of being
+    /// reordered by pressure. Ignored when `renumber` is `false`.
+    pub sort_by_pres: bool,
 }
 
 impl Default for ConcatConfig {
@@ -22,6 +29,7 @@ impl Default for ConcatConfig {
         ConcatConfig {
             pattern: "*.parquet".to_string(),
             renumber: true,
+            sort_by_pres: true,
         }
     }
 }
@@ -60,7 +68,11 @@ fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, 
 
 /// Sort the combined DataFrame and re-assign `profile_no` and `observation_no`.
 ///
-/// Sort order: `platform_code`, `profile_timestamp`, `longitude`, `latitude`, `pres`.
+/// Sort order: `platform_code`, `profile_timestamp`, `longitude`, `latitude`, and
+/// — when `sort_by_pres` is `true` — `pres`. When `sort_by_pres` is `false` the
+/// `pres` key is dropped and the sort is made stable (`maintain_order`), so
+/// observations keep their original per-profile order from the source rather than
+/// being reordered by pressure.
 ///
 /// `profile_no` — dense rank of the composite key
 /// `(platform_code | profile_timestamp | longitude | latitude)` within each
@@ -69,11 +81,18 @@ fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, 
 ///
 /// `observation_no` — 1-based sequential counter within each
 /// `(platform_code, profile_no)` group, in the sorted row order.
-fn renumber(lf: LazyFrame) -> LazyFrame {
-    lf.sort(
-        ["platform_code", "profile_timestamp", "longitude", "latitude", "pres"],
-        SortMultipleOptions::default(),
-    )
+fn renumber(lf: LazyFrame, sort_by_pres: bool) -> LazyFrame {
+    let mut sort_keys: Vec<&str> =
+        vec!["platform_code", "profile_timestamp", "longitude", "latitude"];
+    if sort_by_pres {
+        sort_keys.push("pres");
+    }
+    // Without `pres` as a tie-breaker, keep equal-key rows in their incoming
+    // (source) order so `observation_no` is deterministic and follows the original
+    // observation order.
+    let sort_opts = SortMultipleOptions::default().with_maintain_order(!sort_by_pres);
+
+    lf.sort(sort_keys, sort_opts)
     .with_column(
         concat_str(
             [
@@ -229,7 +248,7 @@ pub fn run_concat_parquet(
         .limit(0)
         .collect()?;
     let empty = if config.renumber {
-        renumber(empty.lazy()).collect()?
+        renumber(empty.lazy(), config.sort_by_pres).collect()?
     } else {
         empty
     };
@@ -285,7 +304,7 @@ pub fn run_concat_parquet(
         }
 
         let Some(frame) = acc else { continue };
-        let result = renumber(frame.lazy()).collect()?;
+        let result = renumber(frame.lazy(), config.sort_by_pres).collect()?;
         writer.write_batch(&result)?;
     }
     writer.finish()?;

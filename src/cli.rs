@@ -56,6 +56,10 @@ pub enum ConcatSubcommand {
         /// Do not re-assign profile_no and observation_no after merging
         #[arg(long = "no-renumber")]
         no_renumber: bool,
+        /// Sort without `pres`: keep observations in their original per-profile
+        /// order instead of reordering by pressure (ignored with --no-renumber)
+        #[arg(long = "no-pres-sort")]
+        no_pres_sort: bool,
     },
     /// Merge header YAML files into a single YAML file
     #[command(name = "header")]

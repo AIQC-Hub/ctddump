@@ -45,6 +45,7 @@ Fixtures in `tests/` are not committed. Fetch them with `scripts/fetch_test_data
 - **CORA `cora` vs `cora_legacy` defaults:** `time_var` `TIME`/`JULD`; `qc_type` `int`/`char`; `has_time_qc` `true`/`false`; `has_deph_source` `true`/`false`.
 - **`--pattern`** matches filenames only (not paths); supports `*`, `?`, `[…]`. Ignored by single-file `convert`.
 - **`batch` output:** without `--output`, each result is written beside its source; with `--output`, all land flat in that dir and a duplicate-output-name collision is an error raised before conversion starts.
+- **`concat convert` renumber sort:** by default rows are sorted by `platform_code, profile_timestamp, longitude, latitude, pres` before `profile_no`/`observation_no` are assigned. `--no-pres-sort` drops the `pres` key and makes the sort stable, so observations keep their original per-profile source order (`observation_no` follows acquisition order instead of ascending pressure). Ignored with `--no-renumber`.
 
 ## Architecture
 
