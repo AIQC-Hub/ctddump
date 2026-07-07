@@ -6,6 +6,8 @@ use glob::Pattern;
 use polars::prelude::*;
 use walkdir::WalkDir;
 
+use crate::convert::common;
+
 /// Configuration for the `concat` command.
 #[derive(Debug, Clone)]
 pub struct ConcatConfig {
@@ -110,12 +112,97 @@ fn renumber(lf: LazyFrame) -> LazyFrame {
     .drop(["_profile_key"])
 }
 
+/// Per-platform index built by the cheap first pass over the inputs.
+struct PlatformIndex {
+    /// Total observation rows per `platform_code`, summed across all input files.
+    counts: HashMap<String, u64>,
+    /// `(file, min_platform, max_platform)` for every non-empty input file, used to
+    /// skip files that cannot contain a given platform range in the second pass.
+    spans: Vec<(PathBuf, String, String)>,
+}
+
+/// First pass: scan only the `platform_code` column of every input file (projection
+/// keeps this cheap) and record per-platform row counts plus each file's min/max
+/// platform. Empty files contribute nothing.
+fn scan_platform_index(files: &[PathBuf]) -> Result<PlatformIndex, Box<dyn Error>> {
+    let mut counts: HashMap<String, u64> = HashMap::new();
+    let mut spans: Vec<(PathBuf, String, String)> = Vec::new();
+
+    for path in files {
+        let df = LazyFrame::scan_parquet(path, ScanArgsParquet::default())
+            .map_err(|e| format!("Cannot scan {}: {}", path.display(), e))?
+            .select([col("platform_code")])
+            .group_by([col("platform_code")])
+            .agg([len().alias("n")])
+            .collect()
+            .map_err(|e| format!("Cannot read {}: {}", path.display(), e))?;
+
+        let pc = df.column("platform_code")?.str()?;
+        let n = df.column("n")?.cast(&DataType::UInt64)?;
+        let n = n.u64()?;
+
+        let mut file_min: Option<String> = None;
+        let mut file_max: Option<String> = None;
+        for (name, cnt) in pc.into_iter().zip(n.into_iter()) {
+            // platform_code is always non-null; len() is always non-null.
+            let (name, cnt) = (name.unwrap(), cnt.unwrap());
+            *counts.entry(name.to_string()).or_insert(0) += cnt;
+            if file_min.as_deref().map_or(true, |m| name < m) {
+                file_min = Some(name.to_string());
+            }
+            if file_max.as_deref().map_or(true, |m| name > m) {
+                file_max = Some(name.to_string());
+            }
+        }
+        if let (Some(lo), Some(hi)) = (file_min, file_max) {
+            spans.push((path.clone(), lo, hi));
+        }
+    }
+
+    Ok(PlatformIndex { counts, spans })
+}
+
+/// Partition the distinct platforms into contiguous `[lo, hi]` ranges (ascending
+/// `platform_code` order) so each range holds at most `budget` observation rows.
+/// A single platform larger than `budget` forms its own range (it is the smallest
+/// unit that `renumber` can process independently).
+fn partition_platform_ranges(
+    counts: &HashMap<String, u64>,
+    budget: u64,
+) -> Vec<(String, String)> {
+    let mut platforms: Vec<&String> = counts.keys().collect();
+    platforms.sort();
+
+    let mut ranges = Vec::new();
+    let mut i = 0;
+    while i < platforms.len() {
+        let lo = platforms[i].clone();
+        let mut sum = counts[platforms[i]];
+        let mut j = i;
+        while j + 1 < platforms.len() && sum + counts[platforms[j + 1]] <= budget {
+            j += 1;
+            sum += counts[platforms[j]];
+        }
+        ranges.push((lo, platforms[j].clone()));
+        i = j + 1;
+    }
+    ranges
+}
+
 /// Concatenate all Parquet files matching `config.pattern` under `src_dir` into
 /// a single Parquet file at `output_file`.
 ///
-/// When `config.renumber` is `true` (the default), the merged DataFrame is
-/// sorted and `profile_no` / `observation_no` are reassigned so that profile
-/// numbers are globally unique and sequential within each platform.
+/// When `config.renumber` is `true` (the default), the merged data is sorted and
+/// `profile_no` / `observation_no` are reassigned so that profile numbers are
+/// globally unique and sequential within each platform.
+///
+/// Memory is bounded: rather than loading every file at once, the inputs are
+/// processed one contiguous `platform_code` range at a time (see
+/// [`partition_platform_ranges`]) and each range is streamed out as a Parquet row
+/// group. Because [`renumber`] partitions by `platform_code`, renumbering each
+/// range and emitting ranges in ascending order is data-identical to renumbering
+/// the whole dataset at once; only the on-disk row-group layout differs. The range
+/// budget is [`common::chunk_rows`] (`CTDDUMP_CHUNK_ROWS`).
 ///
 /// Returns the number of input files merged.
 pub fn run_concat_parquet(
@@ -126,35 +213,82 @@ pub fn run_concat_parquet(
     let files = collect_parquet_files(src_dir, &config.pattern)?;
     let n = files.len();
 
-    let frames: Vec<LazyFrame> = files
-        .iter()
-        .map(|f| {
-            let file = std::fs::File::open(f)
-                .map_err(|e| format!("Cannot open {}: {}", f.display(), e))?;
-            Ok(ParquetReader::new(file).finish()?.lazy())
-        })
-        .collect::<Result<_, Box<dyn Error>>>()?;
-
-    let combined = concat(frames, UnionArgs::default())?;
-
-    let combined = if config.renumber {
-        renumber(combined)
-    } else {
-        combined
-    };
-
-    let mut result = combined.collect()?;
-
     if let Some(parent) = output_file.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Cannot create output directory: {}", e))?;
         }
     }
-
-    let mut out_file = std::fs::File::create(output_file)
+    let out_file = std::fs::File::create(output_file)
         .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
-    ParquetWriter::new(&mut out_file).finish(&mut result)?;
+
+    // Zero-row frame from the first input defines the output schema for the batched
+    // writer. When renumbering, run it through `renumber` so the schema matches the
+    // real (renumbered) chunks exactly.
+    let empty = LazyFrame::scan_parquet(&files[0], ScanArgsParquet::default())?
+        .limit(0)
+        .collect()?;
+    let empty = if config.renumber {
+        renumber(empty.lazy()).collect()?
+    } else {
+        empty
+    };
+    let schema = empty.schema();
+    let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
+
+    if !config.renumber {
+        // No renumbering: stream each file straight through as its own row group.
+        for path in &files {
+            let df = LazyFrame::scan_parquet(path, ScanArgsParquet::default())?
+                .collect()
+                .map_err(|e| format!("Cannot read {}: {}", path.display(), e))?;
+            writer.write_batch(&df)?;
+        }
+        writer.finish()?;
+        return Ok(n);
+    }
+
+    let index = scan_platform_index(&files)?;
+    let ranges = partition_platform_ranges(&index.counts, common::chunk_rows() as u64);
+
+    if ranges.is_empty() {
+        // Every input was empty: still emit a valid, empty Parquet file.
+        writer.write_batch(&empty)?;
+        writer.finish()?;
+        return Ok(n);
+    }
+
+    for (lo, hi) in ranges {
+        // Assemble every row in this platform range, reading only files that overlap
+        // it. The range is a contiguous slice of the distinct platform list, so this
+        // filter selects exactly the range's platforms.
+        let mut acc: Option<DataFrame> = None;
+        for (path, file_min, file_max) in &index.spans {
+            if file_max < &lo || file_min > &hi {
+                continue;
+            }
+            let part = LazyFrame::scan_parquet(path, ScanArgsParquet::default())?
+                .filter(
+                    col("platform_code")
+                        .gt_eq(lit(lo.as_str()))
+                        .and(col("platform_code").lt_eq(lit(hi.as_str()))),
+                )
+                .collect()
+                .map_err(|e| format!("Cannot read {}: {}", path.display(), e))?;
+            if part.height() == 0 {
+                continue;
+            }
+            acc = Some(match acc {
+                Some(a) => a.vstack(&part)?,
+                None => part,
+            });
+        }
+
+        let Some(frame) = acc else { continue };
+        let result = renumber(frame.lazy()).collect()?;
+        writer.write_batch(&result)?;
+    }
+    writer.finish()?;
 
     Ok(n)
 }

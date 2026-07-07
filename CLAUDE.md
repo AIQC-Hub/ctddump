@@ -62,6 +62,10 @@ Two-stage `clap` dispatch:
 
 **Header** (`src/header/{nrt,cora}.rs`, `common.rs`): metadata → YAML; shared `collect_dimensions()`, `collect_global_attributes()`, `collect_variables_and_metadata()`.
 
+**Concat** (`src/concat.rs`): `run_concat_parquet()` merges Parquet files; `run_concat_header()` merges YAML. `renumber()` reassigns `profile_no` (dense rank of the `platform_code|timestamp|lon|lat` key, `.over(["platform_code"])`) and `observation_no` (`.over(["platform_code","profile_no"])`).
+
+> **Streaming (memory).** `run_concat_parquet` never loads all inputs at once. Because `renumber` partitions by `platform_code`, the merge is done one **contiguous `platform_code` range** at a time and each range is streamed out as a Parquet **row group** via `BatchedWriter`. Pass 1 (`scan_platform_index`) reads only the `platform_code` column of every file to get per-platform row counts and per-file min/max platform; `partition_platform_ranges` groups platforms into ranges of at most `common::chunk_rows()` obs rows (`CTDDUMP_CHUNK_ROWS`). Pass 2 assembles each range by re-scanning only the overlapping files with a `platform_code` filter (predicate pushdown skips non-matching row groups), runs the **same** `renumber`, and writes. Emitting ranges in ascending order is data-identical to a whole-dataset renumber — only the row-group layout changes (verified by `tests/test_concat_streaming.rs`). This also preserves cross-file profile merging (a profile split across files shares a `platform_code`, so it lands in one range). `--no-renumber` skips the two passes and streams each file straight through as its own row group. NRT files (one platform each) are read once total; multi-platform files (e.g. CORA) are re-scanned once per overlapping range.
+
 **Shared utilities** (`src/convert/common.rs`):
 - `convert_time_value()` — days-since-1950-01-01 (oceanographic epoch) → Unix ms.
 - `get_coordinate_value()` — reads 1-D/scalar var, tiles to `time_len × obs_len`; fill values if absent.
