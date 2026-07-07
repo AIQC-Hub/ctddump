@@ -173,12 +173,13 @@ fn dispatch_header(format: HeaderFormat) -> Result<Config, Box<dyn Error>> {
 
 fn dispatch_concat(subcommand: ConcatSubcommand) -> Result<Config, Box<dyn Error>> {
     match subcommand {
-        ConcatSubcommand::Convert { src_dir, output, pattern, no_renumber, no_pres_sort, keep_na_pres } => {
+        ConcatSubcommand::Convert { src_dir, output, pattern, no_renumber, no_pres_sort, keep_na_pres, threads } => {
             let mut config = ConcatConfig::default();
             if let Some(p) = pattern { config.pattern = p; }
             if no_renumber { config.renumber = false; }
             if no_pres_sort { config.sort_by_pres = false; }
             if keep_na_pres { config.drop_na_pres = false; }
+            config.threads = threads;
             concat::run_concat_parquet(&src_dir, &output, &config)?;
             Ok(Config { module: "concat".to_string(), target: "convert".to_string(), args: vec![] })
         }

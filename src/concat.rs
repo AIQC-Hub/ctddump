@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use glob::Pattern;
 use polars::prelude::*;
+use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::convert::common;
@@ -29,6 +30,16 @@ pub struct ConcatConfig {
     /// Also honored in `--no-renumber` mode as a plain row filter. Set to `false`
     /// (via `--keep-na-pres`) to retain missing-pressure rows.
     pub drop_na_pres: bool,
+    /// Number of range workers for the renumber path. `None` (the default) uses all
+    /// logical CPU cores.
+    ///
+    /// When the effective count is `> 1`, platform ranges are renumbered in parallel,
+    /// each writing a temporary Parquet file beside the output which are then
+    /// concatenated in range order — trading higher peak memory
+    /// (≈ `threads × CTDDUMP_CHUNK_ROWS` rows) and temporary disk for speed. `Some(1)`
+    /// forces the sequential single-writer path (lowest memory; Polars still uses all
+    /// cores within it). Ignored by the `--no-renumber` path.
+    pub threads: Option<usize>,
 }
 
 impl Default for ConcatConfig {
@@ -38,6 +49,7 @@ impl Default for ConcatConfig {
             renumber: true,
             sort_by_pres: true,
             drop_na_pres: true,
+            threads: None,
         }
     }
 }
@@ -45,6 +57,85 @@ impl Default for ConcatConfig {
 /// Drop rows whose `pres` is null or NaN.
 fn filter_valid_pres(lf: LazyFrame) -> LazyFrame {
     lf.filter(col("pres").is_not_null().and(col("pres").is_not_nan()))
+}
+
+/// Temporary Parquet path for range `i`, placed beside the final output. The
+/// suffix has no `.parquet` extension so a later `*.parquet` scan never picks up a
+/// stray temp file left behind by a crash.
+fn temp_path_for(output: &Path, i: usize) -> PathBuf {
+    let name = output
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("concat_output");
+    output.with_file_name(format!("{}.concat-tmp-{:05}", name, i))
+}
+
+/// Assemble one platform range `[lo, hi]` from the overlapping input files, drop
+/// missing-`pres` rows if configured, and renumber. Returns `None` when the range
+/// has no rows (before or after dropping). The range is a contiguous slice of the
+/// distinct platform list, so the `platform_code` filter selects exactly its
+/// platforms — and because `renumber` partitions by `platform_code`, each range is
+/// a fully independent unit of work.
+fn build_range_df(
+    spans: &[(PathBuf, String, String)],
+    lo: &str,
+    hi: &str,
+    config: &ConcatConfig,
+) -> Result<Option<DataFrame>, Box<dyn Error>> {
+    let mut acc: Option<DataFrame> = None;
+    for (path, file_min, file_max) in spans {
+        if file_max.as_str() < lo || file_min.as_str() > hi {
+            continue;
+        }
+        let part = LazyFrame::scan_parquet(path, ScanArgsParquet::default())?
+            .filter(
+                col("platform_code")
+                    .gt_eq(lit(lo))
+                    .and(col("platform_code").lt_eq(lit(hi))),
+            )
+            .collect()
+            .map_err(|e| format!("Cannot read {}: {}", path.display(), e))?;
+        if part.height() == 0 {
+            continue;
+        }
+        acc = Some(match acc {
+            Some(a) => a.vstack(&part)?,
+            None => part,
+        });
+    }
+
+    let Some(frame) = acc else { return Ok(None) };
+    let mut lf = frame.lazy();
+    if config.drop_na_pres {
+        lf = filter_valid_pres(lf);
+    }
+    let df = renumber(lf, config.sort_by_pres).collect()?;
+    if df.height() == 0 {
+        return Ok(None);
+    }
+    Ok(Some(df))
+}
+
+/// Build one range and write it to `temp_path` (nothing is written for an empty
+/// range). Errors are returned as `String` so the result is `Send` for rayon.
+fn build_and_write_range(
+    spans: &[(PathBuf, String, String)],
+    lo: &str,
+    hi: &str,
+    config: &ConcatConfig,
+    temp_path: &Path,
+) -> Result<(), String> {
+    match build_range_df(spans, lo, hi, config).map_err(|e| e.to_string())? {
+        None => Ok(()),
+        Some(mut df) => {
+            let f = std::fs::File::create(temp_path)
+                .map_err(|e| format!("Cannot create temp file {}: {}", temp_path.display(), e))?;
+            ParquetWriter::new(f)
+                .finish(&mut df)
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        }
+    }
 }
 
 /// Recursively collect all files under `src_dir` whose filename matches `pattern`.
@@ -230,11 +321,20 @@ fn partition_platform_ranges(
 ///
 /// Memory is bounded: rather than loading every file at once, the inputs are
 /// processed one contiguous `platform_code` range at a time (see
-/// [`partition_platform_ranges`]) and each range is streamed out as a Parquet row
-/// group. Because [`renumber`] partitions by `platform_code`, renumbering each
-/// range and emitting ranges in ascending order is data-identical to renumbering
-/// the whole dataset at once; only the on-disk row-group layout differs. The range
-/// budget is [`common::chunk_rows`] (`CTDDUMP_CHUNK_ROWS`).
+/// [`partition_platform_ranges`]). Because [`renumber`] partitions by
+/// `platform_code`, renumbering each range and emitting ranges in ascending order
+/// is data-identical to renumbering the whole dataset at once; only the on-disk
+/// row-group layout differs. The range budget is [`common::chunk_rows`]
+/// (`CTDDUMP_CHUNK_ROWS`).
+///
+/// When more than one range worker is used — `config.threads` is `None` (all cores,
+/// the default) or `Some(n > 1)` — the renumber path runs the per-range work in
+/// parallel: each range is written to a temporary Parquet file beside the output,
+/// then the temp files are concatenated in range order into the final output (and
+/// removed). Ranges are fully independent (each owns complete platforms), so the
+/// merged result is identical to the sequential path — only faster, at the cost of
+/// ≈ `threads × CTDDUMP_CHUNK_ROWS` peak rows and temporary disk. `config.threads =
+/// Some(1)` forces the sequential single-writer path.
 ///
 /// Returns the number of input files merged.
 pub fn run_concat_parquet(
@@ -245,14 +345,28 @@ pub fn run_concat_parquet(
     let files = collect_parquet_files(src_dir, &config.pattern)?;
     let n = files.len();
 
+    // Number of range workers: an explicit `--threads N`, or all logical cores when
+    // omitted. `n_threads == 1` uses the sequential single-writer path (and lets
+    // Polars parallelize that one stream); `n_threads > 1` renumbers ranges in
+    // parallel. In the parallel case, pin Polars to one internal thread so
+    // `--threads` is the real knob (see batch::run_batch) — otherwise N range
+    // workers each spawn Polars' own N_cpus pool on top. This must run before any
+    // Polars call, since Polars reads the var once when it lazily inits its pool.
+    let n_threads = match config.threads {
+        Some(n) => n.max(1),
+        None => std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1),
+    };
+    let parallel = n_threads > 1;
+    if parallel && std::env::var_os("POLARS_MAX_THREADS").is_none() {
+        std::env::set_var("POLARS_MAX_THREADS", "1");
+    }
+
     if let Some(parent) = output_file.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Cannot create output directory: {}", e))?;
         }
     }
-    let out_file = std::fs::File::create(output_file)
-        .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
 
     // Zero-row frame from the first input defines the output schema for the batched
     // writer. When renumbering, run it through `renumber` so the schema matches the
@@ -266,10 +380,12 @@ pub fn run_concat_parquet(
         empty
     };
     let schema = empty.schema();
-    let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
 
     if !config.renumber {
         // No renumbering: stream each file straight through as its own row group.
+        let out_file = std::fs::File::create(output_file)
+            .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
+        let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
         for path in &files {
             let mut lf = LazyFrame::scan_parquet(path, ScanArgsParquet::default())?;
             if config.drop_na_pres {
@@ -287,6 +403,75 @@ pub fn run_concat_parquet(
     let index = scan_platform_index(&files)?;
     let ranges = partition_platform_ranges(&index.counts, common::chunk_rows() as u64);
 
+    // Parallel path: renumber ranges concurrently into temp files, then concatenate
+    // the temp files in range order.
+    if parallel {
+        if !ranges.is_empty() {
+            let temp_paths: Vec<PathBuf> =
+                (0..ranges.len()).map(|i| temp_path_for(output_file, i)).collect();
+
+            let work = || -> Vec<String> {
+                ranges
+                    .par_iter()
+                    .zip(temp_paths.par_iter())
+                    .filter_map(|((lo, hi), tmp)| {
+                        build_and_write_range(&index.spans, lo, hi, config, tmp).err()
+                    })
+                    .collect()
+            };
+
+            // rayon's default 2 MiB worker stack overflows inside Polars' parquet
+            // writer on large ranges; match the 16 MiB stack used by batch mode.
+            const WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
+            let errors = rayon::ThreadPoolBuilder::new()
+                .stack_size(WORKER_STACK_SIZE)
+                .num_threads(n_threads)
+                .build()
+                .map_err(|e| format!("Failed to build thread pool: {}", e))?
+                .install(work);
+
+            if !errors.is_empty() {
+                for tmp in &temp_paths {
+                    let _ = std::fs::remove_file(tmp);
+                }
+                return Err(format!("Concat processing errors:\n{}", errors.join("\n")).into());
+            }
+
+            // Concatenate the per-range temp files in ascending range order.
+            let out_file = std::fs::File::create(output_file)
+                .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
+            let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
+            let mut wrote_any = false;
+            for tmp in &temp_paths {
+                if !tmp.exists() {
+                    continue; // range produced no rows
+                }
+                let df = LazyFrame::scan_parquet(tmp, ScanArgsParquet::default())?
+                    .collect()
+                    .map_err(|e| format!("Cannot read temp file {}: {}", tmp.display(), e))?;
+                if df.height() > 0 {
+                    writer.write_batch(&df)?;
+                    wrote_any = true;
+                }
+            }
+            if !wrote_any {
+                writer.write_batch(&empty)?;
+            }
+            writer.finish()?;
+
+            for tmp in &temp_paths {
+                let _ = std::fs::remove_file(tmp);
+            }
+            return Ok(n);
+        }
+        // No ranges: fall through to the sequential empty-output handling below.
+    }
+
+    // Sequential path: one writer, ranges assembled and written in ascending order.
+    let out_file = std::fs::File::create(output_file)
+        .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
+    let mut writer = ParquetWriter::new(out_file).batched(&schema)?;
+
     if ranges.is_empty() {
         // Every input was empty: still emit a valid, empty Parquet file.
         writer.write_batch(&empty)?;
@@ -294,41 +479,10 @@ pub fn run_concat_parquet(
         return Ok(n);
     }
 
-    for (lo, hi) in ranges {
-        // Assemble every row in this platform range, reading only files that overlap
-        // it. The range is a contiguous slice of the distinct platform list, so this
-        // filter selects exactly the range's platforms.
-        let mut acc: Option<DataFrame> = None;
-        for (path, file_min, file_max) in &index.spans {
-            if file_max < &lo || file_min > &hi {
-                continue;
-            }
-            let part = LazyFrame::scan_parquet(path, ScanArgsParquet::default())?
-                .filter(
-                    col("platform_code")
-                        .gt_eq(lit(lo.as_str()))
-                        .and(col("platform_code").lt_eq(lit(hi.as_str()))),
-                )
-                .collect()
-                .map_err(|e| format!("Cannot read {}: {}", path.display(), e))?;
-            if part.height() == 0 {
-                continue;
-            }
-            acc = Some(match acc {
-                Some(a) => a.vstack(&part)?,
-                None => part,
-            });
+    for (lo, hi) in &ranges {
+        if let Some(df) = build_range_df(&index.spans, lo, hi, config)? {
+            writer.write_batch(&df)?;
         }
-
-        let Some(frame) = acc else { continue };
-        let mut frame_lf = frame.lazy();
-        if config.drop_na_pres {
-            // Drop missing-pressure rows before numbering so `observation_no` is
-            // contiguous over the remaining rows.
-            frame_lf = filter_valid_pres(frame_lf);
-        }
-        let result = renumber(frame_lf, config.sort_by_pres).collect()?;
-        writer.write_batch(&result)?;
     }
     writer.finish()?;
 

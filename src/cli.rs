@@ -64,6 +64,11 @@ pub enum ConcatSubcommand {
         /// dropped before merging so observation_no stays contiguous
         #[arg(long = "keep-na-pres")]
         keep_na_pres: bool,
+        /// Number of threads for parallel renumbering via temporary files in the
+        /// output folder (defaults to all CPU cores; use 1 for the sequential,
+        /// lowest-memory path; ignored with --no-renumber)
+        #[arg(short, long)]
+        threads: Option<usize>,
     },
     /// Merge header YAML files into a single YAML file
     #[command(name = "header")]

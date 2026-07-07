@@ -110,7 +110,7 @@ ctddump concat convert [OPTIONS] <src_dir> <output_file>
 ctddump concat header  [OPTIONS] <src_dir> <output_file>
 ```
 
-`concat convert` merges Parquet files and re-assigns `profile_no` and `observation_no` by default (pass `--no-renumber` to skip). Renumbering sorts rows by `platform_code, profile_timestamp, longitude, latitude, pres`; pass `--no-pres-sort` to sort without `pres`, keeping each profile's observations in their original source order instead of reordering them by pressure. Rows with missing (null/NaN) `pres` are dropped before merging by default (this keeps `observation_no` contiguous over the remaining rows); pass `--keep-na-pres` to retain them.
+`concat convert` merges Parquet files and re-assigns `profile_no` and `observation_no` by default (pass `--no-renumber` to skip). Renumbering sorts rows by `platform_code, profile_timestamp, longitude, latitude, pres`; pass `--no-pres-sort` to sort without `pres`, keeping each profile's observations in their original source order instead of reordering them by pressure. Rows with missing (null/NaN) `pres` are dropped before merging by default (this keeps `observation_no` contiguous over the remaining rows); pass `--keep-na-pres` to retain them. Renumbering processes platform ranges in parallel across all CPU cores by default (via temporary files in the output folder); pass `--threads N` to cap the worker count, or `--threads 1` for the sequential, lowest-memory path. Peak memory rises with the thread count, but the result is identical either way.
 
 `concat header` merges YAML header files — each file contributes its top-level keys to the combined output. An error is raised if any two files share the same key.
 
@@ -126,6 +126,12 @@ ctddump concat convert --no-pres-sort /data/parquet merged.parquet
 
 # Merge, keeping rows with missing pres (they are dropped by default)
 ctddump concat convert --keep-na-pres /data/parquet merged.parquet
+
+# Cap renumbering at 8 threads (defaults to all cores)
+ctddump concat convert --threads 8 /data/parquet merged.parquet
+
+# Sequential, lowest-memory merge
+ctddump concat convert --threads 1 /data/parquet merged.parquet
 
 # Merge only a subset
 ctddump concat convert --pattern "AR_PR_CT_*.parquet" /data/parquet merged.parquet
