@@ -153,6 +153,52 @@ fn test_concat_convert_no_pres_sort_preserves_source_order() {
     assert_eq!(run(&["--no-pres-sort"]), vec![30.0, 20.0, 10.0]);
 }
 
+// ── concat convert: missing-pres dropping (default on) ────────────────────────
+
+/// A single profile with NaN `pres` interleaved among valid rows. By default the
+/// NaN rows are removed before numbering, leaving `pres` fully populated and
+/// `observation_no` contiguous (1..N); `--keep-na-pres` retains all rows.
+#[test]
+fn test_concat_convert_drops_na_pres_by_default() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let mut df = df!(
+        "platform_code"     => ["P", "P", "P", "P", "P"],
+        "profile_timestamp" => [1000i64, 1000, 1000, 1000, 1000],
+        "longitude"         => [10.0f64, 10.0, 10.0, 10.0, 10.0],
+        "latitude"          => [60.0f64, 60.0, 60.0, 60.0, 60.0],
+        "pres"              => [10.0f32, f32::NAN, 20.0, f32::NAN, 30.0],
+        "profile_no"        => [0u32, 0, 0, 0, 0],
+        "observation_no"    => [0u32, 0, 0, 0, 0],
+    )
+    .unwrap();
+    let src = dir.path().join("in.parquet");
+    ParquetWriter::new(std::fs::File::create(&src).unwrap())
+        .finish(&mut df)
+        .unwrap();
+
+    let run = |extra: &[&str]| -> DataFrame {
+        let out = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
+        let mut args = vec!["concat".to_string(), "convert".to_string()];
+        args.extend(extra.iter().map(|s| s.to_string()));
+        args.push(dir.path().to_str().unwrap().to_string());
+        args.push(out.path().to_str().unwrap().to_string());
+        assert!(handle_dispatch(&args).is_ok());
+        read_parquet(out.path())
+    };
+
+    // Default: the two NaN-pres rows are dropped.
+    let dropped = run(&[]);
+    assert_eq!(dropped.height(), 3, "NaN-pres rows should be removed by default");
+    let pres: Vec<f32> = dropped.column("pres").unwrap().f32().unwrap().into_no_null_iter().collect();
+    assert_eq!(pres, vec![10.0, 20.0, 30.0]);
+    let obs: Vec<u32> = dropped.column("observation_no").unwrap().u32().unwrap().into_no_null_iter().collect();
+    assert_eq!(obs, vec![1, 2, 3], "observation_no must be contiguous after dropping");
+
+    // --keep-na-pres: all 5 rows retained.
+    assert_eq!(run(&["--keep-na-pres"]).height(), 5);
+}
+
 // ── concat convert: --no-renumber ─────────────────────────────────────────────
 
 #[test]

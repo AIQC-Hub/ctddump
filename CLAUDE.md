@@ -46,6 +46,7 @@ Fixtures in `tests/` are not committed. Fetch them with `scripts/fetch_test_data
 - **`--pattern`** matches filenames only (not paths); supports `*`, `?`, `[…]`. Ignored by single-file `convert`.
 - **`batch` output:** without `--output`, each result is written beside its source; with `--output`, all land flat in that dir and a duplicate-output-name collision is an error raised before conversion starts.
 - **`concat convert` renumber sort:** by default rows are sorted by `platform_code, profile_timestamp, longitude, latitude, pres` before `profile_no`/`observation_no` are assigned. `--no-pres-sort` drops the `pres` key and makes the sort stable, so observations keep their original per-profile source order (`observation_no` follows acquisition order instead of ascending pressure). Ignored with `--no-renumber`.
+- **`concat convert` missing-pres dropping (default on):** rows whose `pres` is null/NaN are dropped before merging. In the renumber path the filter runs before numbering so `observation_no` stays contiguous (`1..N`) over the surviving rows; it is also honored under `--no-renumber` as a plain row filter. Pass `--keep-na-pres` to retain those rows.
 
 ## Architecture
 

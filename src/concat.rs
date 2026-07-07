@@ -22,6 +22,13 @@ pub struct ConcatConfig {
     /// their original per-profile order from the source files instead of being
     /// reordered by pressure. Ignored when `renumber` is `false`.
     pub sort_by_pres: bool,
+    /// Drop rows whose `pres` is null or NaN before merging (default: `true`).
+    ///
+    /// Applied before renumbering, so `observation_no` stays contiguous
+    /// (`1..N` over the remaining valid-pressure rows) rather than leaving gaps.
+    /// Also honored in `--no-renumber` mode as a plain row filter. Set to `false`
+    /// (via `--keep-na-pres`) to retain missing-pressure rows.
+    pub drop_na_pres: bool,
 }
 
 impl Default for ConcatConfig {
@@ -30,8 +37,14 @@ impl Default for ConcatConfig {
             pattern: "*.parquet".to_string(),
             renumber: true,
             sort_by_pres: true,
+            drop_na_pres: true,
         }
     }
+}
+
+/// Drop rows whose `pres` is null or NaN.
+fn filter_valid_pres(lf: LazyFrame) -> LazyFrame {
+    lf.filter(col("pres").is_not_null().and(col("pres").is_not_nan()))
 }
 
 /// Recursively collect all files under `src_dir` whose filename matches `pattern`.
@@ -258,7 +271,11 @@ pub fn run_concat_parquet(
     if !config.renumber {
         // No renumbering: stream each file straight through as its own row group.
         for path in &files {
-            let df = LazyFrame::scan_parquet(path, ScanArgsParquet::default())?
+            let mut lf = LazyFrame::scan_parquet(path, ScanArgsParquet::default())?;
+            if config.drop_na_pres {
+                lf = filter_valid_pres(lf);
+            }
+            let df = lf
                 .collect()
                 .map_err(|e| format!("Cannot read {}: {}", path.display(), e))?;
             writer.write_batch(&df)?;
@@ -304,7 +321,13 @@ pub fn run_concat_parquet(
         }
 
         let Some(frame) = acc else { continue };
-        let result = renumber(frame.lazy(), config.sort_by_pres).collect()?;
+        let mut frame_lf = frame.lazy();
+        if config.drop_na_pres {
+            // Drop missing-pressure rows before numbering so `observation_no` is
+            // contiguous over the remaining rows.
+            frame_lf = filter_valid_pres(frame_lf);
+        }
+        let result = renumber(frame_lf, config.sort_by_pres).collect()?;
         writer.write_batch(&result)?;
     }
     writer.finish()?;

@@ -60,6 +60,10 @@ pub enum ConcatSubcommand {
         /// order instead of reordering by pressure (ignored with --no-renumber)
         #[arg(long = "no-pres-sort")]
         no_pres_sort: bool,
+        /// Keep rows with missing (null/NaN) `pres`. By default such rows are
+        /// dropped before merging so observation_no stays contiguous
+        #[arg(long = "keep-na-pres")]
+        keep_na_pres: bool,
     },
     /// Merge header YAML files into a single YAML file
     #[command(name = "header")]
