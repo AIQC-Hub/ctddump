@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- `RELEASING.md` documenting the release procedure; `README.md` and `CLAUDE.md` now point to it
+- Link to the documentation website in `README.md`
+
 ## [0.4.2] - 2026-07-09
 
 ### Added

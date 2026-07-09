@@ -12,7 +12,9 @@ Top-level commands: `convert` (single file → Parquet), `batch` (directory tree
 
 ## Git Workflow
 
-Permanent branches: `main` (stable releases), `develop` (integration). Commit day-to-day work directly to `develop`. `git-flow` (AVH Edition) is installed for multi-session features (`feature start/finish`), releases (`release …`), and hotfixes (`hotfix …`) — use it only when it adds value.
+Permanent branches: `main` (stable releases), `develop` (integration). Commit day-to-day work directly to `develop`. `git-flow` (AVH Edition) is installed for multi-session features (`feature start/finish`) and hotfixes (`hotfix …`) — use it only when it adds value.
+
+Releases are cut by merging `develop` into `main` and tagging `vX.Y.Z` (not via `git flow release`). See [`RELEASING.md`](RELEASING.md) for the full procedure — version bump, `Cargo.lock` sync, `CHANGELOG.md`, merge, tag, push.
 
 ## System Dependencies
 
