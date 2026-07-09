@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+### Added
+- MIT License (`LICENSE`, `license = "MIT"` in `Cargo.toml`, and a README section)
+
+## [0.4.1] - 2026-07-09
+
+### Added
+- Project documentation website built with mdBook and auto-deployed to GitHub Pages (<https://aiqc-hub.github.io/ctddump/>): introduction, installation, a page per command, configuration and output-schema reference, and end-to-end regional workflows for the Arctic, Baltic, and Mediterranean seas
+- `scripts/prepare_data.sh`: a single runnable data-preparation pipeline (download → convert → merge → header export → merge) built from reusable shell functions, replacing the ad-hoc `data_preparation.md`
+
+## [0.4.0] - 2026-07-09
+
+### Added
+- `concat convert --no-pres-sort`: sort without `pres`, keeping each profile's observations in their original source order instead of reordering by pressure
+- `concat convert --keep-na-pres`: retain rows whose `pres` is null/NaN
+- `concat convert --threads N`: renumber platform ranges in parallel (default: all cores; `--threads 1` selects the sequential, lowest-memory path)
+- `CTDDUMP_CHUNK_ROWS` environment variable to tune the streaming chunk / platform-range size
+
+### Changed
+- `convert`, `batch convert`, and `concat convert` now stream data in bounded memory — chunked Parquet row groups for conversion and contiguous `platform_code` ranges for `concat` — instead of materializing the full dataset, greatly reducing peak memory on large inputs (output is data-identical; only the on-disk row-group layout changes)
+- `concat convert` now drops rows with missing (null/NaN) `pres` by default; pass `--keep-na-pres` to retain them
+
+### Fixed
+- Unbounded memory growth in `batch` mode caused by a Polars 0.43.1 parallel-operation leak; batch RSS is now a small constant regardless of file count
+- NRT AR/MO files that ship `DEPH` instead of `PRES` now derive `pres` correctly via conversion (previously both `pres` and `deph` could be all-NaN)
+- `batch` mode worker stack overflow and thread over-subscription on large files
+
 ## [0.3.0] - 2026-05-26
 
 ### Added
@@ -34,7 +60,9 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/AIQC-Hub/ctddump/releases/tag/v0.1.0
