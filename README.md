@@ -2,6 +2,8 @@
 
 A Rust CLI tool for converting oceanographic CTD (Conductivity, Temperature, Depth) data from NetCDF to Parquet (data) or YAML (metadata).
 
+📖 **Documentation: <https://aiqc-hub.github.io/ctddump/>**
+
 Two data sources are supported:
 
 | Source | Description |
