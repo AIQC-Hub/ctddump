@@ -8,8 +8,9 @@ pub mod cli;
 pub mod concat;
 pub mod convert;
 pub mod header;
+pub mod report;
 
-use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat, ConcatSubcommand};
+use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat, ConcatSubcommand, ReportSubcommand};
 use concat::ConcatConfig;
 use convert::cora_config::CoraConfig;
 use convert::nrt_config::NrtConfig;
@@ -30,6 +31,7 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
         Commands::Batch { subcommand } => dispatch_batch(subcommand),
         Commands::Header { format } => dispatch_header(format),
         Commands::Concat { subcommand } => dispatch_concat(subcommand),
+        Commands::Report { subcommand } => dispatch_report(subcommand),
     }
 }
 
@@ -187,6 +189,19 @@ fn dispatch_concat(subcommand: ConcatSubcommand) -> Result<Config, Box<dyn Error
             let effective_pattern = pattern.as_deref().unwrap_or("*.yaml");
             concat::run_concat_header(&src_dir, &output, effective_pattern)?;
             Ok(Config { module: "concat".to_string(), target: "header".to_string(), args: vec![] })
+        }
+    }
+}
+
+fn dispatch_report(subcommand: ReportSubcommand) -> Result<Config, Box<dyn Error>> {
+    match subcommand {
+        ReportSubcommand::Parquet { level, format, src, dest } => {
+            report::parquet::run(level, format, &src, dest.as_deref())?;
+            Ok(Config { module: "report".to_string(), target: "parquet".to_string(), args: vec![] })
+        }
+        ReportSubcommand::Yaml { format, src, dest } => {
+            report::yaml::run(format, &src, dest.as_deref())?;
+            Ok(Config { module: "report".to_string(), target: "yaml".to_string(), args: vec![] })
         }
     }
 }

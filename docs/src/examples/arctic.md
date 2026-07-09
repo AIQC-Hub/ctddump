@@ -79,3 +79,22 @@ ctddump concat header ../process_data/ctddump/header/ar/gl ../process_data/ctddu
 # CORA AR
 ctddump concat header ../process_data/ctddump/header/ar/cora ../process_data/ctddump/header/cora_ar.yaml
 ```
+
+## 6. Summarise the results
+
+Write a global-level summary of each merged Parquet file and a per-file summary
+of each merged header YAML (as TSV).
+
+```shell
+# NRT AR
+ctddump report parquet --level global ../process_data/ctddump/parquet/nrt_ar_ar.parquet ../process_data/ctddump/report/nrt_ar_ar.parquet.tsv
+ctddump report yaml ../process_data/ctddump/header/nrt_ar_ar.yaml ../process_data/ctddump/report/nrt_ar_ar.yaml.tsv
+
+# NRT GL
+ctddump report parquet --level global ../process_data/ctddump/parquet/nrt_ar_gl.parquet ../process_data/ctddump/report/nrt_ar_gl.parquet.tsv
+ctddump report yaml ../process_data/ctddump/header/nrt_ar_gl.yaml ../process_data/ctddump/report/nrt_ar_gl.yaml.tsv
+
+# CORA AR
+ctddump report parquet --level global ../process_data/ctddump/parquet/cora_ar.parquet ../process_data/ctddump/report/cora_ar.parquet.tsv
+ctddump report yaml ../process_data/ctddump/header/cora_ar.yaml ../process_data/ctddump/report/cora_ar.yaml.tsv
+```

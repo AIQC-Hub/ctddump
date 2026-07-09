@@ -142,6 +142,30 @@ ctddump concat convert --pattern "AR_PR_CT_*.parquet" /data/parquet merged.parqu
 ctddump concat header /data/yaml merged.yaml
 ```
 
+### `report` — summarise a Parquet or YAML file
+
+```
+ctddump report parquet [--level global|platform|profile] [--format tsv|text|json] <src.parquet> [dest]
+ctddump report yaml    [--format tsv|text|json] <src.yaml> [dest]
+```
+
+Writes a text summary to `dest`, or to stdout when omitted. Default format is `tsv`.
+
+`report parquet` aggregates a data file at one of three `--level`s (default `platform`): `global` (one row), `platform` (one row per `platform_code`), or `profile` (one row per profile). Each row reports profile / observation counts, per-profile "good" QC counts (`time_qc`/`position_qc == "1"`), missing-value counts, min / max / mean for `temp`, `psal`, and `pres`, and the geographic bounding box (`longitude`/`latitude` min/max; `global` and `platform` levels only).
+
+`report yaml` summarises a merged header YAML: one row per source file with presence flags for the core columns (`TEMP`, `PSAL`, `PRES`, `DEPH`, `TIME`, position) and an `extra_params` list of the extra measurement parameters detected — biogeochemical/biological and other non-core variables (e.g. `DOXY;FLU2;TUR3`).
+
+```bash
+# Per-platform summary of a merged Parquet file
+ctddump report parquet --level platform merged.parquet report.tsv
+
+# Whole-file summary, human-readable, to stdout
+ctddump report parquet --level global --format text merged.parquet
+
+# YAML header summary as JSON
+ctddump report yaml --format json merged.yaml report.json
+```
+
 ## Configuration
 
 All `convert` and `batch convert` subcommands support a `--config` TOML file plus individual flag overrides. Priority order:
