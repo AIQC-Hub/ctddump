@@ -30,6 +30,9 @@ Every row also reports:
 - `na_temp` / `na_psal` / `na_pres` — count of missing (null/NaN) values.
 - `{temp,psal,pres}_{min,max,mean}` — statistics over the valid (non-NaN)
   values. (Median is intentionally not computed.)
+- `{longitude,latitude}_{min,max}` — geographic bounding box over the valid
+  positions (`global` and `platform` levels only; at `profile` level the single
+  `longitude`/`latitude` is already shown).
 
 ```bash
 # Per-platform summary

@@ -62,6 +62,27 @@ fn measure_cols() -> Vec<Expr> {
     v
 }
 
+/// Geographic bounding-box aggregates: min/max of `longitude` and `latitude`
+/// over the valid (non-NaN) positions. Used by the global and platform levels.
+fn geo_aggs() -> Vec<Expr> {
+    let mut v = Vec::new();
+    for name in ["longitude", "latitude"] {
+        let valid = col(name).filter(col(name).is_not_nan());
+        v.push(valid.clone().min().alias(format!("{name}_min").as_str()));
+        v.push(valid.max().alias(format!("{name}_max").as_str()));
+    }
+    v
+}
+
+fn geo_cols() -> Vec<Expr> {
+    let mut v = Vec::new();
+    for name in ["longitude", "latitude"] {
+        v.push(col(format!("{name}_min").as_str()));
+        v.push(col(format!("{name}_max").as_str()));
+    }
+    v
+}
+
 /// Per-profile roll-up of the profile-level QC flags into per-platform "good"
 /// counts (flag `== "1"`), plus the profile count.
 fn platform_qc(lf: LazyFrame) -> LazyFrame {
@@ -79,6 +100,7 @@ fn platform_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
     let obs = lf.clone().group_by([col("platform_code")]).agg({
         let mut v = vec![len().alias("n_obs")];
         v.extend(measure_aggs());
+        v.extend(geo_aggs());
         v
     });
     let qc = platform_qc(lf);
@@ -90,6 +112,7 @@ fn platform_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
         col("time_qc_good"),
         col("position_qc_good"),
     ];
+    select_cols.extend(geo_cols());
     select_cols.extend(measure_cols());
 
     let df = obs
@@ -150,6 +173,7 @@ fn global_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
         .select({
             let mut v = vec![len().alias("n_obs")];
             v.extend(measure_aggs());
+            v.extend(geo_aggs());
             v
         })
         .collect()?;
@@ -177,6 +201,10 @@ fn global_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
         Series::new("time_qc_good".into(), vec![time_qc_good]),
         Series::new("position_qc_good".into(), vec![position_qc_good]),
     ];
+    for name in ["longitude", "latitude"] {
+        cols.push(base.column(format!("{name}_min").as_str())?.clone());
+        cols.push(base.column(format!("{name}_max").as_str())?.clone());
+    }
     for name in ["temp", "psal", "pres"] {
         cols.push(base.column(format!("na_{name}").as_str())?.clone());
         cols.push(base.column(format!("{name}_min").as_str())?.clone());

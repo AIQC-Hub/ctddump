@@ -39,8 +39,9 @@ fn write_parquet_fixture(path: &Path) {
         Series::new("pres".into(), vec![0.0f32, 5.0, 10.0, 0.0, 5.0, 100.0]),
         Series::new("time_qc".into(), vec!["1", "1", "1", "1", "1", "9"]),
         Series::new("position_qc".into(), vec!["1", "1", "1", "1", "1", "1"]),
-        Series::new("longitude".into(), vec![1.0f32; 6]),
-        Series::new("latitude".into(), vec![2.0f32; 6]),
+        // A spans lon 1..5 / lat 20..24; B is at lon 10 / lat 30.
+        Series::new("longitude".into(), vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 10.0]),
+        Series::new("latitude".into(), vec![20.0f32, 21.0, 22.0, 23.0, 24.0, 30.0]),
         Series::new("profile_timestamp".into(), vec![0i64, 0, 0, 0, 0, 1000])
             .cast(&DataType::Datetime(TimeUnit::Milliseconds, None))
             .unwrap(),
@@ -76,6 +77,10 @@ fn test_report_parquet_platform() {
     assert_eq!(a["temp_min"], "1");
     assert_eq!(a["temp_max"], "4");
     assert_eq!(a["temp_mean"], "2.5"); // (1+2+3+4)/4
+    assert_eq!(a["longitude_min"], "1");
+    assert_eq!(a["longitude_max"], "5");
+    assert_eq!(a["latitude_min"], "20");
+    assert_eq!(a["latitude_max"], "24");
 
     let b = &by_platform["B"];
     assert_eq!(b["n_profiles"], "1");
@@ -84,6 +89,8 @@ fn test_report_parquet_platform() {
     assert_eq!(b["na_temp"], "1");
     assert_eq!(b["temp_min"], "", "all-NaN group → empty stat");
     assert_eq!(b["temp_mean"], "");
+    assert_eq!(b["longitude_min"], "10");
+    assert_eq!(b["latitude_max"], "30");
 }
 
 #[test]
@@ -105,6 +112,10 @@ fn test_report_parquet_global() {
     assert_eq!(g["na_temp"], "2");
     assert_eq!(g["temp_min"], "1");
     assert_eq!(g["temp_max"], "4");
+    assert_eq!(g["longitude_min"], "1");
+    assert_eq!(g["longitude_max"], "10");
+    assert_eq!(g["latitude_min"], "20");
+    assert_eq!(g["latitude_max"], "30");
 }
 
 #[test]
