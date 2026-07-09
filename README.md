@@ -153,7 +153,7 @@ Writes a text summary to `dest`, or to stdout when omitted. Default format is `t
 
 `report parquet` aggregates a data file at one of three `--level`s (default `platform`): `global` (one row), `platform` (one row per `platform_code`), or `profile` (one row per profile). Each row reports profile / observation counts, per-profile "good" QC counts (`time_qc`/`position_qc == "1"`), missing-value counts, and min / max / mean for `temp`, `psal`, and `pres`.
 
-`report yaml` summarises a merged header YAML: one row per source file with presence flags for the core columns (`TEMP`, `PSAL`, `PRES`, `DEPH`, `TIME`, position) and the list of biogeochemical/biological measurement variables detected (e.g. `DOXY;FLU2;TUR3`).
+`report yaml` summarises a merged header YAML: one row per source file with presence flags for the core columns (`TEMP`, `PSAL`, `PRES`, `DEPH`, `TIME`, position) and an `extra_params` list of the extra measurement parameters detected — biogeochemical/biological and other non-core variables (e.g. `DOXY;FLU2;TUR3`).
 
 ```bash
 # Per-platform summary of a merged Parquet file

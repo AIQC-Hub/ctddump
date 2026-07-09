@@ -48,12 +48,13 @@ one row per source file.
 |--------|---------|
 | `filename` | source file stem |
 | `has_temp`, `has_psal`, `has_pres`, `has_deph`, `has_time`, `has_position` | presence of each core column |
-| `bgc_columns` | `;`-joined list of biogeochemical/biological measurement variables present |
+| `extra_params` | `;`-joined list of the extra measurement parameters present |
 
-`bgc_columns` is detected automatically: any `Float` variable dimensioned
+`extra_params` is detected automatically: any `Float` variable dimensioned
 `(TIME, DEPTH)` that is not a `_QC` flag and not a core physical
-(`TEMP/PSAL/PRES/DEPH`). This captures `DOXY`, `FLU2`, `TUR3`, `CPHL`, `NTRA`,
-and similar without a hard-coded list.
+(`TEMP/PSAL/PRES/DEPH`). This captures biogeochemical/biological parameters
+(`DOXY`, `FLU2`, `TUR3`, `CPHL`, `NTRA`, …) as well as other non-core
+measurements (`CNDC`, `SVEL`, …) without a hard-coded list.
 
 ```bash
 # YAML header summary as JSON

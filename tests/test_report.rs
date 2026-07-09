@@ -195,11 +195,11 @@ fn test_report_yaml() {
     assert_eq!(a["has_psal"], "true");
     assert_eq!(a["has_pres"], "false");
     assert_eq!(a["has_position"], "false");
-    assert_eq!(a["bgc_columns"], "", "TEMP/PSAL are core; TEMP_QC excluded");
+    assert_eq!(a["extra_params"], "", "TEMP/PSAL are core; TEMP_QC excluded");
 
     let b = &by_file["FILE_B"];
     assert_eq!(b["has_temp"], "true");
     assert_eq!(b["has_psal"], "false");
     assert_eq!(b["has_position"], "true");
-    assert_eq!(b["bgc_columns"], "DOXY;TUR3", "sorted, QC/core excluded");
+    assert_eq!(b["extra_params"], "DOXY;TUR3", "sorted, QC/core excluded");
 }

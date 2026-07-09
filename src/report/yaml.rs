@@ -30,7 +30,7 @@ pub fn run(format_: ReportFormat, src: &Path, dest: Option<&Path>) -> Result<(),
     let mut has_deph = Vec::new();
     let mut has_time = Vec::new();
     let mut has_position = Vec::new();
-    let mut bgc_columns = Vec::new();
+    let mut extra_params = Vec::new();
 
     for (key, value) in map {
         let name = key.as_str().unwrap_or("").to_string();
@@ -44,7 +44,7 @@ pub fn run(format_: ReportFormat, src: &Path, dest: Option<&Path>) -> Result<(),
         has_deph.push(present("DEPH"));
         has_time.push(present("TIME"));
         has_position.push(present("POSITION_QC"));
-        bgc_columns.push(detect_bgc(vars).join(";"));
+        extra_params.push(detect_extra_params(vars).join(";"));
     }
 
     let df = DataFrame::new(vec![
@@ -55,17 +55,19 @@ pub fn run(format_: ReportFormat, src: &Path, dest: Option<&Path>) -> Result<(),
         Series::new("has_deph".into(), has_deph),
         Series::new("has_time".into(), has_time),
         Series::new("has_position".into(), has_position),
-        Series::new("bgc_columns".into(), bgc_columns),
+        Series::new("extra_params".into(), extra_params),
     ])?;
 
     format::write_report(&df, format_, dest)?;
     Ok(())
 }
 
-/// Detect biogeochemical/biological measurement variables by complement: a
-/// `Float` variable dimensioned `(TIME, DEPTH)`, not a `_QC` flag and not a core
-/// physical (`TEMP/PSAL/PRES/DEPH`). Returns sorted variable names.
-fn detect_bgc(vars: Option<&serde_yaml::Value>) -> Vec<String> {
+/// Detect the extra measurement parameters by complement: a `Float` variable
+/// dimensioned `(TIME, DEPTH)`, not a `_QC` flag and not a core physical
+/// (`TEMP/PSAL/PRES/DEPH`). This captures biogeochemical/biological parameters
+/// (DOXY, FLU2, TUR3, …) as well as other non-core measurements (CNDC, SVEL, …).
+/// Returns sorted variable names.
+fn detect_extra_params(vars: Option<&serde_yaml::Value>) -> Vec<String> {
     let Some(mapping) = vars.and_then(|v| v.as_mapping()) else {
         return Vec::new();
     };
