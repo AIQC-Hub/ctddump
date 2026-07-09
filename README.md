@@ -215,3 +215,7 @@ scripts/fetch_test_data.sh
 ```
 
 > **Note:** HDF5-DIAG messages may appear in test output on systems with HDF5 ≤ 1.10. They are harmless — the data is read correctly and all tests pass.
+
+## License
+
+Licensed under the [MIT License](LICENSE).

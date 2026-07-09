@@ -1,7 +1,8 @@
 [package]
 name = "ctddump"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
