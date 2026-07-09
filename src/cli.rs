@@ -37,6 +37,65 @@ pub enum Commands {
         #[command(subcommand)]
         subcommand: ConcatSubcommand,
     },
+    /// Summarise a Parquet or YAML file as a text report
+    #[command(name = "report")]
+    Report {
+        #[command(subcommand)]
+        subcommand: ReportSubcommand,
+    },
+}
+
+// ── Report subcommands ────────────────────────────────────────────────────────
+
+/// Aggregation level for a Parquet report.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum ReportLevel {
+    /// One summary row for the whole file
+    Global,
+    /// One row per platform_code
+    Platform,
+    /// One row per (platform_code, profile_no)
+    Profile,
+}
+
+/// Output text format for a report.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum ReportFormat {
+    /// Tab-separated values (header + rows)
+    Tsv,
+    /// Human-readable aligned text
+    Text,
+    /// JSON array of records
+    Json,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ReportSubcommand {
+    /// Summarise a Parquet data file
+    #[command(name = "parquet")]
+    Parquet {
+        /// Aggregation level
+        #[arg(long, value_enum, default_value_t = ReportLevel::Platform)]
+        level: ReportLevel,
+        /// Output format
+        #[arg(long, value_enum, default_value_t = ReportFormat::Tsv)]
+        format: ReportFormat,
+        /// Source Parquet file
+        src: PathBuf,
+        /// Output file (default: stdout)
+        dest: Option<PathBuf>,
+    },
+    /// Summarise a YAML header file
+    #[command(name = "yaml")]
+    Yaml {
+        /// Output format
+        #[arg(long, value_enum, default_value_t = ReportFormat::Tsv)]
+        format: ReportFormat,
+        /// Source YAML file
+        src: PathBuf,
+        /// Output file (default: stdout)
+        dest: Option<PathBuf>,
+    },
 }
 
 // ── Concat subcommands ────────────────────────────────────────────────────────

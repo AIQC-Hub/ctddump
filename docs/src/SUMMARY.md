@@ -9,6 +9,7 @@
 - [batch](./commands/batch.md)
 - [header](./commands/header.md)
 - [concat](./commands/concat.md)
+- [report](./commands/report.md)
 
 # Reference
 
