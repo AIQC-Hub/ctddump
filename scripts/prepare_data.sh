@@ -11,7 +11,8 @@
 #   login       Log in to the Copernicus Marine Toolbox (once, interactively).
 #   download    Download the source NetCDF files.
 #   process     Convert + merge Parquet, export + merge headers.  (default)
-#   all         download, then process.
+#   report      Summarise the merged Parquet/YAML outputs as TSV.
+#   all         download, process, then report.
 #   help        Show this help.
 #
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
@@ -66,6 +67,16 @@ header_cora() {  # <src_dir> <out_dir>
 merge_hdr() {  # <src_dir> <out_file>
   mkdir -p "$(dirname "$2")"
   ctddump concat header "$1" "$2"
+}
+
+report_parquet() {  # <src_file> <out_tsv> -- global-level summary of a merged Parquet
+  mkdir -p "$(dirname "$2")"
+  ctddump report parquet --level global "$1" "$2"
+}
+
+report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
+  mkdir -p "$(dirname "$2")"
+  ctddump report yaml "$1" "$2"
 }
 
 # ---- Download ------------------------------------------------------------
@@ -149,9 +160,41 @@ process_mediterranean() {
   merge_hdr "$H/mo/cora" "$H/cora_mo.yaml"
 }
 
+# ---- Per-region reports (summaries of the merged outputs) ----------------
+# Parquet reports use the global level; each report lands in $OUT/report/ named
+# after its source, with a .parquet.tsv / .yaml.tsv suffix.
+
+report_arctic() {
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report"
+  report_parquet "$P/nrt_ar_ar.parquet" "$R/nrt_ar_ar.parquet.tsv"
+  report_parquet "$P/nrt_ar_gl.parquet" "$R/nrt_ar_gl.parquet.tsv"
+  report_parquet "$P/cora_ar.parquet"   "$R/cora_ar.parquet.tsv"
+  report_yaml    "$H/nrt_ar_ar.yaml"     "$R/nrt_ar_ar.yaml.tsv"
+  report_yaml    "$H/nrt_ar_gl.yaml"     "$R/nrt_ar_gl.yaml.tsv"
+  report_yaml    "$H/cora_ar.yaml"       "$R/cora_ar.yaml.tsv"
+}
+
+report_baltic() {
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report"
+  report_parquet "$P/nrt_bo_bo.parquet" "$R/nrt_bo_bo.parquet.tsv"
+  report_parquet "$P/cora_bo.parquet"   "$R/cora_bo.parquet.tsv"
+  report_yaml    "$H/nrt_bo_bo.yaml"     "$R/nrt_bo_bo.yaml.tsv"
+  report_yaml    "$H/cora_bo.yaml"       "$R/cora_bo.yaml.tsv"
+}
+
+report_mediterranean() {
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report"
+  report_parquet "$P/nrt_mo_mo.parquet" "$R/nrt_mo_mo.parquet.tsv"
+  report_parquet "$P/nrt_mo_gl.parquet" "$R/nrt_mo_gl.parquet.tsv"
+  report_parquet "$P/cora_mo.parquet"   "$R/cora_mo.parquet.tsv"
+  report_yaml    "$H/nrt_mo_mo.yaml"     "$R/nrt_mo_mo.yaml.tsv"
+  report_yaml    "$H/nrt_mo_gl.yaml"     "$R/nrt_mo_gl.yaml.tsv"
+  report_yaml    "$H/cora_mo.yaml"       "$R/cora_mo.yaml.tsv"
+}
+
 # ---- Dispatch ------------------------------------------------------------
 
-usage() { sed -n '3,26p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 is_region() {
   local r
@@ -166,7 +209,7 @@ main() {
   case "$cmd" in
     -h|--help|help) usage; return 0 ;;
     login) login; return 0 ;;
-    download|process|all) ;;
+    download|process|report|all) ;;
     *) echo "Unknown command: $cmd" >&2; usage; return 1 ;;
   esac
 
@@ -183,7 +226,8 @@ main() {
     case "$cmd" in
       download) "download_$r" ;;
       process)  "process_$r" ;;
-      all)      "download_$r"; "process_$r" ;;
+      report)   "report_$r" ;;
+      all)      "download_$r"; "process_$r"; "report_$r" ;;
     esac
   done
 }
