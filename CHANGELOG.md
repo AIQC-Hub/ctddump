@@ -2,10 +2,13 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-10
+
 ### Added
 - `report` subcommand: summarise a Parquet data file or a YAML header file as a text report (TSV, plain text, or JSON), to a file or stdout
   - `report parquet --level global|platform|profile`: profile/observation counts, per-profile "good" QC counts, missing-value counts, min/max/mean of `temp`/`psal`/`pres`, and the `longitude`/`latitude` bounding box (global/platform levels)
   - `report yaml`: per source file, core-column presence flags and an `extra_params` list of auto-detected non-core measurement parameters — biogeochemical/biological and other (DOXY, FLU2, TUR3, CNDC, …)
+- `scripts/prepare_data.sh`: a `report` stage summarising the merged outputs (and `all` now runs download → process → report); the regional workflow pages gain a matching report step
 
 ## [0.4.3] - 2026-07-09
 
@@ -73,7 +76,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.0...v0.4.1
