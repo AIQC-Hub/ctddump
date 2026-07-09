@@ -2,3 +2,6 @@
 /target
 /.idea
 /tests/test_data
+
+# mdBook build output
+docs/book
