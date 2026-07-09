@@ -113,6 +113,17 @@ where
             .map_err(|e| format!("Cannot create output directory {}: {}", dir.display(), e))?;
     }
 
+    // Parallelism here is per file. Each conversion also calls Polars, which has
+    // its own global thread pool sized to the logical CPU count — so without this
+    // cap the process spawns `threads` + N_cpus workers, far exceeding `--threads`.
+    // Pin Polars to a single internal thread so `--threads` is the real knob.
+    // Polars reads this when it lazily initializes its pool (first call in the
+    // parallel loop below), so setting it here is early enough. Respect a value
+    // the user set explicitly.
+    if std::env::var_os("POLARS_MAX_THREADS").is_none() {
+        std::env::set_var("POLARS_MAX_THREADS", "1");
+    }
+
     let run = || -> Vec<String> {
         pairs
             .par_iter()
@@ -127,15 +138,20 @@ where
             .collect()
     };
 
-    let errors = if let Some(n) = threads {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(n)
-            .build()
-            .map_err(|e| format!("Failed to build thread pool: {}", e))?
-            .install(run)
-    } else {
-        run()
-    };
+    // Build an explicit pool with a generous worker stack. rayon's default 2 MiB
+    // worker stack overflows on large files inside Polars' parquet writer; this
+    // matches the stack raised via RUST_MIN_STACK in `main` regardless of env
+    // timing. When `threads` is None we still use a controlled pool (default
+    // thread count) so both paths get the larger stack.
+    const WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
+    let mut builder = rayon::ThreadPoolBuilder::new().stack_size(WORKER_STACK_SIZE);
+    if let Some(n) = threads {
+        builder = builder.num_threads(n);
+    }
+    let errors = builder
+        .build()
+        .map_err(|e| format!("Failed to build thread pool: {}", e))?
+        .install(run);
 
     if !errors.is_empty() {
         return Err(format!("Batch processing errors:\n{}", errors.join("\n")).into());

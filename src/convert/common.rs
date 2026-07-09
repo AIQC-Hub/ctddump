@@ -47,10 +47,47 @@ pub fn create_platform_code(
 }
 
 pub fn create_profile_no_sequence(time_len: usize, obs_len: usize) -> Result<Vec<u32>, Box<dyn Error>> {
-    let profile_no: Vec<u32> = (1..=time_len as u32).collect();
-    let profile_no_repeated: Vec<u32> = profile_no.iter().flat_map(|&v| std::iter::repeat(v).take(obs_len)).collect();
+    create_profile_no_sequence_chunk(0, time_len, obs_len)
+}
 
-    Ok(profile_no_repeated)
+/// Profile numbers (1-based, global) for the TIME slice `[time_offset, time_offset + time_count)`,
+/// each repeated `obs_len` times. Streaming-safe: numbering stays consistent across chunks
+/// because it is anchored to the absolute `time_offset`, not the chunk position.
+pub fn create_profile_no_sequence_chunk(
+    time_offset: usize,
+    time_count: usize,
+    obs_len: usize,
+) -> Result<Vec<u32>, Box<dyn Error>> {
+    let profile_no: Vec<u32> = ((time_offset as u32 + 1)..=(time_offset + time_count) as u32).collect();
+    Ok(profile_no.iter().flat_map(|&v| std::iter::repeat(v).take(obs_len)).collect())
+}
+
+/// Target number of observation rows to assemble per streamed chunk. Bounds peak
+/// memory independent of file size; override with `CTDDUMP_CHUNK_ROWS` for tuning
+/// (larger = faster/more memory) or tests. Values ≤ 0 / unparsable fall back to the default.
+pub fn chunk_rows() -> usize {
+    const DEFAULT_CHUNK_ROWS: usize = 1_000_000;
+    std::env::var("CTDDUMP_CHUNK_ROWS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(DEFAULT_CHUNK_ROWS)
+}
+
+/// Split the outer dimension (`TIME` / `N_PROF`, length `outer_len`) into
+/// `(offset, count)` chunks so each chunk holds at most ~`chunk_rows()` observation
+/// rows (`count × obs_len`), always advancing by ≥ 1 outer step. Returns an empty
+/// vec when `outer_len == 0`.
+pub fn time_chunks(outer_len: usize, obs_len: usize) -> Vec<(usize, usize)> {
+    let step = (chunk_rows() / obs_len.max(1)).max(1);
+    let mut chunks = Vec::new();
+    let mut offset = 0;
+    while offset < outer_len {
+        let count = step.min(outer_len - offset);
+        chunks.push((offset, count));
+        offset += count;
+    }
+    chunks
 }
 
 pub fn create_observation_sequence(time_len: usize, obs_len: usize) -> Result<Vec<u32>, Box<dyn Error>> {
@@ -58,6 +95,23 @@ pub fn create_observation_sequence(time_len: usize, obs_len: usize) -> Result<Ve
     let obs_repeated: Vec<u32> = obs.iter().cycle().take(obs_len * time_len).cloned().collect();
 
     Ok(obs_repeated)
+}
+
+/// Keep only the elements where `keep[i]` is `true`, consuming `v`. `v` and `keep`
+/// must have the same length.
+///
+/// Converters drop all-NaN observation rows this way — on the raw column vectors,
+/// *before* building the `DataFrame` — instead of Polars' `DataFrame::filter` /
+/// `take`, which leak memory per call in the pinned Polars version (each gather of
+/// the string columns retains memory that is never released). On a batch of many
+/// files this leak accumulates without bound; filtering the vectors here avoids it
+/// entirely and also keeps the dense all-NaN levels out of Polars.
+pub fn retain_by_mask<T>(v: Vec<T>, keep: &[bool]) -> Vec<T> {
+    debug_assert_eq!(v.len(), keep.len());
+    v.into_iter()
+        .zip(keep.iter())
+        .filter_map(|(x, &k)| k.then_some(x))
+        .collect()
 }
 
 pub fn convert_time_value(time_values: &Vec<f64>) -> Result<Vec<i64>, Box<dyn Error>> {
@@ -83,44 +137,45 @@ pub fn convert_time_value(time_values: &Vec<f64>) -> Result<Vec<i64>, Box<dyn Er
     Ok(timestamps)
 }
 
-pub fn get_coordinate_value<T>(
+/// Read the TIME slice `[time_offset, time_offset + time_count)` of a 1-D coordinate
+/// variable and tile each value `obs_len` times. A scalar variable (length 1) is
+/// broadcast across the whole chunk; a missing variable yields `fill_value`.
+pub fn get_coordinate_value_chunk<T>(
     file: &netcdf::File,
-    var_name: String,
-    time_len: usize,
+    var_name: &str,
+    time_offset: usize,
+    time_count: usize,
     obs_len: usize,
     fill_value: T,
 ) -> Result<Vec<T>, Box<dyn Error>>
 where
     T: Clone + Copy + netcdf::NcTypeDescriptor,
 {
-
-    let var = match file.variable(&var_name) {
+    let n = time_count * obs_len;
+    let var = match file.variable(var_name) {
         Some(v) => v,
-        None => {
-            return Ok(std::iter::repeat(fill_value)
-                .take(time_len * obs_len)
-                .collect())
-        }
+        None => return Ok(vec![fill_value; n]),
     };
 
-    let var_value: Vec<T> = var.get::<T, _>(..).unwrap().iter().cloned().collect();
-    let var_value_repeated: Vec<T> = if var_value.len() == 1 {
-        let value = var_value[0];
-        std::iter::repeat(value).take(time_len * obs_len).collect()
-    } else {
-        // Repeat each value `depth_len` times
-        var_value.iter().flat_map(|&v| std::iter::repeat(v).take(obs_len)).collect()
-    };
+    // Scalar coordinate: one value tiled across the whole chunk. Read with the
+    // full-extent selector so it works whether the variable is rank-0 or a
+    // length-1 dimension (an explicit `[0..1]` range fails on a rank-0 scalar).
+    if var.len() == 1 {
+        let value = var.get_values::<T, _>(..)?[0];
+        return Ok(vec![value; n]);
+    }
 
-    Ok(var_value_repeated)
+    // 1-D TIME-indexed coordinate: read only this chunk's slice, tile each `obs_len`.
+    let slice: Vec<T> = var.get_values::<T, _>([time_offset..time_offset + time_count])?;
+    Ok(slice.iter().flat_map(|&v| std::iter::repeat(v).take(obs_len)).collect())
 }
 
 pub fn get_float_fill_value (
     file: &netcdf::File,
-    var_name: String
+    var_name: &str
 ) -> f32 {
 
-    let var = match file.variable(&var_name) {
+    let var = match file.variable(var_name) {
         Some(v) => v,
         None => return f32::NAN,
     };
@@ -136,32 +191,37 @@ pub fn get_float_fill_value (
     }
 }
 
-pub fn get_var_float_value<T>(
+/// Read the TIME slice `[time_offset, time_offset + time_count)` of a 2-D
+/// `[TIME, DEPTH]` float variable, replacing `fill_value` with NaN. A scalar
+/// variable (length 1) is broadcast; a missing variable yields all-NaN.
+pub fn get_var_float_value_chunk<T>(
     file: &netcdf::File,
-    var_name: String,
+    var_name: &str,
     fill_value: T,
-    vec_size: usize,
+    time_offset: usize,
+    time_count: usize,
+    obs_len: usize,
 ) -> Result<Vec<T>, Box<dyn Error>>
 where
     T: Float + FromPrimitive + netcdf::NcTypeDescriptor,
 {
-    let var_temp = match file.variable(&var_name) {
+    let n = time_count * obs_len;
+    let var_temp = match file.variable(var_name) {
         Some(var) => var,
-        None => {
-            return Ok(vec![T::nan(); vec_size]);
-        }
-    };
-    let var_val_temp: Vec<T> = var_temp.get::<T, _>(..).unwrap().iter().cloned().collect();
-
-    let var_val_clean: Vec<T> = if var_val_temp.len() == 1 {
-        let value = var_val_temp[0];
-        std::iter::repeat(value).take(vec_size).collect()
-    } else {
-        // Repeat each value `depth_len` times
-        var_val_temp.into_iter().map(|x| if x == fill_value { T::nan() } else { x }).collect()
+        None => return Ok(vec![T::nan(); n]),
     };
 
-    Ok(var_val_clean)
+    // Scalar: broadcast the single value (matches the original whole-file behaviour,
+    // which did not apply the fill→NaN mapping in the scalar case). Full-extent read
+    // so it works for rank-0 scalars as well as length-1 dimensions.
+    if var_temp.len() == 1 {
+        let value = var_temp.get_values::<T, _>(..)?[0];
+        return Ok(vec![value; n]);
+    }
+
+    let slice: Vec<T> =
+        var_temp.get_values::<T, _>([time_offset..time_offset + time_count, 0..obs_len])?;
+    Ok(slice.into_iter().map(|x| if x == fill_value { T::nan() } else { x }).collect())
 }
 
 /// Convert a raw i8 QC byte (0–9) to its single-digit string.
@@ -174,78 +234,86 @@ fn i8_to_qc_string(v: i8) -> String {
     }
 }
 
-/// Read an integer QC variable (stored as `i8`) and return each flag as a
-/// single-character string ("0"–"9"). Missing or out-of-range values → `""`.
-pub fn get_qc_value(
+/// Read the slice `[time_offset, time_offset + time_count)` of a 2-D `[TIME, DEPTH]`
+/// integer QC variable (`i8`) and return each flag as a single-character string
+/// ("0"–"9"). Missing variable or out-of-range values → `""`.
+pub fn get_qc_value_chunk(
     file: &netcdf::File,
-    var_name: String,
-    vec_size: usize,
+    var_name: &str,
+    time_offset: usize,
+    time_count: usize,
+    obs_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>>
 {
-    let var_temp = match file.variable(&var_name) {
+    let n = time_count * obs_len;
+    let var_temp = match file.variable(var_name) {
         Some(var) => var,
-        None => return Ok(vec![String::new(); vec_size]),
+        None => return Ok(vec![String::new(); n]),
     };
 
-    let raw: Vec<i8> = var_temp.get::<i8, _>(..)?.iter().cloned().collect();
+    let raw: Vec<i8> = var_temp.get_values::<i8, _>([time_offset..time_offset + time_count, 0..obs_len])?;
     Ok(raw.iter().map(|&v| i8_to_qc_string(v)).collect())
 }
 
 /// Read a coordinate-tiled QC variable (e.g., `TIME_QC`, `POSITION_QC`) stored
-/// as `i8` and return each flag as a single-character string.
-/// The variable is tiled from `time_len` to `time_len × obs_len` like other
-/// coordinates. Missing variable → all `""`.
-pub fn get_qc_coordinate_value(
+/// as `i8` for the TIME slice `[time_offset, time_offset + time_count)` and return
+/// each flag as a single-character string. Tiled from TIME to `time_count × obs_len`
+/// like other coordinates. Missing variable → all `""`.
+pub fn get_qc_coordinate_value_chunk(
     file: &netcdf::File,
-    var_name: String,
-    time_len: usize,
+    var_name: &str,
+    time_offset: usize,
+    time_count: usize,
     obs_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>>
 {
-    let raw: Vec<i8> = get_coordinate_value(file, var_name, time_len, obs_len, i8::MIN)?;
+    let raw: Vec<i8> = get_coordinate_value_chunk(file, var_name, time_offset, time_count, obs_len, i8::MIN)?;
     Ok(raw.iter().map(|&v| i8_to_qc_string(v)).collect())
 }
 
-pub fn get_char_value (
+/// Read the slice `[time_offset, time_offset + time_count)` of a 2-D `[TIME, DEPTH]`
+/// `char` variable, one character per observation. Missing variable → all `" "`.
+pub fn get_char_value_chunk(
     file: &netcdf::File,
-    var_name: String,
-    vec_size: usize,
+    var_name: &str,
+    time_offset: usize,
+    time_count: usize,
+    obs_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>> {
-    let var_temp = match file.variable(&var_name) {
+    let n = time_count * obs_len;
+    let var_temp = match file.variable(var_name) {
         Some(var) => var,
-        None => {
-            return Ok(vec![" ".to_string(); vec_size]);
-        }
+        None => return Ok(vec![" ".to_string(); n]),
     };
 
-    let char_data: Vec<NcChar> = var_temp.get_values::<NcChar, _>(..)?;
-    let vec_strings: Vec<String> = char_data
-        .iter()
-        .map(|&NcChar(c)| (c as u8 as char).to_string())
-        .collect();
-
-    Ok(vec_strings)
+    let char_data: Vec<NcChar> =
+        var_temp.get_values::<NcChar, _>([time_offset..time_offset + time_count, 0..obs_len])?;
+    Ok(char_data.iter().map(|&NcChar(c)| (c as u8 as char).to_string()).collect())
 }
 
-pub fn get_char_value2 (
+/// Read the profile slice `[prof_offset, prof_offset + prof_count)` of a 2-D
+/// `[N_PROF, STRING<max_len>]` `char` variable (e.g. `PLATFORM_NUMBER`), assembling
+/// one trimmed string per profile and repeating it `obs_len` (`N_LEVELS`) times.
+/// Missing variable → all `" "`.
+pub fn get_char_value2_chunk(
     file: &netcdf::File,
-    var_name: String,
-    nrow: usize,
-    ncol: usize,
+    var_name: &str,
+    prof_offset: usize,
+    prof_count: usize,
+    obs_len: usize,
     max_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>> {
-    let var_temp = match file.variable(&var_name) {
+    let var_temp = match file.variable(var_name) {
         Some(var) => var,
-        None => {
-            return Ok(vec![" ".to_string(); nrow * ncol]);
-        }
+        None => return Ok(vec![" ".to_string(); prof_count * obs_len]),
     };
 
-    let char_data: Vec<NcChar> = var_temp.get_values::<NcChar, _>(..)?;
+    let char_data: Vec<NcChar> =
+        var_temp.get_values::<NcChar, _>([prof_offset..prof_offset + prof_count, 0..max_len])?;
 
-    let mut result = Vec::with_capacity(ncol);
-    for col in 0..ncol {
-        // For each row, collect characters from columns, filtering out whitespace and null chars
+    let mut result = Vec::with_capacity(prof_count);
+    for col in 0..prof_count {
+        // Collect the characters of this profile's name, dropping whitespace and null chars
         let row_string: String = (0..max_len)
             .filter_map(|row| {
                 let idx = col * max_len + row;
@@ -257,17 +325,13 @@ pub fn get_char_value2 (
                 }
             })
             .collect();
-
-        // Add the row string to the result vector
         result.push(row_string);
     }
 
-    let result_repeated: Vec<String> = result
+    Ok(result
         .iter()
-        .flat_map(|v| std::iter::repeat(v.clone()).take(nrow))
-        .collect();
-
-    Ok(result_repeated)
+        .flat_map(|v| std::iter::repeat(v.clone()).take(obs_len))
+        .collect())
 }
 
 pub fn get_char_vector3(
@@ -295,12 +359,14 @@ pub fn get_char_vector3(
 /// Space (`' '`) and null (`'\0'`) are treated as missing and map to `""`.
 /// All other characters (digits `'0'`–`'9'`, letters `'A'`, `'B'`, …) are
 /// kept as-is so that non-numeric ARGO QC codes are preserved faithfully.
-pub fn get_qc_value_from_char(
+pub fn get_qc_value_from_char_chunk(
     file: &netcdf::File,
-    var_name: String,
-    vec_size: usize,
+    var_name: &str,
+    time_offset: usize,
+    time_count: usize,
+    obs_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>> {
-    let char_vals = get_char_value(file, var_name, vec_size)?;
+    let char_vals = get_char_value_chunk(file, var_name, time_offset, time_count, obs_len)?;
     let result: Vec<String> = char_vals
         .iter()
         .map(|s| match s.chars().next() {
@@ -391,14 +457,28 @@ where
 /// TIME value is repeated `obs_len` times to match the observation-level output.
 ///
 /// Negative indices are clamped to 0.  Input need not be sorted.
+/// Whole-file convenience wrapper over [`expand_coords_from_indices_range`],
+/// retained for the unit tests that exercise the expansion algorithm directly.
+#[cfg(test)]
 fn expand_coords_from_indices(
     deploy_indices: &[i32],
     coord_values: &[f32],
     time_len: usize,
     obs_len: usize,
 ) -> Vec<f32> {
-    let vec_size = time_len * obs_len;
+    expand_coords_from_indices_range(deploy_indices, coord_values, 0, time_len, obs_len)
+}
 
+/// Streaming variant of [`expand_coords_from_indices`] restricted to the TIME range
+/// `[t_start, t_end)`. Deployment resolution is anchored to absolute TIME indices,
+/// so a chunk resolves to exactly the same values it would in a whole-file pass.
+fn expand_coords_from_indices_range(
+    deploy_indices: &[i32],
+    coord_values: &[f32],
+    t_start: usize,
+    t_end: usize,
+    obs_len: usize,
+) -> Vec<f32> {
     // Sort deployments by their start TIME index (ascending)
     let mut sorted: Vec<(usize, f32)> = deploy_indices
         .iter()
@@ -407,8 +487,8 @@ fn expand_coords_from_indices(
         .collect();
     sorted.sort_by_key(|&(idx, _)| idx);
 
-    let mut result = Vec::with_capacity(vec_size);
-    for t in 0..time_len {
+    let mut result = Vec::with_capacity((t_end - t_start) * obs_len);
+    for t in t_start..t_end {
         // Latest deployment whose start index ≤ t
         let value = sorted
             .iter()
@@ -425,31 +505,37 @@ fn expand_coords_from_indices(
 }
 
 /// Expand a deployment-indexed coordinate variable (`DEPLOY_LATITUDE` or
-/// `DEPLOY_LONGITUDE`) into a flat `Vec<f32>` of length `time_len × obs_len`.
+/// `DEPLOY_LONGITUDE`) into a flat `Vec<f32>` for the TIME slice
+/// `[time_offset, time_offset + time_count)`.
 ///
 /// The `DEPLOYMENT` variable holds the 0-based TIME index at which each
 /// deployment begins. For each TIME step `t`, the active deployment is the
 /// one with the latest start index that is still ≤ `t`. Each TIME value is
 /// then repeated `obs_len` times to match the observation-level output.
-pub fn expand_deploy_coords(
+///
+/// `DEPLOYMENT` / `DEPLOY_*` are per-deployment (few entries), so they are read
+/// in full every chunk — the resolution is anchored to absolute TIME indices,
+/// making each chunk's result identical to a whole-file pass.
+pub fn expand_deploy_coords_chunk(
     file: &netcdf::File,
     var_name: &str,
-    time_len: usize,
+    time_offset: usize,
+    time_count: usize,
     obs_len: usize,
 ) -> Result<Vec<f32>, Box<dyn Error>> {
-    let vec_size = time_len * obs_len;
+    let n = time_count * obs_len;
 
     let deploy_var = match file.variable("DEPLOYMENT") {
         Some(v) => v,
-        None => return Ok(vec![f32::NAN; vec_size]),
+        None => return Ok(vec![f32::NAN; n]),
     };
-    let deploy_indices: Vec<i32> = deploy_var.get::<i32, _>(..)?.iter().cloned().collect();
+    let deploy_indices: Vec<i32> = deploy_var.get_values::<i32, _>(..)?;
 
     let coord_var = match file.variable(var_name) {
         Some(v) => v,
-        None => return Ok(vec![f32::NAN; vec_size]),
+        None => return Ok(vec![f32::NAN; n]),
     };
-    let coord_values: Vec<f32> = coord_var.get::<f32, _>(..)?.iter().cloned().collect();
+    let coord_values: Vec<f32> = coord_var.get_values::<f32, _>(..)?;
 
     if deploy_indices.len() != coord_values.len() {
         return Err(format!(
@@ -461,7 +547,13 @@ pub fn expand_deploy_coords(
         .into());
     }
 
-    Ok(expand_coords_from_indices(&deploy_indices, &coord_values, time_len, obs_len))
+    Ok(expand_coords_from_indices_range(
+        &deploy_indices,
+        &coord_values,
+        time_offset,
+        time_offset + time_count,
+        obs_len,
+    ))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

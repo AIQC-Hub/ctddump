@@ -56,6 +56,19 @@ pub enum ConcatSubcommand {
         /// Do not re-assign profile_no and observation_no after merging
         #[arg(long = "no-renumber")]
         no_renumber: bool,
+        /// Sort without `pres`: keep observations in their original per-profile
+        /// order instead of reordering by pressure (ignored with --no-renumber)
+        #[arg(long = "no-pres-sort")]
+        no_pres_sort: bool,
+        /// Keep rows with missing (null/NaN) `pres`. By default such rows are
+        /// dropped before merging so observation_no stays contiguous
+        #[arg(long = "keep-na-pres")]
+        keep_na_pres: bool,
+        /// Number of threads for parallel renumbering via temporary files in the
+        /// output folder (defaults to all CPU cores; use 1 for the sequential,
+        /// lowest-memory path; ignored with --no-renumber)
+        #[arg(short, long)]
+        threads: Option<usize>,
     },
     /// Merge header YAML files into a single YAML file
     #[command(name = "header")]
