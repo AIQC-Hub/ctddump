@@ -1,0 +1,20 @@
+[book]
+title = "ctddump"
+description = "Convert oceanographic CTD data from NetCDF to Parquet (data) or YAML (metadata)."
+authors = ["AIQC-Hub"]
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/AIQC-Hub/ctddump"
+edit-url-template = "https://github.com/AIQC-Hub/ctddump/edit/main/docs/{path}"
+site-url = "/ctddump/"
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true
