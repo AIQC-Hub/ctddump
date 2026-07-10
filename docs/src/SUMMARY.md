@@ -11,6 +11,7 @@
 - [concat](./commands/concat.md)
 - [report](./commands/report.md)
 - [filter](./commands/filter.md)
+- [dropna](./commands/dropna.md)
 
 # Reference
 

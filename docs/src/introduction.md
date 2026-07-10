@@ -29,6 +29,7 @@ Two families of source files are supported:
 | [`concat`](./commands/concat.md) | Merge many Parquet (or YAML) files into one. |
 | [`report`](./commands/report.md) | Summarise a Parquet or YAML file as a text report. |
 | [`filter`](./commands/filter.md) | Filter a Parquet file's profiles by a geographic bounding box. |
+| [`dropna`](./commands/dropna.md) | Drop profiles that are entirely NA in any of `temp`/`psal`/`pres`. |
 
 ## Quick example
 

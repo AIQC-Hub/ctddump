@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- `dropna` subcommand: drop whole profiles that are entirely NA (null/NaN) in any of `temp`/`psal`/`pres` — a profile is kept only if each parameter has at least one valid observation. Works on Parquet files in two streaming passes so peak memory stays bounded and the result is independent of chunking
+
 ## [0.6.0] - 2026-07-11
 
 ### Added

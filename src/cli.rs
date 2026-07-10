@@ -66,6 +66,14 @@ pub enum Commands {
         /// Output Parquet file
         dest: PathBuf,
     },
+    /// Drop profiles that are entirely NA in any of temp/psal/pres
+    #[command(name = "dropna")]
+    Dropna {
+        /// Source Parquet file
+        src: PathBuf,
+        /// Output Parquet file
+        dest: PathBuf,
+    },
 }
 
 // ── Report subcommands ────────────────────────────────────────────────────────

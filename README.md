@@ -182,6 +182,19 @@ ctddump filter --min-lon 5 --max-lon 15 --min-lat 35 --max-lat 40 merged.parquet
 ctddump filter --mode exclude --min-lon 5 --max-lon 15 --min-lat 35 --max-lat 40 merged.parquet outside.parquet
 ```
 
+### `dropna` — drop profiles with no usable data in a core parameter
+
+```
+ctddump dropna <src.parquet> <dest.parquet>
+```
+
+`dropna` keeps a profile only if **each** of `temp`, `psal`, and `pres` has at least one non-NA observation, and drops the whole profile if **any one** of them is entirely NA (null or NaN). Partial NAs are fine — a kept profile keeps all its rows. It runs in two streaming passes, so peak memory stays bounded regardless of file size and the output is independent of chunking.
+
+```bash
+# Drop profiles with an all-NA temp, psal, or pres
+ctddump dropna merged.parquet cleaned.parquet
+```
+
 ## Configuration
 
 All `convert` and `batch convert` subcommands support a `--config` TOML file plus individual flag overrides. Priority order:

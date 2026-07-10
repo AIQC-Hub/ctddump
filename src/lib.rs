@@ -7,6 +7,7 @@ pub mod batch;
 pub mod cli;
 pub mod concat;
 pub mod convert;
+pub mod dropna;
 pub mod filter;
 pub mod header;
 pub mod report;
@@ -35,6 +36,10 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
         Commands::Report { subcommand } => dispatch_report(subcommand),
         Commands::Filter { mode, min_lon, max_lon, min_lat, max_lat, src, dest } => {
             dispatch_filter(mode, min_lon, max_lon, min_lat, max_lat, src, dest)
+        }
+        Commands::Dropna { src, dest } => {
+            dropna::run(&src, &dest)?;
+            Ok(Config { module: "dropna".to_string(), target: "parquet".to_string(), args: vec![] })
         }
     }
 }
