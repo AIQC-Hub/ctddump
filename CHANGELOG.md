@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- `filter` subcommand: keep (`--mode include`, default) or drop (`--mode exclude`) whole profiles by a geographic bounding box (`--min-lon`/`--max-lon`/`--min-lat`/`--max-lat`, inclusive edges; NaN positions treated as outside). Works on Parquet files and streams one row group at a time so peak memory stays bounded
+
+### Changed
+- `scripts/prepare_data.sh` and the regional workflow pages now generate parquet reports at the `platform` level instead of `global`
+
 ## [0.5.0] - 2026-07-10
 
 ### Added

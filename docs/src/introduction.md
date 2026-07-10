@@ -28,6 +28,7 @@ Two families of source files are supported:
 | [`header`](./commands/header.md) | Extract a single file's metadata to YAML. |
 | [`concat`](./commands/concat.md) | Merge many Parquet (or YAML) files into one. |
 | [`report`](./commands/report.md) | Summarise a Parquet or YAML file as a text report. |
+| [`filter`](./commands/filter.md) | Filter a Parquet file's profiles by a geographic bounding box. |
 
 ## Quick example
 

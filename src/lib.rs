@@ -7,10 +7,11 @@ pub mod batch;
 pub mod cli;
 pub mod concat;
 pub mod convert;
+pub mod filter;
 pub mod header;
 pub mod report;
 
-use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat, ConcatSubcommand, ReportSubcommand};
+use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat, ConcatSubcommand, ReportSubcommand, FilterMode};
 use concat::ConcatConfig;
 use convert::cora_config::CoraConfig;
 use convert::nrt_config::NrtConfig;
@@ -32,6 +33,9 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
         Commands::Header { format } => dispatch_header(format),
         Commands::Concat { subcommand } => dispatch_concat(subcommand),
         Commands::Report { subcommand } => dispatch_report(subcommand),
+        Commands::Filter { mode, min_lon, max_lon, min_lat, max_lat, src, dest } => {
+            dispatch_filter(mode, min_lon, max_lon, min_lat, max_lat, src, dest)
+        }
     }
 }
 
@@ -204,6 +208,20 @@ fn dispatch_report(subcommand: ReportSubcommand) -> Result<Config, Box<dyn Error
             Ok(Config { module: "report".to_string(), target: "yaml".to_string(), args: vec![] })
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dispatch_filter(
+    mode: FilterMode,
+    min_lon: f64,
+    max_lon: f64,
+    min_lat: f64,
+    max_lat: f64,
+    src: PathBuf,
+    dest: PathBuf,
+) -> Result<Config, Box<dyn Error>> {
+    filter::run(mode, min_lon, max_lon, min_lat, max_lat, &src, &dest)?;
+    Ok(Config { module: "filter".to_string(), target: "area".to_string(), args: vec![] })
 }
 
 /// Returns a config loaded from `path` if provided, or the embedded default otherwise.

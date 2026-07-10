@@ -10,6 +10,7 @@
 - [header](./commands/header.md)
 - [concat](./commands/concat.md)
 - [report](./commands/report.md)
+- [filter](./commands/filter.md)
 
 # Reference
 

@@ -43,6 +43,29 @@ pub enum Commands {
         #[command(subcommand)]
         subcommand: ReportSubcommand,
     },
+    /// Filter a Parquet file's profiles by a geographic bounding box
+    #[command(name = "filter")]
+    Filter {
+        /// Keep (include) or drop (exclude) profiles inside the box
+        #[arg(long, value_enum, default_value_t = FilterMode::Include)]
+        mode: FilterMode,
+        /// Western bound: minimum longitude
+        #[arg(long, allow_hyphen_values = true)]
+        min_lon: f64,
+        /// Eastern bound: maximum longitude
+        #[arg(long, allow_hyphen_values = true)]
+        max_lon: f64,
+        /// Southern bound: minimum latitude
+        #[arg(long, allow_hyphen_values = true)]
+        min_lat: f64,
+        /// Northern bound: maximum latitude
+        #[arg(long, allow_hyphen_values = true)]
+        max_lat: f64,
+        /// Source Parquet file
+        src: PathBuf,
+        /// Output Parquet file
+        dest: PathBuf,
+    },
 }
 
 // ── Report subcommands ────────────────────────────────────────────────────────
@@ -96,6 +119,17 @@ pub enum ReportSubcommand {
         /// Output file (default: stdout)
         dest: Option<PathBuf>,
     },
+}
+
+// ── Filter mode ───────────────────────────────────────────────────────────────
+
+/// Whether profiles inside the box are kept or dropped.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum FilterMode {
+    /// Keep only profiles inside the box (drop everything else)
+    Include,
+    /// Drop profiles inside the box (keep everything else)
+    Exclude,
 }
 
 // ── Concat subcommands ────────────────────────────────────────────────────────
