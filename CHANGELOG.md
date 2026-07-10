@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-11
+
+### Added
+- `dropna` subcommand: drop whole profiles that are entirely NA (null/NaN) in any of `temp`/`psal`/`pres` — a profile is kept only if each parameter has at least one valid observation. Works on Parquet files in two streaming passes so peak memory stays bounded and the result is independent of chunking
+
 ## [0.6.0] - 2026-07-11
 
 ### Added
@@ -84,7 +89,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.2...v0.4.3
