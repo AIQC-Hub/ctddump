@@ -166,6 +166,22 @@ ctddump report parquet --level global --format text merged.parquet
 ctddump report yaml --format json merged.yaml report.json
 ```
 
+### `filter` — filter a Parquet file's profiles by a bounding box
+
+```
+ctddump filter [--mode include|exclude] --min-lon <W> --max-lon <E> --min-lat <S> --max-lat <N> <src.parquet> <dest.parquet>
+```
+
+`filter` keeps or drops **whole profiles** by a geographic bounding box (inclusive on all edges; an inverted box is rejected). `--mode` defaults to `include` (keep profiles inside the box); `exclude` keeps everything outside it. A profile with a NaN position counts as outside the box. The file is streamed one row group at a time, so peak memory stays bounded regardless of size.
+
+```bash
+# Keep only profiles inside a bounding box
+ctddump filter --min-lon 5 --max-lon 15 --min-lat 35 --max-lat 40 merged.parquet box.parquet
+
+# Drop profiles inside that box, keep the rest
+ctddump filter --mode exclude --min-lon 5 --max-lon 15 --min-lat 35 --max-lat 40 merged.parquet outside.parquet
+```
+
 ## Configuration
 
 All `convert` and `batch convert` subcommands support a `--config` TOML file plus individual flag overrides. Priority order:
