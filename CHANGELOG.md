@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-11
+
 ### Added
 - `filter` subcommand: keep (`--mode include`, default) or drop (`--mode exclude`) whole profiles by a geographic bounding box (`--min-lon`/`--max-lon`/`--min-lat`/`--max-lat`, inclusive edges; NaN positions treated as outside). Works on Parquet files and streams one row group at a time so peak memory stays bounded
 
@@ -82,7 +84,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.3...v0.5.0
 [0.4.3]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.1...v0.4.2
