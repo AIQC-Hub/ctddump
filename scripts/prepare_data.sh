@@ -69,9 +69,9 @@ merge_hdr() {  # <src_dir> <out_file>
   ctddump concat header "$1" "$2"
 }
 
-report_parquet() {  # <src_file> <out_tsv> -- global-level summary of a merged Parquet
+report_parquet() {  # <src_file> <out_tsv> -- platform-level summary of a merged Parquet
   mkdir -p "$(dirname "$2")"
-  ctddump report parquet --level global "$1" "$2"
+  ctddump report parquet --level platform "$1" "$2"
 }
 
 report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
