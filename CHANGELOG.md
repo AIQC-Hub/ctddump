@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- `dropqc` subcommand: drop whole profiles flagged bad by their profile-level QC — a profile is kept only if both `time_qc` and `position_qc` are `"1"` (OK) or missing (an absent QC variable or the NA byte `-128`, both stored as `""`). Missing QC is kept on purpose so files that ship no profile-level QC are not discarded. Works on Parquet files and streams one row group at a time so peak memory stays bounded
+- `scripts/clean_data.sh`: helper that cleans the merged Parquet outputs of `prepare_data.sh` in four steps — `dropqc`, `dropna`, `filter` (region bounding box with excluded sub-areas for the Baltic and Mediterranean), and `report` — writing its reports to `$OUT/report/clean/`
+
+### Changed
+- `scripts/prepare_data.sh` now writes its reports to `$OUT/report/prepare/` (was `$OUT/report/`), leaving `$OUT/report/clean/` for `clean_data.sh`
+
 ## [0.7.0] - 2026-07-11
 
 ### Added

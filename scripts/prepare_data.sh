@@ -78,7 +78,7 @@ report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
   mkdir -p "$(dirname "$2")"
   ctddump report yaml "$1" "$2"
 }
-
+W
 # ---- Download ------------------------------------------------------------
 login() { copernicusmarine login; }
 
@@ -161,11 +161,12 @@ process_mediterranean() {
 }
 
 # ---- Per-region reports (summaries of the merged outputs) ----------------
-# Parquet reports use the global level; each report lands in $OUT/report/ named
-# after its source, with a .parquet.tsv / .yaml.tsv suffix.
+# Parquet reports use the platform level; each report lands in
+# $OUT/report/prepare/ named after its source, with a .parquet.tsv /
+# .yaml.tsv suffix. (clean_data.sh writes its reports to $OUT/report/clean/.)
 
 report_arctic() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
   report_parquet "$P/nrt_ar_ar.parquet" "$R/nrt_ar_ar.parquet.tsv"
   report_parquet "$P/nrt_ar_gl.parquet" "$R/nrt_ar_gl.parquet.tsv"
   report_parquet "$P/cora_ar.parquet"   "$R/cora_ar.parquet.tsv"
@@ -175,7 +176,7 @@ report_arctic() {
 }
 
 report_baltic() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
   report_parquet "$P/nrt_bo_bo.parquet" "$R/nrt_bo_bo.parquet.tsv"
   report_parquet "$P/cora_bo.parquet"   "$R/cora_bo.parquet.tsv"
   report_yaml    "$H/nrt_bo_bo.yaml"     "$R/nrt_bo_bo.yaml.tsv"
@@ -183,7 +184,7 @@ report_baltic() {
 }
 
 report_mediterranean() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
   report_parquet "$P/nrt_mo_mo.parquet" "$R/nrt_mo_mo.parquet.tsv"
   report_parquet "$P/nrt_mo_gl.parquet" "$R/nrt_mo_gl.parquet.tsv"
   report_parquet "$P/cora_mo.parquet"   "$R/cora_mo.parquet.tsv"

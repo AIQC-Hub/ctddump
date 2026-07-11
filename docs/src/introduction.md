@@ -30,6 +30,7 @@ Two families of source files are supported:
 | [`report`](./commands/report.md) | Summarise a Parquet or YAML file as a text report. |
 | [`filter`](./commands/filter.md) | Filter a Parquet file's profiles by a geographic bounding box. |
 | [`dropna`](./commands/dropna.md) | Drop profiles that are entirely NA in any of `temp`/`psal`/`pres`. |
+| [`dropqc`](./commands/dropqc.md) | Drop profiles flagged bad in `time_qc` or `position_qc`. |
 
 ## Quick example
 

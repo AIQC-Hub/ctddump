@@ -8,6 +8,7 @@ pub mod cli;
 pub mod concat;
 pub mod convert;
 pub mod dropna;
+pub mod dropqc;
 pub mod filter;
 pub mod header;
 pub mod report;
@@ -40,6 +41,10 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
         Commands::Dropna { src, dest } => {
             dropna::run(&src, &dest)?;
             Ok(Config { module: "dropna".to_string(), target: "parquet".to_string(), args: vec![] })
+        }
+        Commands::Dropqc { src, dest } => {
+            dropqc::run(&src, &dest)?;
+            Ok(Config { module: "dropqc".to_string(), target: "parquet".to_string(), args: vec![] })
         }
     }
 }

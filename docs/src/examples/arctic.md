@@ -1,9 +1,12 @@
 # Arctic Sea
 
-An end-to-end workflow for the Arctic Sea: download the source files, convert
-them to Parquet, merge them, and export the metadata.
+An end-to-end workflow for the Arctic Sea in two phases: **data preparation**
+(download, convert, merge, and export the metadata) and **data cleaning** (drop
+low-quality profiles and restrict the data to the region).
 
-## Prerequisites
+## Data preparation
+
+### Prerequisites
 
 Downloading requires a free [Copernicus Marine](https://marine.copernicus.eu/)
 account and the **Copernicus Marine Toolbox**
@@ -18,7 +21,7 @@ cd copernicus
 copernicusmarine login
 ```
 
-## 1. Download the data
+### 1. Download the data
 
 ```shell
 # NRT — Arctic (AR) and Global (GL)
@@ -28,7 +31,7 @@ copernicusmarine get -i cmems_obs-ins_arc_phybgcwav_mynrt_na_irr --dataset-part 
 copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "arctic/*/*_PR_CT.nc"
 ```
 
-## 2. Convert NetCDF to Parquet
+### 2. Convert NetCDF to Parquet
 
 ```shell
 # NRT AR
@@ -41,7 +44,7 @@ ctddump batch convert nrt_gl --threads 10 --output ../process_data/ctddump/parqu
 ctddump batch convert cora --threads 10 --output ../process_data/ctddump/parquet/ar/cora ../source_data/ctddump/netcdf/INSITU_GLO_PHY_TS_DISCRETE_MY_013_001/cmems_obs-ins_glo_phy-temp-sal_my_cora_irr_202511/arctic
 ```
 
-## 3. Merge the Parquet files
+### 3. Merge the Parquet files
 
 ```shell
 # NRT AR
@@ -54,7 +57,7 @@ ctddump concat convert --threads 10 ../process_data/ctddump/parquet/ar/gl ../pro
 ctddump concat convert --threads 10 ../process_data/ctddump/parquet/ar/cora ../process_data/ctddump/parquet/cora_ar.parquet
 ```
 
-## 4. Export the metadata (headers)
+### 4. Export the metadata (headers)
 
 ```shell
 # NRT AR
@@ -67,7 +70,7 @@ ctddump batch header nrt --threads 10 --pattern "GL_PR_CT_*.nc" --output ../proc
 ctddump batch header cora --threads 10 --output ../process_data/ctddump/header/ar/cora ../source_data/ctddump/netcdf/INSITU_GLO_PHY_TS_DISCRETE_MY_013_001/cmems_obs-ins_glo_phy-temp-sal_my_cora_irr_202511/arctic
 ```
 
-## 5. Merge the header files
+### 5. Merge the header files
 
 ```shell
 # NRT AR
@@ -80,21 +83,99 @@ ctddump concat header ../process_data/ctddump/header/ar/gl ../process_data/ctddu
 ctddump concat header ../process_data/ctddump/header/ar/cora ../process_data/ctddump/header/cora_ar.yaml
 ```
 
-## 6. Summarise the results
+### 6. Summarise the results
 
 Write a platform-level summary of each merged Parquet file and a per-file summary
 of each merged header YAML (as TSV).
 
 ```shell
+mkdir -p ../process_data/ctddump/report/prepare
+
 # NRT AR
-ctddump report parquet --level platform ../process_data/ctddump/parquet/nrt_ar_ar.parquet ../process_data/ctddump/report/nrt_ar_ar.parquet.tsv
-ctddump report yaml ../process_data/ctddump/header/nrt_ar_ar.yaml ../process_data/ctddump/report/nrt_ar_ar.yaml.tsv
+ctddump report parquet --level platform ../process_data/ctddump/parquet/nrt_ar_ar.parquet ../process_data/ctddump/report/prepare/nrt_ar_ar.parquet.tsv
+ctddump report yaml ../process_data/ctddump/header/nrt_ar_ar.yaml ../process_data/ctddump/report/prepare/nrt_ar_ar.yaml.tsv
 
 # NRT GL
-ctddump report parquet --level platform ../process_data/ctddump/parquet/nrt_ar_gl.parquet ../process_data/ctddump/report/nrt_ar_gl.parquet.tsv
-ctddump report yaml ../process_data/ctddump/header/nrt_ar_gl.yaml ../process_data/ctddump/report/nrt_ar_gl.yaml.tsv
+ctddump report parquet --level platform ../process_data/ctddump/parquet/nrt_ar_gl.parquet ../process_data/ctddump/report/prepare/nrt_ar_gl.parquet.tsv
+ctddump report yaml ../process_data/ctddump/header/nrt_ar_gl.yaml ../process_data/ctddump/report/prepare/nrt_ar_gl.yaml.tsv
 
 # CORA AR
-ctddump report parquet --level platform ../process_data/ctddump/parquet/cora_ar.parquet ../process_data/ctddump/report/cora_ar.parquet.tsv
-ctddump report yaml ../process_data/ctddump/header/cora_ar.yaml ../process_data/ctddump/report/cora_ar.yaml.tsv
+ctddump report parquet --level platform ../process_data/ctddump/parquet/cora_ar.parquet ../process_data/ctddump/report/prepare/cora_ar.parquet.tsv
+ctddump report yaml ../process_data/ctddump/header/cora_ar.yaml ../process_data/ctddump/report/prepare/cora_ar.yaml.tsv
 ```
+
+## Data cleaning
+
+Clean the merged Parquet from the preparation phase by dropping low-quality
+profiles and restricting the data to the region. Each step reads the previous
+step's output, so the stages chain `dropqc → dropna → filter`.
+
+Create the output directories:
+
+```shell
+mkdir -p ../process_data/ctddump/clean/dropqc ../process_data/ctddump/clean/dropna ../process_data/ctddump/clean/filter ../process_data/ctddump/report/clean
+```
+
+### 1. Drop profiles with bad profile-level QC
+
+Drop profiles whose `time_qc` or `position_qc` is a present, non-OK flag;
+profiles that are OK (`"1"`) or have missing QC are kept.
+
+```shell
+# NRT AR
+ctddump dropqc ../process_data/ctddump/parquet/nrt_ar_ar.parquet ../process_data/ctddump/clean/dropqc/nrt_ar_ar.parquet
+
+# NRT GL
+ctddump dropqc ../process_data/ctddump/parquet/nrt_ar_gl.parquet ../process_data/ctddump/clean/dropqc/nrt_ar_gl.parquet
+
+# CORA AR
+ctddump dropqc ../process_data/ctddump/parquet/cora_ar.parquet ../process_data/ctddump/clean/dropqc/cora_ar.parquet
+```
+
+### 2. Drop profiles with no usable data
+
+Drop profiles that are entirely NA in any of `temp`, `psal`, or `pres`.
+
+```shell
+# NRT AR
+ctddump dropna ../process_data/ctddump/clean/dropqc/nrt_ar_ar.parquet ../process_data/ctddump/clean/dropna/nrt_ar_ar.parquet
+
+# NRT GL
+ctddump dropna ../process_data/ctddump/clean/dropqc/nrt_ar_gl.parquet ../process_data/ctddump/clean/dropna/nrt_ar_gl.parquet
+
+# CORA AR
+ctddump dropna ../process_data/ctddump/clean/dropqc/cora_ar.parquet ../process_data/ctddump/clean/dropna/cora_ar.parquet
+```
+
+### 3. Filter to the Arctic region
+
+Keep only profiles inside the Arctic bounding box (longitude -180 to 180,
+latitude 60 to 90).
+
+```shell
+# NRT AR
+ctddump filter --min-lon -180 --max-lon 180 --min-lat 60 --max-lat 90 ../process_data/ctddump/clean/dropna/nrt_ar_ar.parquet ../process_data/ctddump/clean/filter/nrt_ar_ar.parquet
+
+# NRT GL
+ctddump filter --min-lon -180 --max-lon 180 --min-lat 60 --max-lat 90 ../process_data/ctddump/clean/dropna/nrt_ar_gl.parquet ../process_data/ctddump/clean/filter/nrt_ar_gl.parquet
+
+# CORA AR
+ctddump filter --min-lon -180 --max-lon 180 --min-lat 60 --max-lat 90 ../process_data/ctddump/clean/dropna/cora_ar.parquet ../process_data/ctddump/clean/filter/cora_ar.parquet
+```
+
+### 4. Summarise the cleaned data
+
+```shell
+# NRT AR
+ctddump report parquet --level platform ../process_data/ctddump/clean/filter/nrt_ar_ar.parquet ../process_data/ctddump/report/clean/nrt_ar_ar.parquet.tsv
+
+# NRT GL
+ctddump report parquet --level platform ../process_data/ctddump/clean/filter/nrt_ar_gl.parquet ../process_data/ctddump/report/clean/nrt_ar_gl.parquet.tsv
+
+# CORA AR
+ctddump report parquet --level platform ../process_data/ctddump/clean/filter/cora_ar.parquet ../process_data/ctddump/report/clean/cora_ar.parquet.tsv
+```
+
+> Both phases are automated by
+> [`scripts/prepare_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/prepare_data.sh)
+> and [`scripts/clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh).

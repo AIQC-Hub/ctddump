@@ -74,6 +74,14 @@ pub enum Commands {
         /// Output Parquet file
         dest: PathBuf,
     },
+    /// Drop profiles whose time_qc or position_qc is a present, non-OK flag
+    #[command(name = "dropqc")]
+    Dropqc {
+        /// Source Parquet file
+        src: PathBuf,
+        /// Output Parquet file
+        dest: PathBuf,
+    },
 }
 
 // ── Report subcommands ────────────────────────────────────────────────────────
