@@ -31,6 +31,8 @@ Two families of source files are supported:
 | [`filter`](./commands/filter.md) | Filter a Parquet file's profiles by a geographic bounding box. |
 | [`dropna`](./commands/dropna.md) | Drop profiles that are entirely NA in any of `temp`/`psal`/`pres`. |
 | [`dropqc`](./commands/dropqc.md) | Drop profiles flagged bad in `time_qc` or `position_qc`. |
+| [`markdup`](./commands/markdup.md) | Mark duplicate profiles (by date + position) with an `is_dup` column. |
+| [`dedup`](./commands/dedup.md) | Remove duplicate profiles, keeping the one with the most observations. |
 
 ## Quick example
 

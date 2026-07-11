@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-11
+
+### Added
+- `markdup` subcommand: mark duplicate profiles with an `is_dup` column and write a TSV listing the duplicated profiles. Duplicates are decided by `profile_timestamp` (date only by default), `longitude`, and `latitude` (3-decimal rounding by default), across platforms. The timestamp format (`--time-format`), rounding precision (`--decimals`), and rounding mode (`--round-mode`) are configurable
+- `dedup` subcommand: remove duplicate profiles, keeping the one with the most observations (ties broken by first appearance). Re-derives the same key as `markdup` (same options); resets `is_dup` to `false` when the column is present
+- `report parquet`: when an `is_dup` column is present, the report adds duplicate counts — `dup_profiles` at the global/platform levels and the `is_dup` flag at the profile level
+- `scripts/dedup_data.sh`: helper that de-duplicates the cleaned Parquet outputs of `clean_data.sh` in four steps — `markdup`, `report`, `dedup`, `report` — writing reports to `$OUT/report/dedup/{markdup,dedup}/`
+- The regional workflow docs (Arctic, Baltic, Mediterranean) gain a "Data de-duplication" section
+
+### Fixed
+- **Critical:** `filter`, `dropqc`, and `dropna` produced corrupt output on any Parquet input with more than one row group (e.g. a `concat` output over ~1M rows): Polars 0.43's parallel Parquet reader mishandles `slice` pushdown across row groups, so every streamed chunk read rows from the *first* row group only. The streaming scans now disable the parallel reader (`ParallelStrategy::None`), which slices correctly; single-row-group inputs were unaffected
+
 ## [0.8.1] - 2026-07-11
 
 ### Fixed
@@ -104,7 +116,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.6.0...v0.7.0

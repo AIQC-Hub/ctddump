@@ -20,10 +20,14 @@ pub fn run(
     let lf = LazyFrame::scan_parquet(src, ScanArgsParquet::default())
         .map_err(|e| format!("Cannot scan {}: {}", src.display(), e))?;
 
+    // When a `markdup` `is_dup` column is present, the report also summarises
+    // duplicate counts; otherwise the duplicate columns are omitted entirely.
+    let has_dup = lf.clone().slice(0, 0).collect()?.schema().index_of("is_dup").is_some();
+
     let df = match level {
-        ReportLevel::Global => global_report(lf)?,
-        ReportLevel::Platform => platform_report(lf)?,
-        ReportLevel::Profile => profile_report(lf)?,
+        ReportLevel::Global => global_report(lf, has_dup)?,
+        ReportLevel::Platform => platform_report(lf, has_dup)?,
+        ReportLevel::Profile => profile_report(lf, has_dup)?,
     };
 
     format::write_report(&df, format, dest)?;
@@ -84,26 +88,33 @@ fn geo_cols() -> Vec<Expr> {
 }
 
 /// Per-profile roll-up of the profile-level QC flags into per-platform "good"
-/// counts (flag `== "1"`), plus the profile count.
-fn platform_qc(lf: LazyFrame) -> LazyFrame {
+/// counts (flag `== "1"`), plus the profile count. With `has_dup`, also counts
+/// duplicated profiles per platform (`is_dup` is profile-level).
+fn platform_qc(lf: LazyFrame, has_dup: bool) -> LazyFrame {
+    let mut prof_agg = vec![col("time_qc").first(), col("position_qc").first()];
+    let mut plat_agg = vec![
+        len().alias("n_profiles"),
+        col("time_qc").eq(lit("1")).sum().alias("time_qc_good"),
+        col("position_qc").eq(lit("1")).sum().alias("position_qc_good"),
+    ];
+    if has_dup {
+        prof_agg.push(col("is_dup").first());
+        plat_agg.push(col("is_dup").sum().alias("dup_profiles"));
+    }
     lf.group_by([col("platform_code"), col("profile_no")])
-        .agg([col("time_qc").first(), col("position_qc").first()])
+        .agg(prof_agg)
         .group_by([col("platform_code")])
-        .agg([
-            len().alias("n_profiles"),
-            col("time_qc").eq(lit("1")).sum().alias("time_qc_good"),
-            col("position_qc").eq(lit("1")).sum().alias("position_qc_good"),
-        ])
+        .agg(plat_agg)
 }
 
-fn platform_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
+fn platform_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Error>> {
     let obs = lf.clone().group_by([col("platform_code")]).agg({
         let mut v = vec![len().alias("n_obs")];
         v.extend(measure_aggs());
         v.extend(geo_aggs());
         v
     });
-    let qc = platform_qc(lf);
+    let qc = platform_qc(lf, has_dup);
 
     let mut select_cols = vec![
         col("platform_code"),
@@ -112,6 +123,9 @@ fn platform_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
         col("time_qc_good"),
         col("position_qc_good"),
     ];
+    if has_dup {
+        select_cols.push(col("dup_profiles"));
+    }
     select_cols.extend(geo_cols());
     select_cols.extend(measure_cols());
 
@@ -128,7 +142,7 @@ fn platform_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
     Ok(df)
 }
 
-fn profile_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
+fn profile_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Error>> {
     let agg = {
         let mut v = vec![
             col("profile_timestamp").first().alias("profile_timestamp"),
@@ -138,6 +152,9 @@ fn profile_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
             col("time_qc").first().alias("time_qc"),
             col("position_qc").first().alias("position_qc"),
         ];
+        if has_dup {
+            v.push(col("is_dup").first().alias("is_dup"));
+        }
         v.extend(measure_aggs());
         v
     };
@@ -152,6 +169,9 @@ fn profile_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
         col("time_qc"),
         col("position_qc"),
     ];
+    if has_dup {
+        select_cols.push(col("is_dup"));
+    }
     select_cols.extend(measure_cols());
 
     let df = lf
@@ -166,7 +186,7 @@ fn profile_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
     Ok(df)
 }
 
-fn global_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
+fn global_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Error>> {
     // Whole-file observation aggregates (one row).
     let base = lf
         .clone()
@@ -181,7 +201,13 @@ fn global_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
     // Profile-level reduction for platform/profile counts and QC "good" counts.
     let profiles = lf
         .group_by([col("platform_code"), col("profile_no")])
-        .agg([col("time_qc").first(), col("position_qc").first()])
+        .agg({
+            let mut v = vec![col("time_qc").first(), col("position_qc").first()];
+            if has_dup {
+                v.push(col("is_dup").first());
+            }
+            v
+        })
         .collect()?;
 
     let n_profiles = profiles.height() as u32;
@@ -201,6 +227,10 @@ fn global_report(lf: LazyFrame) -> Result<DataFrame, Box<dyn Error>> {
         Series::new("time_qc_good".into(), vec![time_qc_good]),
         Series::new("position_qc_good".into(), vec![position_qc_good]),
     ];
+    if has_dup {
+        let dup_profiles = profiles.column("is_dup")?.bool()?.sum().unwrap_or(0);
+        cols.push(Series::new("dup_profiles".into(), vec![dup_profiles]));
+    }
     for name in ["longitude", "latitude"] {
         cols.push(base.column(format!("{name}_min").as_str())?.clone());
         cols.push(base.column(format!("{name}_max").as_str())?.clone());

@@ -7,10 +7,13 @@ pub mod batch;
 pub mod cli;
 pub mod concat;
 pub mod convert;
+pub mod dedup;
 pub mod dropna;
 pub mod dropqc;
+pub mod dupkey;
 pub mod filter;
 pub mod header;
+pub mod markdup;
 pub mod report;
 
 use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat, ConcatSubcommand, ReportSubcommand, FilterMode};
@@ -45,6 +48,16 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
         Commands::Dropqc { src, dest } => {
             dropqc::run(&src, &dest)?;
             Ok(Config { module: "dropqc".to_string(), target: "parquet".to_string(), args: vec![] })
+        }
+        Commands::Markdup { time_format, decimals, round_mode, src, dest, dups } => {
+            let opts = dupkey::KeyOpts { time_format, decimals, round_mode };
+            markdup::run(&opts, &src, &dest, &dups)?;
+            Ok(Config { module: "markdup".to_string(), target: "parquet".to_string(), args: vec![] })
+        }
+        Commands::Dedup { time_format, decimals, round_mode, src, dest } => {
+            let opts = dupkey::KeyOpts { time_format, decimals, round_mode };
+            dedup::run(&opts, &src, &dest)?;
+            Ok(Config { module: "dedup".to_string(), target: "parquet".to_string(), args: vec![] })
         }
     }
 }

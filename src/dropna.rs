@@ -26,7 +26,7 @@ const PARAMS: [&str; 3] = ["temp", "psal", "pres"];
 /// file and writes only the rows whose profile is in the keep-set.
 pub fn run(src: &Path, dest: &Path) -> Result<(), Box<dyn Error>> {
     let scan = || {
-        LazyFrame::scan_parquet(src, ScanArgsParquet::default())
+        LazyFrame::scan_parquet(src, common::seq_scan_args())
             .map_err(|e| format!("Cannot scan {}: {}", src.display(), e))
     };
 
