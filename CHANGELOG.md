@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-11
+
+### Added
+- `dropqc` subcommand: drop whole profiles flagged bad by their profile-level QC — a profile is kept only if both `time_qc` and `position_qc` are `"1"` (OK) or missing (an absent QC variable or the NA byte `-128`, both stored as `""`). Missing QC is kept on purpose so files that ship no profile-level QC are not discarded. Works on Parquet files and streams one row group at a time so peak memory stays bounded
+- `scripts/clean_data.sh`: helper that cleans the merged Parquet outputs of `prepare_data.sh` in four steps — `dropqc`, `dropna`, `filter` (region bounding box with excluded sub-areas for the Baltic and Mediterranean), and `report` — writing its reports to `$OUT/report/clean/`
+- The regional workflow docs (Arctic, Baltic, Mediterranean) gain a "Data cleaning" section covering the `dropqc`/`dropna`/`filter`/`report` pipeline
+
+### Changed
+- `scripts/prepare_data.sh` now writes its reports to `$OUT/report/prepare/` (was `$OUT/report/`), leaving `$OUT/report/clean/` for `clean_data.sh`
+
 ## [0.7.0] - 2026-07-11
 
 ### Added
@@ -89,7 +99,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.4.3...v0.5.0

@@ -8,7 +8,7 @@ Guidance for Claude Code when working in this repository.
 - **NRT** (Near Real Time): regional data — Arctic (AR), Baltic (BO), Mediterranean (MO), Global (GL).
 - **CORA** (Copernicus Ocean Reanalysis): historical re-processed profiles (`cora` current format, `cora_legacy` older files).
 
-Top-level commands: `convert` (single file → Parquet), `batch` (directory tree → Parquet/YAML, multi-threaded), `header` (NetCDF → YAML metadata), `concat` (merge Parquet files), `report` (summarise a Parquet/YAML file as text), `filter` (keep/drop profiles by a bounding box), `dropna` (drop profiles that are all-NA in any of temp/psal/pres).
+Top-level commands: `convert` (single file → Parquet), `batch` (directory tree → Parquet/YAML, multi-threaded), `header` (NetCDF → YAML metadata), `concat` (merge Parquet files), `report` (summarise a Parquet/YAML file as text), `filter` (keep/drop profiles by a bounding box), `dropna` (drop profiles that are all-NA in any of temp/psal/pres), `dropqc` (drop profiles flagged bad in time_qc/position_qc).
 
 ## Git Workflow
 
@@ -79,6 +79,8 @@ Two-stage `clap` dispatch:
 **Filter** (`src/filter.rs`): `run()` keeps (`--mode include`, default) or drops (`--mode exclude`) whole profiles by a geographic bounding box. Since `longitude`/`latitude` are constant within a profile, it is a plain per-row predicate (NaN positions are treated as outside via `is_not_nan` guards). Streamed in `common::chunk_rows()` row slices via `BatchedWriter` (`set_parallel(false)`), so peak memory is bounded regardless of file size.
 
 **Dropna** (`src/dropna.rs`): `run()` drops whole profiles that are entirely NA in any of `temp`/`psal`/`pres` (kept iff each parameter has ≥1 valid observation). Two streaming passes bound memory: `build_keep_set` OR-s each chunk's per-`(platform_code, profile_no)` "has ≥1 valid" flags into a `HashMap` (a hash group-by, so it is correct even when a profile's rows straddle a chunk boundary); pass 2 re-streams the slices and writes only rows whose profile is in the keep-set (`keep_mask` + `filter`, `BatchedWriter` `set_parallel(false)`). Verified by `tests/test_dropna.rs`, including cross-chunk merge.
+
+**Dropqc** (`src/dropqc.rs`): `run()` drops whole profiles whose profile-level QC is bad — a profile is kept iff **both** `time_qc` and `position_qc` are `"1"` (OK) or `""` (missing / NA). Missing is kept on purpose (many files ship no profile-level QC; a `-128` NA byte and an absent variable both map to `""` via `common::i8_to_qc_string`, so the empty-string check covers both). Note `"9"` (Argo "missing value" flag) is a *present* value, not the NA byte, so it is dropped. Since these QC columns are constant within a profile, it is a plain per-row predicate (`(qc == "1") | (qc == "")` for each), streamed one `chunk_rows()` slice at a time via `BatchedWriter` (`set_parallel(false)`) — the same shape as **Filter**, no group-by needed. Verified by `tests/test_dropqc.rs`.
 
 **Shared utilities** (`src/convert/common.rs`):
 - `convert_time_value()` — days-since-1950-01-01 (oceanographic epoch) → Unix ms.

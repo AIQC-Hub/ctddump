@@ -12,6 +12,7 @@
 - [report](./commands/report.md)
 - [filter](./commands/filter.md)
 - [dropna](./commands/dropna.md)
+- [dropqc](./commands/dropqc.md)
 
 # Reference
 

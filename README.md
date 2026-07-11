@@ -195,6 +195,19 @@ ctddump dropna <src.parquet> <dest.parquet>
 ctddump dropna merged.parquet cleaned.parquet
 ```
 
+### `dropqc` — drop profiles flagged bad by profile-level QC
+
+```
+ctddump dropqc <src.parquet> <dest.parquet>
+```
+
+`dropqc` keeps a profile only if **both** `time_qc` and `position_qc` are either `"1"` (OK) or **missing** (absent QC or the NA byte `-128`, both stored as `""`). Any other flag (`"0"`, `"2"`…`"9"`, or a non-numeric code) drops the whole profile. Missing QC is kept on purpose — several source files ship no profile-level QC at all. Since these flags are constant within a profile, it is a plain per-row predicate; the file is streamed one row group at a time, so peak memory stays bounded regardless of size.
+
+```bash
+# Drop profiles flagged bad in time_qc or position_qc
+ctddump dropqc merged.parquet cleaned.parquet
+```
+
 ## Configuration
 
 All `convert` and `batch convert` subcommands support a `--config` TOML file plus individual flag overrides. Priority order:
