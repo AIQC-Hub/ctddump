@@ -78,7 +78,7 @@ report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
   mkdir -p "$(dirname "$2")"
   ctddump report yaml "$1" "$2"
 }
-W
+
 # ---- Download ------------------------------------------------------------
 login() { copernicusmarine login; }
 

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `scripts/prepare_data.sh`: remove a stray `W` line (introduced in v0.8.0) that made the script exit immediately with `W: command not found` under `set -e`
+
 ## [0.8.0] - 2026-07-11
 
 ### Added
