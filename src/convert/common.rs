@@ -74,6 +74,23 @@ pub fn chunk_rows() -> usize {
         .unwrap_or(DEFAULT_CHUNK_ROWS)
 }
 
+/// `ScanArgsParquet` with Polars' parallel Parquet reader disabled.
+///
+/// Polars 0.43's parallel (row-group) reader mishandles `slice` pushdown on a
+/// **multi-row-group** Parquet file: every sliced window returns rows from the
+/// first row group, silently corrupting the chunked streaming passes used by
+/// `filter`/`dropqc`/`dropna`/`markdup`/`dedup` whenever their input has more
+/// than one row group (e.g. any `concat`/`markdup` output over `chunk_rows()`
+/// rows). `ParallelStrategy::None` slices correctly. Whole-file
+/// group-by/`collect` (e.g. `report`, `concat`) is unaffected and keeps the
+/// default parallel reader.
+pub fn seq_scan_args() -> polars::prelude::ScanArgsParquet {
+    polars::prelude::ScanArgsParquet {
+        parallel: polars::prelude::ParallelStrategy::None,
+        ..Default::default()
+    }
+}
+
 /// Split the outer dimension (`TIME` / `N_PROF`, length `outer_len`) into
 /// `(offset, count)` chunks so each chunk holds at most ~`chunk_rows()` observation
 /// rows (`count × obs_len`), always advancing by ≥ 1 outer step. Returns an empty

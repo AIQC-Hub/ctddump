@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crate::convert::cora_config::{CoraConfig, QcType};
 use crate::convert::nrt_config::NrtConfig;
+use crate::dupkey::RoundMode;
 
 #[derive(Parser, Debug)]
 #[command(name = "ctddump", version, about = "Convert CTD data from NetCDF to Parquet or YAML")]
@@ -77,6 +78,42 @@ pub enum Commands {
     /// Drop profiles whose time_qc or position_qc is a present, non-OK flag
     #[command(name = "dropqc")]
     Dropqc {
+        /// Source Parquet file
+        src: PathBuf,
+        /// Output Parquet file
+        dest: PathBuf,
+    },
+    /// Mark duplicate profiles (by timestamp/longitude/latitude) with an is_dup column
+    #[command(name = "markdup")]
+    Markdup {
+        /// strftime format applied to profile_timestamp for the key (default: date only)
+        #[arg(long, default_value = "%Y-%m-%d")]
+        time_format: String,
+        /// Decimal places longitude/latitude are rounded to for the key
+        #[arg(long, default_value_t = 3)]
+        decimals: u32,
+        /// How coordinates are rounded for the key
+        #[arg(long, value_enum, default_value_t = RoundMode::Round)]
+        round_mode: RoundMode,
+        /// Source Parquet file
+        src: PathBuf,
+        /// Output Parquet file (adds the is_dup column)
+        dest: PathBuf,
+        /// Output TSV listing the duplicated profiles
+        dups: PathBuf,
+    },
+    /// Remove duplicate profiles, keeping the one with the most observations
+    #[command(name = "dedup")]
+    Dedup {
+        /// strftime format applied to profile_timestamp for the key (default: date only)
+        #[arg(long, default_value = "%Y-%m-%d")]
+        time_format: String,
+        /// Decimal places longitude/latitude are rounded to for the key
+        #[arg(long, default_value_t = 3)]
+        decimals: u32,
+        /// How coordinates are rounded for the key
+        #[arg(long, value_enum, default_value_t = RoundMode::Round)]
+        round_mode: RoundMode,
         /// Source Parquet file
         src: PathBuf,
         /// Output Parquet file

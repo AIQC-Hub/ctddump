@@ -176,6 +176,73 @@ ctddump report parquet --level platform ../process_data/ctddump/clean/filter/nrt
 ctddump report parquet --level platform ../process_data/ctddump/clean/filter/cora_ar.parquet ../process_data/ctddump/report/clean/cora_ar.parquet.tsv
 ```
 
-> Both phases are automated by
-> [`scripts/prepare_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/prepare_data.sh)
-> and [`scripts/clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh).
+## Data de-duplication
+
+De-duplicate the cleaned Parquet from the previous phase. Two profiles are
+duplicates when they share the same date and position (longitude/latitude rounded
+to 3 decimals) — ctddump's defaults, across platforms. `markdup` flags them (and
+lists them in a TSV); `dedup` removes them, keeping the profile with the most
+observations.
+
+Create the output directories:
+
+```shell
+mkdir -p ../process_data/ctddump/dedup/markdup ../process_data/ctddump/dedup/dedup ../process_data/ctddump/report/dedup/markdup ../process_data/ctddump/report/dedup/dedup
+```
+
+### 1. Mark duplicate profiles
+
+```shell
+# NRT AR
+ctddump markdup ../process_data/ctddump/clean/filter/nrt_ar_ar.parquet ../process_data/ctddump/dedup/markdup/nrt_ar_ar.parquet ../process_data/ctddump/dedup/markdup/nrt_ar_ar.dups.tsv
+
+# NRT GL
+ctddump markdup ../process_data/ctddump/clean/filter/nrt_ar_gl.parquet ../process_data/ctddump/dedup/markdup/nrt_ar_gl.parquet ../process_data/ctddump/dedup/markdup/nrt_ar_gl.dups.tsv
+
+# CORA AR
+ctddump markdup ../process_data/ctddump/clean/filter/cora_ar.parquet ../process_data/ctddump/dedup/markdup/cora_ar.parquet ../process_data/ctddump/dedup/markdup/cora_ar.dups.tsv
+```
+
+### 2. Summarise the marked data (duplicate counts)
+
+```shell
+# NRT AR
+ctddump report parquet --level platform ../process_data/ctddump/dedup/markdup/nrt_ar_ar.parquet ../process_data/ctddump/report/dedup/markdup/nrt_ar_ar.parquet.tsv
+
+# NRT GL
+ctddump report parquet --level platform ../process_data/ctddump/dedup/markdup/nrt_ar_gl.parquet ../process_data/ctddump/report/dedup/markdup/nrt_ar_gl.parquet.tsv
+
+# CORA AR
+ctddump report parquet --level platform ../process_data/ctddump/dedup/markdup/cora_ar.parquet ../process_data/ctddump/report/dedup/markdup/cora_ar.parquet.tsv
+```
+
+### 3. Remove duplicate profiles
+
+```shell
+# NRT AR
+ctddump dedup ../process_data/ctddump/dedup/markdup/nrt_ar_ar.parquet ../process_data/ctddump/dedup/dedup/nrt_ar_ar.parquet
+
+# NRT GL
+ctddump dedup ../process_data/ctddump/dedup/markdup/nrt_ar_gl.parquet ../process_data/ctddump/dedup/dedup/nrt_ar_gl.parquet
+
+# CORA AR
+ctddump dedup ../process_data/ctddump/dedup/markdup/cora_ar.parquet ../process_data/ctddump/dedup/dedup/cora_ar.parquet
+```
+
+### 4. Summarise the de-duplicated data
+
+```shell
+# NRT AR
+ctddump report parquet --level platform ../process_data/ctddump/dedup/dedup/nrt_ar_ar.parquet ../process_data/ctddump/report/dedup/dedup/nrt_ar_ar.parquet.tsv
+
+# NRT GL
+ctddump report parquet --level platform ../process_data/ctddump/dedup/dedup/nrt_ar_gl.parquet ../process_data/ctddump/report/dedup/dedup/nrt_ar_gl.parquet.tsv
+
+# CORA AR
+ctddump report parquet --level platform ../process_data/ctddump/dedup/dedup/cora_ar.parquet ../process_data/ctddump/report/dedup/dedup/cora_ar.parquet.tsv
+```
+
+> All three phases are automated by
+> [`scripts/prepare_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/prepare_data.sh),
+> [`scripts/clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh),
+> and [`scripts/dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh).

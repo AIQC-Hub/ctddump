@@ -208,6 +208,30 @@ ctddump dropqc <src.parquet> <dest.parquet>
 ctddump dropqc merged.parquet cleaned.parquet
 ```
 
+### `markdup` — mark duplicate profiles
+
+```
+ctddump markdup [OPTIONS] <src.parquet> <dest.parquet> <dups.tsv>
+```
+
+`markdup` adds a Boolean `is_dup` column marking profiles that share a duplicate key with at least one other profile. The key is built from `profile_timestamp` (date only by default), `longitude`, and `latitude` (rounded to 3 decimals by default), **across platforms**. It also writes a TSV listing the duplicated profiles (`dup_group`, `platform_code`, `profile_no`, `profile_time`, `profile_timestamp`, `longitude`, `latitude`, `n_obs`). The timestamp format (`--time-format`), rounding precision (`--decimals`), and rounding mode (`--round-mode` = `round`/`floor`/`ceil`/`trunc`) are configurable.
+
+```bash
+ctddump markdup merged.parquet marked.parquet duplicates.tsv
+```
+
+### `dedup` — remove duplicate profiles
+
+```
+ctddump dedup [OPTIONS] <src.parquet> <dest.parquet>
+```
+
+`dedup` re-derives the same key as `markdup` (pass the same options) and keeps one profile per duplicate group — the one with the most observation rows, ties broken by first appearance. Profiles with no key (NaN position / null timestamp) are always kept; an `is_dup` column, if present, is reset to `false`.
+
+```bash
+ctddump dedup marked.parquet deduped.parquet
+```
+
 ## Configuration
 
 All `convert` and `batch convert` subcommands support a `--config` TOML file plus individual flag overrides. Priority order:

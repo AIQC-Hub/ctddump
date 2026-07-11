@@ -13,6 +13,8 @@
 - [filter](./commands/filter.md)
 - [dropna](./commands/dropna.md)
 - [dropqc](./commands/dropqc.md)
+- [markdup](./commands/markdup.md)
+- [dedup](./commands/dedup.md)
 
 # Reference
 

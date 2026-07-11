@@ -23,7 +23,7 @@ pub fn run(src: &Path, dest: &Path) -> Result<(), Box<dyn Error>> {
     let predicate = usable("time_qc").and(usable("position_qc"));
 
     let scan = || {
-        LazyFrame::scan_parquet(src, ScanArgsParquet::default())
+        LazyFrame::scan_parquet(src, common::seq_scan_args())
             .map_err(|e| format!("Cannot scan {}: {}", src.display(), e))
     };
 
