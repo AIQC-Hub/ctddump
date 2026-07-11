@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-11
+
 ### Added
 - `markdup` subcommand: mark duplicate profiles with an `is_dup` column and write a TSV listing the duplicated profiles. Duplicates are decided by `profile_timestamp` (date only by default), `longitude`, and `latitude` (3-decimal rounding by default), across platforms. The timestamp format (`--time-format`), rounding precision (`--decimals`), and rounding mode (`--round-mode`) are configurable
 - `dedup` subcommand: remove duplicate profiles, keeping the one with the most observations (ties broken by first appearance). Re-derives the same key as `markdup` (same options); resets `is_dup` to `false` when the column is present
@@ -114,7 +116,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.6.0...v0.7.0
