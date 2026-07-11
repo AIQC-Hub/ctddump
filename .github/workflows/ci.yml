@@ -11,8 +11,22 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
 
+    # Strip debuginfo from every crate. The integration tests each link a full
+    # static copy of Polars; with debuginfo their object files exhaust the
+    # runner's disk and `lld` dies with a SIGBUS during linking. debuginfo=0
+    # shrinks them by ~an order of magnitude (CI only needs pass/fail, not
+    # line-numbered backtraces).
+    env:
+      RUSTFLAGS: "-C debuginfo=0"
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libhdf5-dev libnetcdf-dev
