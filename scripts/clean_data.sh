@@ -28,14 +28,14 @@
 #
 # Configuration (override via environment):
 #   OUT   root for the prepare_data.sh outputs and the cleaned outputs
-#         (default: ../process_data/ctddump)
+#         (default: output)
 #
 # Requires: ctddump on PATH, and prepare_data.sh's merged Parquet in $OUT/parquet.
 
 set -euo pipefail
 
 # ---- Configuration -------------------------------------------------------
-OUT="${OUT:-../process_data/ctddump}"
+OUT="${OUT:-output}"
 
 # Stage directories (each step reads the previous one).
 SRC_DIR="$OUT/parquet"          # prepare_data.sh merged Parquet (input)

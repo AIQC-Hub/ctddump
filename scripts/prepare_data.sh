@@ -19,8 +19,8 @@
 #
 # Configuration (override via environment):
 #   THREADS   worker threads for ctddump           (default: 10)
-#   SRC       root of the downloaded NetCDF tree    (default: ../source_data/ctddump/netcdf)
-#   OUT       root for the generated outputs        (default: ../process_data/ctddump)
+#   SRC       root of the downloaded NetCDF tree    (default: input)
+#   OUT       root for the generated outputs        (default: output)
 #
 # Requires: ctddump on PATH; copernicusmarine on PATH for the download/login steps.
 # A free Copernicus Marine account is needed to download:
@@ -30,8 +30,8 @@ set -euo pipefail
 
 # ---- Configuration -------------------------------------------------------
 THREADS="${THREADS:-10}"
-SRC="${SRC:-../source_data/ctddump/netcdf}"
-OUT="${OUT:-../process_data/ctddump}"
+SRC="${SRC:-input}"
+OUT="${OUT:-output}"
 
 # Copernicus product directories under $SRC.
 NRT_AR_DIR="INSITU_ARC_PHYBGCWAV_DISCRETE_MYNRT_013_031"

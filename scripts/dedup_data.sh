@@ -29,7 +29,7 @@
 #
 # Configuration (override via environment):
 #   OUT   root for the clean_data.sh outputs and the de-duplicated outputs
-#         (default: ../process_data/ctddump)
+#         (default: output)
 #
 # Requires: ctddump on PATH, and clean_data.sh's cleaned Parquet in
 # $OUT/clean/filter.
@@ -37,7 +37,7 @@
 set -euo pipefail
 
 # ---- Configuration -------------------------------------------------------
-OUT="${OUT:-../process_data/ctddump}"
+OUT="${OUT:-output}"
 
 # Stage directories (each step reads the previous one).
 SRC_DIR="$OUT/clean/filter"          # clean_data.sh cleaned Parquet (input)
