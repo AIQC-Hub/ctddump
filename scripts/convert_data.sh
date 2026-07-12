@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 #
-# prepare_data.sh — download CTD data from the Copernicus Marine Service and
-# convert/merge it to Parquet (data) and YAML (metadata) with ctddump, for the
-# Arctic, Baltic, and Mediterranean seas.
+# convert_data.sh — convert the CTD source NetCDF (fetched by download_data.sh)
+# to Parquet (data) and YAML (metadata) with ctddump, for the Arctic, Baltic,
+# and Mediterranean seas: batch-convert, merge, export + merge headers, and
+# summarise.
 #
 # Usage:
-#   scripts/prepare_data.sh [options] [command] [region ...]
+#   scripts/convert_data.sh [options] [command] [region ...]
 #
 # Commands:
-#   login       Log in to the Copernicus Marine Toolbox (once, interactively).
-#   download    Download the source NetCDF files.
 #   process     Convert + merge Parquet, export + merge headers.  (default)
 #   report      Summarise the merged Parquet/YAML outputs as TSV.
-#   all         download, process, then report.
+#   all         process, then report.
 #   help        Show this help.
 #
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
@@ -26,9 +25,7 @@
 #   -y, --yes         Skip the confirmation prompt and start immediately.
 #   -h, --help        Show this help.
 #
-# Requires: ctddump on PATH; copernicusmarine on PATH for the download/login steps.
-# A free Copernicus Marine account is needed to download:
-#   https://help.marine.copernicus.eu/en/collections/9080063-copernicus-marine-toolbox
+# Requires: ctddump on PATH, and the source NetCDF in <src> (see download_data.sh).
 
 set -euo pipefail
 
@@ -71,7 +68,7 @@ REGIONS=(arctic baltic mediterranean)
 
 # ---- Logging -------------------------------------------------------------
 # Announce each step (timestamped, to stderr) so the currently running process
-# is visible. `log` prints a message; `run` logs the command then executes it.
+# is visible.
 
 # Each parallel region worker sets REGION so its lines are tagged "[region]".
 log() {
@@ -79,7 +76,6 @@ log() {
   [[ -n "${REGION:-}" ]] && p="[$REGION] "
   printf '[%s] %s%s\n' "$(date '+%H:%M:%S')" "$p" "$*" >&2
 }
-run() { log "RUN: $*"; "$@"; }
 
 # Print the resolved configuration, then ask for confirmation unless -y/--yes was
 # given. In a non-interactive shell without -y there is nothing to read, so abort
@@ -155,24 +151,6 @@ report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
   ctddump report yaml "$1" "$2"
 }
 
-# ---- Download ------------------------------------------------------------
-login() { copernicusmarine login; }
-
-download_arctic() {
-  run copernicusmarine get -i cmems_obs-ins_arc_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "arctic/*/*_PR_CT.nc"
-}
-
-download_baltic() {
-  run copernicusmarine get -i cmems_obs-ins_bal_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "baltic/*/*_PR_CT.nc"
-}
-
-download_mediterranean() {
-  run copernicusmarine get -i cmems_obs-ins_med_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "mediterrane/*/*_PR_CT.nc"
-}
-
 # ---- Per-region pipelines ------------------------------------------------
 
 process_arctic() {
@@ -238,11 +216,11 @@ process_mediterranean() {
 
 # ---- Per-region reports (summaries of the merged outputs) ----------------
 # Parquet reports use the platform level; each report lands in
-# $OUT/report/prepare/ named after its source, with a .parquet.tsv /
+# $OUT/report/convert/ named after its source, with a .parquet.tsv /
 # .yaml.tsv suffix. (clean_data.sh writes its reports to $OUT/report/clean/.)
 
 report_arctic() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
   report_parquet "$P/nrt_ar_ar.parquet" "$R/nrt_ar_ar.parquet.tsv"
   report_parquet "$P/nrt_ar_gl.parquet" "$R/nrt_ar_gl.parquet.tsv"
   report_parquet "$P/cora_ar.parquet"   "$R/cora_ar.parquet.tsv"
@@ -252,7 +230,7 @@ report_arctic() {
 }
 
 report_baltic() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
   report_parquet "$P/nrt_bo_bo.parquet" "$R/nrt_bo_bo.parquet.tsv"
   report_parquet "$P/cora_bo.parquet"   "$R/cora_bo.parquet.tsv"
   report_yaml    "$H/nrt_bo_bo.yaml"     "$R/nrt_bo_bo.yaml.tsv"
@@ -260,7 +238,7 @@ report_baltic() {
 }
 
 report_mediterranean() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
   report_parquet "$P/nrt_mo_mo.parquet" "$R/nrt_mo_mo.parquet.tsv"
   report_parquet "$P/nrt_mo_gl.parquet" "$R/nrt_mo_gl.parquet.tsv"
   report_parquet "$P/cora_mo.parquet"   "$R/cora_mo.parquet.tsv"
@@ -281,10 +259,9 @@ is_region() {
 run_region() {  # <cmd> <region>
   local cmd="$1" r="$2"
   case "$cmd" in
-    download) "download_$r" ;;
-    process)  "process_$r" ;;
-    report)   "report_$r" ;;
-    all)      "download_$r"; "process_$r"; "report_$r" ;;
+    process) "process_$r" ;;
+    report)  "report_$r" ;;
+    all)     "process_$r"; "report_$r" ;;
   esac
 }
 
@@ -327,8 +304,7 @@ main() {
 
   case "$cmd" in
     -h|--help|help) usage; return 0 ;;
-    login) login; return 0 ;;
-    download|process|report|all) ;;
+    process|report|all) ;;
     *) echo "Unknown command: $cmd" >&2; usage; return 1 ;;
   esac
 

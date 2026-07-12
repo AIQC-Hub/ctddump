@@ -85,15 +85,15 @@ Write a platform-level summary of each merged Parquet file and a per-file summar
 of each merged header YAML (as TSV).
 
 ```shell
-mkdir -p output/report/prepare
+mkdir -p output/report/convert
 
 # NRT BO
-ctddump report parquet --level platform output/parquet/nrt_bo_bo.parquet output/report/prepare/nrt_bo_bo.parquet.tsv
-ctddump report yaml output/header/nrt_bo_bo.yaml output/report/prepare/nrt_bo_bo.yaml.tsv
+ctddump report parquet --level platform output/parquet/nrt_bo_bo.parquet output/report/convert/nrt_bo_bo.parquet.tsv
+ctddump report yaml output/header/nrt_bo_bo.yaml output/report/convert/nrt_bo_bo.yaml.tsv
 
 # CORA BO
-ctddump report parquet --level platform output/parquet/cora_bo.parquet output/report/prepare/cora_bo.parquet.tsv
-ctddump report yaml output/header/cora_bo.yaml output/report/prepare/cora_bo.yaml.tsv
+ctddump report parquet --level platform output/parquet/cora_bo.parquet output/report/convert/cora_bo.parquet.tsv
+ctddump report yaml output/header/cora_bo.yaml output/report/convert/cora_bo.yaml.tsv
 ```
 
 ## Data cleaning
@@ -214,8 +214,9 @@ ctddump report parquet --level platform output/dedup/dedup/nrt_bo_bo.parquet out
 ctddump report parquet --level platform output/dedup/dedup/cora_bo.parquet output/report/dedup/dedup/cora_bo.parquet.tsv
 ```
 
-> All three phases are automated by
-> [`scripts/prepare_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/prepare_data.sh),
+> The pipeline is automated by
+> [`scripts/download_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/download_data.sh),
+> [`scripts/convert_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/convert_data.sh),
 > [`scripts/clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh),
 > and [`scripts/dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh)
 > — see [Helper scripts](../scripts.md) for their commands and options.

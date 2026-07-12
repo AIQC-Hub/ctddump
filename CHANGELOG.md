@@ -3,7 +3,13 @@
 ## [Unreleased]
 
 ### Added
-- The helper scripts (`prepare_data.sh`, `clean_data.sh`, `dedup_data.sh`) run the selected regions **in parallel** by default when more than one is chosen — one background worker per region, with log lines tagged `[region]`. Failures are collected and the script exits non-zero after reporting which region failed. Pass `--sequential` to process regions one at a time
+- The helper scripts run the selected regions **in parallel** by default when more than one is chosen — one background worker per region, with log lines tagged `[region]`. Failures are collected and the script exits non-zero after reporting which region failed. Pass `--sequential` to process regions one at a time
+
+### Changed
+- Split `prepare_data.sh` into two scripts with clearer names and prerequisites: **`download_data.sh`** (`login`, `download`; needs only the `copernicusmarine` toolbox) and **`convert_data.sh`** (`process`, `report`; needs only `ctddump`). `download_data.sh` fetches into `-s/--src` (default `input`); `convert_data.sh` writes its summaries to `output/report/convert/` (was `output/report/prepare/`). The pipeline now reads download → convert → clean → dedup
+
+### Removed
+- `scripts/prepare_data.sh` (replaced by `download_data.sh` + `convert_data.sh`)
 
 ## [0.10.0] - 2026-07-12
 

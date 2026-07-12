@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# clean_data.sh — clean the merged Parquet outputs of prepare_data.sh with
+# clean_data.sh — clean the merged Parquet outputs of convert_data.sh with
 # ctddump, for the Arctic, Baltic, and Mediterranean seas. Four steps run in
 # order, each reading the previous step's output:
 #
@@ -11,7 +11,7 @@
 #
 # The stages chain through sub-directories of $OUT/clean:
 #   $OUT/parquet -> clean/dropqc -> clean/dropna -> clean/filter
-# and reports land in $OUT/report/clean/  (prepare_data.sh uses report/prepare/).
+# and reports land in $OUT/report/clean/  (convert_data.sh uses report/convert/).
 #
 # Usage:
 #   scripts/clean_data.sh [options] [command] [region ...]
@@ -27,14 +27,14 @@
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
 #
 # Options (may appear anywhere on the command line):
-#   -o, --out DIR   root for the prepare_data.sh outputs and the cleaned
+#   -o, --out DIR   root for the convert_data.sh outputs and the cleaned
 #                   outputs (default: output)
 #   --sequential    Process regions one at a time (default: selected regions
 #                   run in parallel when more than one is chosen).
 #   -y, --yes       Skip the confirmation prompt and start immediately.
 #   -h, --help      Show this help.
 #
-# Requires: ctddump on PATH, and prepare_data.sh's merged Parquet in <out>/parquet.
+# Requires: ctddump on PATH, and convert_data.sh's merged Parquet in <out>/parquet.
 
 set -euo pipefail
 
@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Stage directories (each step reads the previous one).
-SRC_DIR="$OUT/parquet"          # prepare_data.sh merged Parquet (input)
+SRC_DIR="$OUT/parquet"          # convert_data.sh merged Parquet (input)
 QC_DIR="$OUT/clean/dropqc"
 NA_DIR="$OUT/clean/dropna"
 CLEAN_DIR="$OUT/clean/filter"   # final cleaned data
@@ -70,7 +70,7 @@ REPORT_DIR="$OUT/report/clean"
 
 REGIONS=(arctic baltic mediterranean)
 
-# Merged-file stems produced by prepare_data.sh, per region.
+# Merged-file stems produced by convert_data.sh, per region.
 stems_for() {  # <region>
   case "$1" in
     arctic)        echo nrt_ar_ar nrt_ar_gl cora_ar ;;
