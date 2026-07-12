@@ -5,7 +5,7 @@
 # Arctic, Baltic, and Mediterranean seas.
 #
 # Usage:
-#   scripts/prepare_data.sh [command] [region ...]
+#   scripts/prepare_data.sh [options] [command] [region ...]
 #
 # Commands:
 #   login       Log in to the Copernicus Marine Toolbox (once, interactively).
@@ -17,10 +17,12 @@
 #
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
 #
-# Configuration (override via environment):
-#   THREADS   worker threads for ctddump           (default: 10)
-#   SRC       root of the downloaded NetCDF tree    (default: ../source_data/ctddump/netcdf)
-#   OUT       root for the generated outputs        (default: ../process_data/ctddump)
+# Options (may appear anywhere on the command line):
+#   -t, --threads N   worker threads for ctddump          (default: 10)
+#   -s, --src DIR     root of the downloaded NetCDF tree  (default: input)
+#   -o, --out DIR     root for the generated outputs      (default: output)
+#   -y, --yes         Skip the confirmation prompt and start immediately.
+#   -h, --help        Show this help.
 #
 # Requires: ctddump on PATH; copernicusmarine on PATH for the download/login steps.
 # A free Copernicus Marine account is needed to download:
@@ -28,10 +30,32 @@
 
 set -euo pipefail
 
-# ---- Configuration -------------------------------------------------------
-THREADS="${THREADS:-10}"
-SRC="${SRC:-../source_data/ctddump/netcdf}"
-OUT="${OUT:-../process_data/ctddump}"
+usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
+
+# ---- Configuration (defaults; override with the options below) -----------
+THREADS=10
+SRC=input
+OUT=output
+ASSUME_YES=0
+
+# ---- Parse options -------------------------------------------------------
+# Options may appear anywhere; the remaining words are the command and regions.
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -t|--threads) THREADS="${2:?--threads requires a value}"; shift 2 ;;
+    --threads=*)  THREADS="${1#*=}"; shift ;;
+    -s|--src)     SRC="${2:?--src requires a directory}"; shift 2 ;;
+    --src=*)      SRC="${1#*=}"; shift ;;
+    -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
+    --out=*)      OUT="${1#*=}"; shift ;;
+    -y|--yes)     ASSUME_YES=1; shift ;;
+    -h|--help)    usage; exit 0 ;;
+    --)           shift; ARGS+=("$@"); break ;;
+    -*)           echo "Unknown option: $1" >&2; usage; exit 1 ;;
+    *)            ARGS+=("$1"); shift ;;
+  esac
+done
 
 # Copernicus product directories under $SRC.
 NRT_AR_DIR="INSITU_ARC_PHYBGCWAV_DISCRETE_MYNRT_013_031"
@@ -41,41 +65,81 @@ CORA="INSITU_GLO_PHY_TS_DISCRETE_MY_013_001/cmems_obs-ins_glo_phy-temp-sal_my_co
 
 REGIONS=(arctic baltic mediterranean)
 
+# ---- Logging -------------------------------------------------------------
+# Announce each step (timestamped, to stderr) so the currently running process
+# is visible. `log` prints a message; `run` logs the command then executes it.
+
+log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
+run() { log "RUN: $*"; "$@"; }
+
+# Print the resolved configuration, then ask for confirmation unless -y/--yes was
+# given. In a non-interactive shell without -y there is nothing to read, so abort
+# with a hint rather than hang.
+show_config() {  # <cmd> <region...>
+  local cmd="$1"; shift
+  {
+    echo "Configuration:"
+    echo "  command : $cmd"
+    echo "  regions : $*"
+    echo "  threads : $THREADS"
+    echo "  src     : $SRC"
+    echo "  out     : $OUT"
+  } >&2
+}
+
+confirm() {
+  [[ "$ASSUME_YES" == 1 ]] && return 0
+  if [[ ! -t 0 ]]; then
+    log "non-interactive shell: pass -y/--yes to proceed without confirmation."
+    return 1
+  fi
+  local reply
+  read -r -p "Proceed? [y/N] " reply
+  [[ "$reply" == [yY] || "$reply" == [yY][eE][sS] ]]
+}
+
 # ---- Reusable ctddump steps ----------------------------------------------
 # Each creates its output location so a fresh run works from scratch.
 
 convert() {  # <format> <src_dir> <out_dir>
   mkdir -p "$3"
+  log "convert $1: $2 -> $3"
   ctddump batch convert "$1" --threads "$THREADS" --output "$3" "$2"
 }
 
 merge() {  # <src_dir> <out_file>
   mkdir -p "$(dirname "$2")"
+  log "merge: $1 -> $2"
   ctddump concat convert --threads "$THREADS" "$1" "$2"
 }
 
 header_nrt() {  # <pattern> <src_dir> <out_dir>
   mkdir -p "$3"
+  log "header nrt ($1): $2 -> $3"
   ctddump batch header nrt --threads "$THREADS" --pattern "$1" --output "$3" "$2"
 }
 
 header_cora() {  # <src_dir> <out_dir>
   mkdir -p "$2"
+  log "header cora: $1 -> $2"
   ctddump batch header cora --threads "$THREADS" --output "$2" "$1"
 }
 
 merge_hdr() {  # <src_dir> <out_file>
   mkdir -p "$(dirname "$2")"
+  log "merge header: $1 -> $2"
   ctddump concat header "$1" "$2"
 }
 
 report_parquet() {  # <src_file> <out_tsv> -- platform-level summary of a merged Parquet
   mkdir -p "$(dirname "$2")"
+  log "report parquet: $1 -> $2"
   ctddump report parquet --level platform "$1" "$2"
 }
 
 report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
   mkdir -p "$(dirname "$2")"
+  log "report yaml: $1 -> $2"
   ctddump report yaml "$1" "$2"
 }
 
@@ -83,18 +147,18 @@ report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
 login() { copernicusmarine login; }
 
 download_arctic() {
-  copernicusmarine get -i cmems_obs-ins_arc_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "arctic/*/*_PR_CT.nc"
+  run copernicusmarine get -i cmems_obs-ins_arc_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
+  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "arctic/*/*_PR_CT.nc"
 }
 
 download_baltic() {
-  copernicusmarine get -i cmems_obs-ins_bal_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "baltic/*/*_PR_CT.nc"
+  run copernicusmarine get -i cmems_obs-ins_bal_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
+  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "baltic/*/*_PR_CT.nc"
 }
 
 download_mediterranean() {
-  copernicusmarine get -i cmems_obs-ins_med_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "mediterrane/*/*_PR_CT.nc"
+  run copernicusmarine get -i cmems_obs-ins_med_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
+  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "mediterrane/*/*_PR_CT.nc"
 }
 
 # ---- Per-region pipelines ------------------------------------------------
@@ -195,8 +259,6 @@ report_mediterranean() {
 
 # ---- Dispatch ------------------------------------------------------------
 
-usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
-
 is_region() {
   local r
   for r in "${REGIONS[@]}"; do [[ "$r" == "$1" ]] && return 0; done
@@ -223,7 +285,11 @@ main() {
     is_region "$r" || { echo "Unknown region: $r" >&2; usage; return 1; }
   done
 
+  show_config "$cmd" "${regions[@]}"
+  confirm || { log "aborted."; return 1; }
+
   for r in "${regions[@]}"; do
+    log "===== $cmd: $r ====="
     case "$cmd" in
       download) "download_$r" ;;
       process)  "process_$r" ;;
@@ -231,6 +297,7 @@ main() {
       all)      "download_$r"; "process_$r"; "report_$r" ;;
     esac
   done
+  log "done."
 }
 
-main "$@"
+main ${ARGS[@]+"${ARGS[@]}"}

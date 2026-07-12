@@ -14,7 +14,7 @@
 # and reports land in $OUT/report/clean/  (prepare_data.sh uses report/prepare/).
 #
 # Usage:
-#   scripts/clean_data.sh [command] [region ...]
+#   scripts/clean_data.sh [options] [command] [region ...]
 #
 # Commands:
 #   dropqc      Drop bad-QC profiles.
@@ -26,16 +26,36 @@
 #
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
 #
-# Configuration (override via environment):
-#   OUT   root for the prepare_data.sh outputs and the cleaned outputs
-#         (default: ../process_data/ctddump)
+# Options (may appear anywhere on the command line):
+#   -o, --out DIR   root for the prepare_data.sh outputs and the cleaned
+#                   outputs (default: output)
+#   -y, --yes       Skip the confirmation prompt and start immediately.
+#   -h, --help      Show this help.
 #
-# Requires: ctddump on PATH, and prepare_data.sh's merged Parquet in $OUT/parquet.
+# Requires: ctddump on PATH, and prepare_data.sh's merged Parquet in <out>/parquet.
 
 set -euo pipefail
 
-# ---- Configuration -------------------------------------------------------
-OUT="${OUT:-../process_data/ctddump}"
+usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
+
+# ---- Configuration (defaults; override with the options below) -----------
+OUT=output
+ASSUME_YES=0
+
+# ---- Parse options -------------------------------------------------------
+# Options may appear anywhere; the remaining words are the command and regions.
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o|--out)  OUT="${2:?--out requires a directory}"; shift 2 ;;
+    --out=*)   OUT="${1#*=}"; shift ;;
+    -y|--yes)  ASSUME_YES=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --)        shift; ARGS+=("$@"); break ;;
+    -*)        echo "Unknown option: $1" >&2; usage; exit 1 ;;
+    *)         ARGS+=("$1"); shift ;;
+  esac
+done
 
 # Stage directories (each step reads the previous one).
 SRC_DIR="$OUT/parquet"          # prepare_data.sh merged Parquet (input)
@@ -53,6 +73,36 @@ stems_for() {  # <region>
     baltic)        echo nrt_bo_bo cora_bo ;;
     mediterranean) echo nrt_mo_mo nrt_mo_gl cora_mo ;;
   esac
+}
+
+# ---- Logging -------------------------------------------------------------
+# Announce each step (timestamped, to stderr) so the currently running process
+# is visible.
+
+log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
+
+# Print the resolved configuration, then ask for confirmation unless -y/--yes was
+# given. In a non-interactive shell without -y there is nothing to read, so abort
+# with a hint rather than hang.
+show_config() {  # <cmd> <region...>
+  local cmd="$1"; shift
+  {
+    echo "Configuration:"
+    echo "  command : $cmd"
+    echo "  regions : $*"
+    echo "  out     : $OUT"
+  } >&2
+}
+
+confirm() {
+  [[ "$ASSUME_YES" == 1 ]] && return 0
+  if [[ ! -t 0 ]]; then
+    log "non-interactive shell: pass -y/--yes to proceed without confirmation."
+    return 1
+  fi
+  local reply
+  read -r -p "Proceed? [y/N] " reply
+  [[ "$reply" == [yY] || "$reply" == [yY][eE][sS] ]]
 }
 
 # ---- Region bounding boxes ------------------------------------------------
@@ -86,6 +136,7 @@ dropqc_region() {  # <region>
   mkdir -p "$QC_DIR"
   local s
   for s in $(stems_for "$1"); do
+    log "dropqc $1/$s"
     ctddump dropqc "$SRC_DIR/$s.parquet" "$QC_DIR/$s.parquet"
   done
 }
@@ -94,6 +145,7 @@ dropna_region() {  # <region>
   mkdir -p "$NA_DIR"
   local s
   for s in $(stems_for "$1"); do
+    log "dropna $1/$s"
     ctddump dropna "$QC_DIR/$s.parquet" "$NA_DIR/$s.parquet"
   done
 }
@@ -102,6 +154,7 @@ filter_region() {  # <region>
   mkdir -p "$CLEAN_DIR"
   local s
   for s in $(stems_for "$1"); do
+    log "filter $1/$s"
     "filter_box_$1" "$NA_DIR/$s.parquet" "$CLEAN_DIR/$s.parquet"
   done
 }
@@ -110,13 +163,12 @@ report_region() {  # <region>
   mkdir -p "$REPORT_DIR"
   local s
   for s in $(stems_for "$1"); do
+    log "report $1/$s"
     ctddump report parquet --level platform "$CLEAN_DIR/$s.parquet" "$REPORT_DIR/$s.parquet.tsv"
   done
 }
 
 # ---- Dispatch ------------------------------------------------------------
-
-usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 is_region() {
   local r
@@ -143,7 +195,11 @@ main() {
     is_region "$r" || { echo "Unknown region: $r" >&2; usage; return 1; }
   done
 
+  show_config "$cmd" "${regions[@]}"
+  confirm || { log "aborted."; return 1; }
+
   for r in "${regions[@]}"; do
+    log "===== $cmd: $r ====="
     case "$cmd" in
       dropqc) "dropqc_region" "$r" ;;
       dropna) "dropna_region" "$r" ;;
@@ -152,6 +208,7 @@ main() {
       all)    "dropqc_region" "$r"; "dropna_region" "$r"; "filter_region" "$r"; "report_region" "$r" ;;
     esac
   done
+  log "done."
 }
 
-main "$@"
+main ${ARGS[@]+"${ARGS[@]}"}

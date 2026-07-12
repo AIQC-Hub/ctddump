@@ -16,7 +16,7 @@
 # and reports land in $OUT/report/dedup/{markdup,dedup}/.
 #
 # Usage:
-#   scripts/dedup_data.sh [command] [region ...]
+#   scripts/dedup_data.sh [options] [command] [region ...]
 #
 # Commands:
 #   markdup     Mark duplicate profiles.
@@ -27,17 +27,37 @@
 #
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
 #
-# Configuration (override via environment):
-#   OUT   root for the clean_data.sh outputs and the de-duplicated outputs
-#         (default: ../process_data/ctddump)
+# Options (may appear anywhere on the command line):
+#   -o, --out DIR   root for the clean_data.sh outputs and the de-duplicated
+#                   outputs (default: output)
+#   -y, --yes       Skip the confirmation prompt and start immediately.
+#   -h, --help      Show this help.
 #
 # Requires: ctddump on PATH, and clean_data.sh's cleaned Parquet in
-# $OUT/clean/filter.
+# <out>/clean/filter.
 
 set -euo pipefail
 
-# ---- Configuration -------------------------------------------------------
-OUT="${OUT:-../process_data/ctddump}"
+usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
+
+# ---- Configuration (defaults; override with the options below) -----------
+OUT=output
+ASSUME_YES=0
+
+# ---- Parse options -------------------------------------------------------
+# Options may appear anywhere; the remaining words are the command and regions.
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -o|--out)  OUT="${2:?--out requires a directory}"; shift 2 ;;
+    --out=*)   OUT="${1#*=}"; shift ;;
+    -y|--yes)  ASSUME_YES=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --)        shift; ARGS+=("$@"); break ;;
+    -*)        echo "Unknown option: $1" >&2; usage; exit 1 ;;
+    *)         ARGS+=("$1"); shift ;;
+  esac
+done
 
 # Stage directories (each step reads the previous one).
 SRC_DIR="$OUT/clean/filter"          # clean_data.sh cleaned Parquet (input)
@@ -57,6 +77,36 @@ stems_for() {  # <region>
   esac
 }
 
+# ---- Logging -------------------------------------------------------------
+# Announce each step (timestamped, to stderr) so the currently running process
+# is visible.
+
+log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
+
+# Print the resolved configuration, then ask for confirmation unless -y/--yes was
+# given. In a non-interactive shell without -y there is nothing to read, so abort
+# with a hint rather than hang.
+show_config() {  # <cmd> <region...>
+  local cmd="$1"; shift
+  {
+    echo "Configuration:"
+    echo "  command : $cmd"
+    echo "  regions : $*"
+    echo "  out     : $OUT"
+  } >&2
+}
+
+confirm() {
+  [[ "$ASSUME_YES" == 1 ]] && return 0
+  if [[ ! -t 0 ]]; then
+    log "non-interactive shell: pass -y/--yes to proceed without confirmation."
+    return 1
+  fi
+  local reply
+  read -r -p "Proceed? [y/N] " reply
+  [[ "$reply" == [yY] || "$reply" == [yY][eE][sS] ]]
+}
+
 # ---- Reusable per-region steps -------------------------------------------
 # Each creates its output location so a fresh run works from scratch.
 
@@ -64,6 +114,7 @@ markdup_region() {  # <region>
   mkdir -p "$MARK_DIR"
   local s
   for s in $(stems_for "$1"); do
+    log "markdup $1/$s"
     ctddump markdup "$SRC_DIR/$s.parquet" "$MARK_DIR/$s.parquet" "$MARK_DIR/$s.dups.tsv"
   done
 }
@@ -72,6 +123,7 @@ dedup_region() {  # <region>
   mkdir -p "$DEDUP_DIR"
   local s
   for s in $(stems_for "$1"); do
+    log "dedup $1/$s"
     ctddump dedup "$MARK_DIR/$s.parquet" "$DEDUP_DIR/$s.parquet"
   done
 }
@@ -80,6 +132,7 @@ report_marked_region() {  # <region>
   mkdir -p "$REPORT_MARK_DIR"
   local s
   for s in $(stems_for "$1"); do
+    log "report (marked) $1/$s"
     ctddump report parquet --level platform "$MARK_DIR/$s.parquet" "$REPORT_MARK_DIR/$s.parquet.tsv"
   done
 }
@@ -88,6 +141,7 @@ report_deduped_region() {  # <region>
   mkdir -p "$REPORT_DEDUP_DIR"
   local s
   for s in $(stems_for "$1"); do
+    log "report (deduped) $1/$s"
     ctddump report parquet --level platform "$DEDUP_DIR/$s.parquet" "$REPORT_DEDUP_DIR/$s.parquet.tsv"
   done
 }
@@ -99,8 +153,6 @@ report_region() {  # <region>
 }
 
 # ---- Dispatch ------------------------------------------------------------
-
-usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 is_region() {
   local r
@@ -127,7 +179,11 @@ main() {
     is_region "$r" || { echo "Unknown region: $r" >&2; usage; return 1; }
   done
 
+  show_config "$cmd" "${regions[@]}"
+  confirm || { log "aborted."; return 1; }
+
   for r in "${regions[@]}"; do
+    log "===== $cmd: $r ====="
     case "$cmd" in
       markdup) "markdup_region" "$r" ;;
       dedup)   "dedup_region" "$r" ;;
@@ -135,6 +191,7 @@ main() {
       all)     "markdup_region" "$r"; "report_marked_region" "$r"; "dedup_region" "$r"; "report_deduped_region" "$r" ;;
     esac
   done
+  log "done."
 }
 
-main "$@"
+main ${ARGS[@]+"${ARGS[@]}"}
