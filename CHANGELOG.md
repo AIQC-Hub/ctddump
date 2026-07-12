@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-12
+
+### Added
+- The helper scripts run the selected regions **in parallel** by default when more than one is chosen — one background worker per region, with log lines tagged `[region]`. Failures are collected and the script exits non-zero after reporting which region failed. Pass `--sequential` to process regions one at a time
+
+### Changed
+- Split `prepare_data.sh` into two scripts with clearer names and prerequisites: **`download_data.sh`** (`login`, `download`; needs only the `copernicusmarine` toolbox) and **`convert_data.sh`** (`process`, `report`; needs only `ctddump`). `download_data.sh` fetches into `-s/--src` (default `input`); `convert_data.sh` writes its summaries to `output/report/convert/` (was `output/report/prepare/`). The pipeline now reads download → convert → clean → dedup
+
+### Removed
+- `scripts/prepare_data.sh` (replaced by `download_data.sh` + `convert_data.sh`)
+
 ## [0.10.0] - 2026-07-12
 
 ### Added
@@ -129,7 +140,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.0...v0.8.1

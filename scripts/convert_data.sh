@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 #
-# prepare_data.sh — download CTD data from the Copernicus Marine Service and
-# convert/merge it to Parquet (data) and YAML (metadata) with ctddump, for the
-# Arctic, Baltic, and Mediterranean seas.
+# convert_data.sh — convert the CTD source NetCDF (fetched by download_data.sh)
+# to Parquet (data) and YAML (metadata) with ctddump, for the Arctic, Baltic,
+# and Mediterranean seas: batch-convert, merge, export + merge headers, and
+# summarise.
 #
 # Usage:
-#   scripts/prepare_data.sh [options] [command] [region ...]
+#   scripts/convert_data.sh [options] [command] [region ...]
 #
 # Commands:
-#   login       Log in to the Copernicus Marine Toolbox (once, interactively).
-#   download    Download the source NetCDF files.
 #   process     Convert + merge Parquet, export + merge headers.  (default)
 #   report      Summarise the merged Parquet/YAML outputs as TSV.
-#   all         download, process, then report.
+#   all         process, then report.
 #   help        Show this help.
 #
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
@@ -21,12 +20,12 @@
 #   -t, --threads N   worker threads for ctddump          (default: 10)
 #   -s, --src DIR     root of the downloaded NetCDF tree  (default: input)
 #   -o, --out DIR     root for the generated outputs      (default: output)
+#   --sequential      Process regions one at a time (default: selected regions
+#                     run in parallel when more than one is chosen).
 #   -y, --yes         Skip the confirmation prompt and start immediately.
 #   -h, --help        Show this help.
 #
-# Requires: ctddump on PATH; copernicusmarine on PATH for the download/login steps.
-# A free Copernicus Marine account is needed to download:
-#   https://help.marine.copernicus.eu/en/collections/9080063-copernicus-marine-toolbox
+# Requires: ctddump on PATH, and the source NetCDF in <src> (see download_data.sh).
 
 set -euo pipefail
 
@@ -37,6 +36,7 @@ THREADS=10
 SRC=input
 OUT=output
 ASSUME_YES=0
+SEQUENTIAL=0
 
 # ---- Parse options -------------------------------------------------------
 # Options may appear anywhere; the remaining words are the command and regions.
@@ -49,6 +49,7 @@ while [[ $# -gt 0 ]]; do
     --src=*)      SRC="${1#*=}"; shift ;;
     -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
     --out=*)      OUT="${1#*=}"; shift ;;
+    --sequential) SEQUENTIAL=1; shift ;;
     -y|--yes)     ASSUME_YES=1; shift ;;
     -h|--help)    usage; exit 0 ;;
     --)           shift; ARGS+=("$@"); break ;;
@@ -67,16 +68,22 @@ REGIONS=(arctic baltic mediterranean)
 
 # ---- Logging -------------------------------------------------------------
 # Announce each step (timestamped, to stderr) so the currently running process
-# is visible. `log` prints a message; `run` logs the command then executes it.
+# is visible.
 
-log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
-run() { log "RUN: $*"; "$@"; }
+# Each parallel region worker sets REGION so its lines are tagged "[region]".
+log() {
+  local p=""
+  [[ -n "${REGION:-}" ]] && p="[$REGION] "
+  printf '[%s] %s%s\n' "$(date '+%H:%M:%S')" "$p" "$*" >&2
+}
 
 # Print the resolved configuration, then ask for confirmation unless -y/--yes was
 # given. In a non-interactive shell without -y there is nothing to read, so abort
 # with a hint rather than hang.
 show_config() {  # <cmd> <region...>
   local cmd="$1"; shift
+  local mode="sequential"
+  [[ "$SEQUENTIAL" != 1 && $# -gt 1 ]] && mode="parallel (per region)"
   {
     echo "Configuration:"
     echo "  command : $cmd"
@@ -84,6 +91,7 @@ show_config() {  # <cmd> <region...>
     echo "  threads : $THREADS"
     echo "  src     : $SRC"
     echo "  out     : $OUT"
+    echo "  mode    : $mode"
   } >&2
 }
 
@@ -141,24 +149,6 @@ report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
   mkdir -p "$(dirname "$2")"
   log "report yaml: $1 -> $2"
   ctddump report yaml "$1" "$2"
-}
-
-# ---- Download ------------------------------------------------------------
-login() { copernicusmarine login; }
-
-download_arctic() {
-  run copernicusmarine get -i cmems_obs-ins_arc_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "arctic/*/*_PR_CT.nc"
-}
-
-download_baltic() {
-  run copernicusmarine get -i cmems_obs-ins_bal_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "baltic/*/*_PR_CT.nc"
-}
-
-download_mediterranean() {
-  run copernicusmarine get -i cmems_obs-ins_med_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
-  run copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "mediterrane/*/*_PR_CT.nc"
 }
 
 # ---- Per-region pipelines ------------------------------------------------
@@ -226,11 +216,11 @@ process_mediterranean() {
 
 # ---- Per-region reports (summaries of the merged outputs) ----------------
 # Parquet reports use the platform level; each report lands in
-# $OUT/report/prepare/ named after its source, with a .parquet.tsv /
+# $OUT/report/convert/ named after its source, with a .parquet.tsv /
 # .yaml.tsv suffix. (clean_data.sh writes its reports to $OUT/report/clean/.)
 
 report_arctic() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
   report_parquet "$P/nrt_ar_ar.parquet" "$R/nrt_ar_ar.parquet.tsv"
   report_parquet "$P/nrt_ar_gl.parquet" "$R/nrt_ar_gl.parquet.tsv"
   report_parquet "$P/cora_ar.parquet"   "$R/cora_ar.parquet.tsv"
@@ -240,7 +230,7 @@ report_arctic() {
 }
 
 report_baltic() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
   report_parquet "$P/nrt_bo_bo.parquet" "$R/nrt_bo_bo.parquet.tsv"
   report_parquet "$P/cora_bo.parquet"   "$R/cora_bo.parquet.tsv"
   report_yaml    "$H/nrt_bo_bo.yaml"     "$R/nrt_bo_bo.yaml.tsv"
@@ -248,7 +238,7 @@ report_baltic() {
 }
 
 report_mediterranean() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/prepare"
+  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
   report_parquet "$P/nrt_mo_mo.parquet" "$R/nrt_mo_mo.parquet.tsv"
   report_parquet "$P/nrt_mo_gl.parquet" "$R/nrt_mo_gl.parquet.tsv"
   report_parquet "$P/cora_mo.parquet"   "$R/cora_mo.parquet.tsv"
@@ -265,14 +255,56 @@ is_region() {
   return 1
 }
 
+# Run one region's pipeline for <cmd>.
+run_region() {  # <cmd> <region>
+  local cmd="$1" r="$2"
+  case "$cmd" in
+    process) "process_$r" ;;
+    report)  "report_$r" ;;
+    all)     "process_$r"; "report_$r" ;;
+  esac
+}
+
+# Run <cmd> for every region. Regions run in parallel (one background worker
+# each, with stdin detached) unless --sequential is set or only one region is
+# selected. Worker failures are collected and reported; exit is non-zero if any
+# region failed.
+run_regions() {  # <cmd> <region...>
+  local cmd="$1"; shift
+  local -a regions=("$@")
+
+  if [[ "$SEQUENTIAL" == 1 || ${#regions[@]} -le 1 ]]; then
+    local r
+    for r in "${regions[@]}"; do
+      log "===== $cmd: $r ====="
+      run_region "$cmd" "$r"
+    done
+    return 0
+  fi
+
+  log "starting ${#regions[@]} regions in parallel (--sequential to disable)"
+  local -a pids=() regs=()
+  local r
+  for r in "${regions[@]}"; do
+    ( REGION="$r"; log "===== $cmd: $r ====="; run_region "$cmd" "$r" ) </dev/null &
+    pids+=("$!"); regs+=("$r")
+  done
+  local fail=0 i
+  for i in "${!pids[@]}"; do
+    if ! wait "${pids[$i]}"; then
+      log "region '${regs[$i]}' FAILED"; fail=1
+    fi
+  done
+  return "$fail"
+}
+
 main() {
   local cmd="${1:-process}"
   [[ $# -gt 0 ]] && shift
 
   case "$cmd" in
     -h|--help|help) usage; return 0 ;;
-    login) login; return 0 ;;
-    download|process|report|all) ;;
+    process|report|all) ;;
     *) echo "Unknown command: $cmd" >&2; usage; return 1 ;;
   esac
 
@@ -288,15 +320,7 @@ main() {
   show_config "$cmd" "${regions[@]}"
   confirm || { log "aborted."; return 1; }
 
-  for r in "${regions[@]}"; do
-    log "===== $cmd: $r ====="
-    case "$cmd" in
-      download) "download_$r" ;;
-      process)  "process_$r" ;;
-      report)   "report_$r" ;;
-      all)      "download_$r"; "process_$r"; "report_$r" ;;
-    esac
-  done
+  run_regions "$cmd" "${regions[@]}" || { log "one or more regions failed."; return 1; }
   log "done."
 }
 

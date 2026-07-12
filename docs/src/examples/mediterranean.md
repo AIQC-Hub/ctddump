@@ -94,19 +94,19 @@ Write a platform-level summary of each merged Parquet file and a per-file summar
 of each merged header YAML (as TSV).
 
 ```shell
-mkdir -p output/report/prepare
+mkdir -p output/report/convert
 
 # NRT MO
-ctddump report parquet --level platform output/parquet/nrt_mo_mo.parquet output/report/prepare/nrt_mo_mo.parquet.tsv
-ctddump report yaml output/header/nrt_mo_mo.yaml output/report/prepare/nrt_mo_mo.yaml.tsv
+ctddump report parquet --level platform output/parquet/nrt_mo_mo.parquet output/report/convert/nrt_mo_mo.parquet.tsv
+ctddump report yaml output/header/nrt_mo_mo.yaml output/report/convert/nrt_mo_mo.yaml.tsv
 
 # NRT GL
-ctddump report parquet --level platform output/parquet/nrt_mo_gl.parquet output/report/prepare/nrt_mo_gl.parquet.tsv
-ctddump report yaml output/header/nrt_mo_gl.yaml output/report/prepare/nrt_mo_gl.yaml.tsv
+ctddump report parquet --level platform output/parquet/nrt_mo_gl.parquet output/report/convert/nrt_mo_gl.parquet.tsv
+ctddump report yaml output/header/nrt_mo_gl.yaml output/report/convert/nrt_mo_gl.yaml.tsv
 
 # CORA MO
-ctddump report parquet --level platform output/parquet/cora_mo.parquet output/report/prepare/cora_mo.parquet.tsv
-ctddump report yaml output/header/cora_mo.yaml output/report/prepare/cora_mo.yaml.tsv
+ctddump report parquet --level platform output/parquet/cora_mo.parquet output/report/convert/cora_mo.parquet.tsv
+ctddump report yaml output/header/cora_mo.yaml output/report/convert/cora_mo.yaml.tsv
 ```
 
 ## Data cleaning
@@ -256,8 +256,9 @@ ctddump report parquet --level platform output/dedup/dedup/nrt_mo_gl.parquet out
 ctddump report parquet --level platform output/dedup/dedup/cora_mo.parquet output/report/dedup/dedup/cora_mo.parquet.tsv
 ```
 
-> All three phases are automated by
-> [`scripts/prepare_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/prepare_data.sh),
+> The pipeline is automated by
+> [`scripts/download_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/download_data.sh),
+> [`scripts/convert_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/convert_data.sh),
 > [`scripts/clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh),
 > and [`scripts/dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh)
 > — see [Helper scripts](../scripts.md) for their commands and options.
