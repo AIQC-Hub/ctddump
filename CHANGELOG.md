@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-12
+
+### Added
+- The helper scripts (`prepare_data.sh`, `clean_data.sh`, `dedup_data.sh`) take command-line options in place of environment variables — `-t`/`--threads`, `-s`/`--src`, `-o`/`--out`. Options may appear anywhere on the command line and accept both `--out DIR` and `--out=DIR` forms
+- The helper scripts print the resolved configuration and ask for a `y/N` confirmation before running; `-y`/`--yes` skips the prompt (required in non-interactive shells, which otherwise abort with a hint). Each step is announced with a timestamp so the currently running process is visible
+- "Helper scripts" documentation page describing the three-phase pipeline (prepare → clean → dedup), the shared command/region/option interface, the confirmation prompt, and each script's commands and output layout
+
+### Changed
+- The helper scripts default to reading source NetCDF from `input/` and writing outputs to `output/` (run from a single working directory), replacing the previous `../source_data/ctddump/netcdf` and `../process_data/ctddump` defaults; the regional workflow docs use the same layout
+
+### Removed
+- The helper scripts no longer read the `THREADS`, `SRC`, and `OUT` environment variables; use the `-t`/`-s`/`-o` options instead
+
 ## [0.9.0] - 2026-07-11
 
 ### Added
@@ -116,7 +129,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.7.0...v0.8.0
