@@ -157,16 +157,8 @@ fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, 
         .map(|e| e.path().to_path_buf())
         .collect();
 
-    if files.is_empty() {
-        return Err(format!(
-            "No files matching '{}' found under {}",
-            pattern,
-            src_dir.display()
-        )
-        .into());
-    }
-
-    // Deterministic order across platforms
+    // An empty result is not an error; the callers report it and write no output.
+    // Deterministic order across platforms.
     files.sort();
     Ok(files)
 }
@@ -346,6 +338,17 @@ pub fn run_concat_parquet(
     let files = collect_parquet_files(src_dir, &config.pattern)?;
     let n = files.len();
 
+    // No inputs is not an error: report it and write no output, so a workflow can
+    // reference a not-yet-available dataset (e.g. Baltic GL) without failing.
+    if files.is_empty() {
+        eprintln!(
+            "No files matching '{}' under {}; no output written.",
+            config.pattern,
+            src_dir.display()
+        );
+        return Ok(0);
+    }
+
     // Number of range workers: an explicit `--threads N`, or all logical cores when
     // omitted. `n_threads == 1` uses the sequential single-writer path (and lets
     // Polars parallelize that one stream); `n_threads > 1` renumbers ranges in
@@ -506,6 +509,16 @@ pub fn run_concat_header(
 ) -> Result<usize, Box<dyn Error>> {
     let files = collect_parquet_files(src_dir, pattern)?;
     let n = files.len();
+
+    // No inputs is not an error: report it and write no output (see run_concat_parquet).
+    if files.is_empty() {
+        eprintln!(
+            "No files matching '{}' under {}; no output written.",
+            pattern,
+            src_dir.display()
+        );
+        return Ok(0);
+    }
 
     let mut combined: HashMap<String, serde_yaml::Value> = HashMap::new();
     let mut duplicates: Vec<String> = Vec::new();

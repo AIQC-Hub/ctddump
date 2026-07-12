@@ -248,19 +248,21 @@ fn test_concat_convert_pattern_selects_subset() {
 
 // ── concat convert: error cases ───────────────────────────────────────────────
 
+/// An empty input directory is not an error: concat succeeds and writes no output.
 #[test]
-fn test_concat_convert_empty_dir_error() {
+fn test_concat_convert_empty_no_output() {
     let src_dir = tempfile::tempdir().unwrap();
-    let output  = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
+    let out_dir = tempfile::tempdir().unwrap();
+    let output  = out_dir.path().join("merged.parquet");
 
     let args = vec![
         "concat".to_string(), "convert".to_string(),
         src_dir.path().to_str().unwrap().to_string(),
-        output.path().to_str().unwrap().to_string(),
+        output.to_str().unwrap().to_string(),
     ];
     let result = handle_dispatch(&args);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("No files matching"));
+    assert!(result.is_ok(), "empty input should succeed, got: {result:?}");
+    assert!(!output.exists(), "no output file should be created");
 }
 
 // ── concat header: basic merge ────────────────────────────────────────────────
@@ -308,19 +310,21 @@ fn test_concat_header_pattern_selects_subset() {
     assert!(!content.contains("AR_PR_CT_58KN"),   "58KN should not be present");
 }
 
+/// An empty input directory is not an error: concat header succeeds and writes no output.
 #[test]
-fn test_concat_header_empty_dir_error() {
+fn test_concat_header_empty_no_output() {
     let src_dir = tempfile::tempdir().unwrap();
-    let output  = tempfile::NamedTempFile::with_suffix(".yaml").unwrap();
+    let out_dir = tempfile::tempdir().unwrap();
+    let output  = out_dir.path().join("merged.yaml");
 
     let args = vec![
         "concat".to_string(), "header".to_string(),
         src_dir.path().to_str().unwrap().to_string(),
-        output.path().to_str().unwrap().to_string(),
+        output.to_str().unwrap().to_string(),
     ];
     let result = handle_dispatch(&args);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("No files matching"));
+    assert!(result.is_ok(), "empty input should succeed, got: {result:?}");
+    assert!(!output.exists(), "no output file should be created");
 }
 
 #[test]
