@@ -21,6 +21,10 @@
 - [Configuration](./configuration.md)
 - [Output schema](./output-schema.md)
 
+# Pipeline scripts
+
+- [Helper scripts](./scripts.md)
+
 # Regional workflows
 
 - [Arctic Sea](./examples/arctic.md)
