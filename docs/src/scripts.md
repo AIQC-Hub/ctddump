@@ -43,8 +43,9 @@ $ scripts/clean_data.sh dropqc
 Configuration:
   command : dropqc
   regions : arctic baltic mediterranean
+  files   : 8
   out     : output
-  mode    : parallel (per region)
+  mode    : parallel (per file)
 Proceed? [y/N]
 ```
 
@@ -54,26 +55,35 @@ pipe or CI job), where the script otherwise aborts with a hint rather than hang.
 While running, each step is announced with a timestamp so you can see what is
 currently in progress.
 
-### Region parallelism
+### Parallelism
 
-When more than one region is selected (the default), the regions run **in
-parallel** — one background worker each — since they are independent units of
-work. Each worker tags its log lines with its region so the interleaved output
-stays readable:
+The selected work runs **in parallel** by default, since the units are
+independent. Each worker tags its log lines with its region so the interleaved
+output stays readable:
 
 ```text
-[12:00:01] [arctic] dropqc arctic/nrt_ar_ar
-[12:00:01] [baltic] dropqc baltic/nrt_bo_bo
-[12:00:01] [mediterranean] dropqc mediterranean/nrt_mo_mo
+[12:00:01] [arctic] dropqc nrt_ar_ar
+[12:00:01] [arctic] dropqc nrt_ar_gl
+[12:00:01] [baltic] dropqc nrt_bo_bo
 ```
 
-If any region fails, the others still finish and the script exits non-zero after
-reporting which region failed. Pass `--sequential` to process regions one at a
-time instead (lower peak resource use; a single-region run is always
-sequential). Note that `convert`/`clean`/`dedup` each already use multiple
-threads *within* a region, so parallel regions multiply the load accordingly —
-tune with `-t/--threads` (convert) or `--sequential`. For `download_data.sh`,
-`--sequential` is also useful if concurrent Copernicus transfers hit rate limits.
+The granularity differs by script:
+
+- **`clean_data.sh` and `dedup_data.sh`** default to **per file** — one worker
+  per merged file (a *stem* within a region), the finest granularity (8 files
+  across the three regions). Each file runs its whole stage chain (e.g.
+  `dropqc → dropna → filter → report`) in order. Pass `--by-region` for one
+  worker per region instead (coarser), or `--sequential` for no parallelism.
+- **`download_data.sh` and `convert_data.sh`** parallelise **per region**;
+  `--sequential` disables it.
+
+If any unit fails, the others still finish and the script exits non-zero after
+reporting which unit failed. A run with only one unit is always sequential.
+Note that `convert`/`clean`/`dedup` each also use multiple threads *within* a
+unit, so parallel units multiply the load accordingly — throttle with
+`--by-region` / `--sequential`, or `-t/--threads` for `convert`. For
+`download_data.sh`, `--sequential` also helps if concurrent Copernicus transfers
+hit rate limits.
 
 ### Options
 
@@ -82,9 +92,19 @@ tune with `-t/--threads` (convert) or `--sequential`. For `download_data.sh`,
 | `-t, --threads N` | convert | `10` | Worker threads for `ctddump`. |
 | `-s, --src DIR` | download, convert | `input` | Root of the source NetCDF tree (downloaded into / read from). |
 | `-o, --out DIR` | convert, clean, dedup | `output` | Root for the generated / consumed outputs. |
-| `--sequential` | all | — | Process regions one at a time instead of in parallel. |
+| `--by-region` | clean, dedup | — | Parallelise per region instead of per file. |
+| `--sequential` | all | — | Process one unit at a time (no parallelism). |
 | `-y, --yes` | all | — | Skip the confirmation prompt. |
 | `-h, --help` | all | — | Show the script's help. |
+
+### Missing datasets
+
+Every stage tolerates missing inputs, so an unavailable dataset does not fail the
+run. A `ctddump batch` or `concat` step that matches no files reports this and
+writes nothing; `clean_data.sh` / `dedup_data.sh` skip any file whose input is
+missing (with a note). The concrete case today is the **Global (GL) product for
+the Baltic Sea**, which Copernicus does not yet publish: the `nrt_bo_gl` outputs
+are simply skipped, and appear automatically once the data becomes available.
 
 ## `download_data.sh`
 

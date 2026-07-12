@@ -177,8 +177,10 @@ fn test_batch_duplicate_error() {
 
 // ── empty directory ───────────────────────────────────────────────────────────
 
+/// A pattern that matches no files is not an error: the batch succeeds and writes
+/// no output (so a workflow can reference a not-yet-available dataset).
 #[test]
-fn test_batch_empty_dir_error() {
+fn test_batch_empty_pattern_no_output() {
     let src_dir = tempfile::tempdir().unwrap();
     let out_dir = tempfile::tempdir().unwrap();
 
@@ -189,9 +191,9 @@ fn test_batch_empty_dir_error() {
     ];
 
     let result = handle_dispatch(&args);
-    assert!(result.is_err());
-    let msg = result.unwrap_err().to_string();
-    assert!(msg.contains("No files matching"), "got: {msg}");
+    assert!(result.is_ok(), "empty match should succeed, got: {result:?}");
+    let produced = std::fs::read_dir(out_dir.path()).unwrap().count();
+    assert_eq!(produced, 0, "no output files should be written");
 }
 
 // ── pattern selection ─────────────────────────────────────────────────────────

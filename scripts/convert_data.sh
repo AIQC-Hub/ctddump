@@ -140,12 +140,14 @@ merge_hdr() {  # <src_dir> <out_file>
 }
 
 report_parquet() {  # <src_file> <out_tsv> -- platform-level summary of a merged Parquet
+  [[ -f "$1" ]] || { log "skip report parquet (missing $1)"; return 0; }
   mkdir -p "$(dirname "$2")"
   log "report parquet: $1 -> $2"
   ctddump report parquet --level platform "$1" "$2"
 }
 
 report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
+  [[ -f "$1" ]] || { log "skip report yaml (missing $1)"; return 0; }
   mkdir -p "$(dirname "$2")"
   log "report yaml: $1 -> $2"
   ctddump report yaml "$1" "$2"
@@ -174,22 +176,29 @@ process_arctic() {
   merge_hdr "$H/ar/cora" "$H/cora_ar.yaml"
 }
 
-# The Baltic workflow uses only the regional NRT (BO) and CORA products; the
-# Global (GL) product is not processed here.
+# The Baltic workflow uses the regional NRT (BO), Global (GL), and CORA products.
+# Copernicus does not yet publish the Global (GL) data for the Baltic, so the GL
+# steps currently match no files: the tools report this and write nothing, and the
+# downstream scripts skip the missing nrt_bo_gl outputs. They activate
+# automatically once the GL data becomes available.
 process_baltic() {
   local P="$OUT/parquet" H="$OUT/header"
   local nrt="$SRC/$NRT_BO_DIR" cora="$SRC/$CORA/baltic"
 
   convert nrt_bo "$SRC"  "$P/bo/bo"
+  convert nrt_gl "$nrt"  "$P/bo/gl"
   convert cora   "$cora" "$P/bo/cora"
 
   merge "$P/bo/bo"   "$P/nrt_bo_bo.parquet"
+  merge "$P/bo/gl"   "$P/nrt_bo_gl.parquet"
   merge "$P/bo/cora" "$P/cora_bo.parquet"
 
   header_nrt "BO_PR_CT_*.nc" "$nrt"  "$H/bo/bo"
+  header_nrt "GL_PR_CT_*.nc" "$nrt"  "$H/bo/gl"
   header_cora                "$cora" "$H/bo/cora"
 
   merge_hdr "$H/bo/bo"   "$H/nrt_bo_bo.yaml"
+  merge_hdr "$H/bo/gl"   "$H/nrt_bo_gl.yaml"
   merge_hdr "$H/bo/cora" "$H/cora_bo.yaml"
 }
 
@@ -232,8 +241,10 @@ report_arctic() {
 report_baltic() {
   local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
   report_parquet "$P/nrt_bo_bo.parquet" "$R/nrt_bo_bo.parquet.tsv"
+  report_parquet "$P/nrt_bo_gl.parquet" "$R/nrt_bo_gl.parquet.tsv"
   report_parquet "$P/cora_bo.parquet"   "$R/cora_bo.parquet.tsv"
   report_yaml    "$H/nrt_bo_bo.yaml"     "$R/nrt_bo_bo.yaml.tsv"
+  report_yaml    "$H/nrt_bo_gl.yaml"     "$R/nrt_bo_gl.yaml.tsv"
   report_yaml    "$H/cora_bo.yaml"       "$R/cora_bo.yaml.tsv"
 }
 

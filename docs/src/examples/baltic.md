@@ -4,8 +4,13 @@ An end-to-end workflow for the Baltic Sea in two phases: **data preparation**
 (download, convert, merge, and export the metadata) and **data cleaning** (drop
 low-quality profiles and restrict the data to the region).
 
-> This workflow uses the regional **NRT (BO)** and **CORA** products. The Global
-> (GL) product is not used for the Baltic here.
+> This workflow uses the regional **NRT (BO)**, **Global (GL)**, and **CORA**
+> products. Copernicus does not yet publish the Global (GL) data for the Baltic,
+> so the GL steps currently match no files — `ctddump` reports this and writes
+> nothing, and the cleaning / de-duplication steps skip the missing `nrt_bo_gl`
+> outputs, activating automatically once GL becomes available. The manual commands
+> below therefore cover BO and CORA; the [helper scripts](../scripts.md)
+> additionally run the (currently empty) GL steps.
 
 ## Data preparation
 

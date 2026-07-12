@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+- `clean_data.sh` and `dedup_data.sh` now parallelise **per file** by default (one worker per merged file — the finest granularity — each running its whole stage chain in order) instead of per region. Pass `--by-region` for the previous per-region grouping, or `--sequential` for no parallelism. `download_data.sh`/`convert_data.sh` are unchanged (per region)
+- `ctddump batch` (convert/header) and `ctddump concat` (convert/header) now treat an empty match — a `--pattern` (or default) matching no files, or an empty/absent input directory — as a no-op: they print an informational message and write no output instead of erroring, so a workflow can reference a not-yet-available dataset
+- The `convert_data.sh`/`clean_data.sh`/`dedup_data.sh` Baltic workflow now includes the Global (GL) product (`nrt_bo_gl`), matching the Arctic and Mediterranean. Copernicus does not yet publish Baltic GL data, so those steps currently produce nothing; the scripts skip any file with a missing input (with a note), so the run succeeds and picks up GL automatically once it is available
+
 ## [0.11.0] - 2026-07-12
 
 ### Added

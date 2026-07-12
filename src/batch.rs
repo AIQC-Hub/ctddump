@@ -8,6 +8,8 @@ use walkdir::WalkDir;
 
 /// Recursively collect all files under `src_dir` whose filename matches `pattern`.
 /// `pattern` is a glob matched against the filename only (not the full path).
+/// An empty result is **not** an error — the caller decides what to do (see
+/// [`run_batch`], which treats it as "nothing to do").
 pub fn collect_nc_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let glob_pat = Pattern::new(pattern)
         .map_err(|e| format!("Invalid pattern '{}': {}", pattern, e))?;
@@ -24,15 +26,6 @@ pub fn collect_nc_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, B
         })
         .map(|e| e.path().to_path_buf())
         .collect();
-
-    if files.is_empty() {
-        return Err(format!(
-            "No files matching '{}' found under {}",
-            pattern,
-            src_dir.display()
-        )
-        .into());
-    }
 
     Ok(files)
 }
@@ -105,6 +98,19 @@ where
     F: Fn(&str, &str) -> Result<(), Box<dyn Error>> + Sync + Send,
 {
     let nc_files = collect_nc_files(src_dir, pattern)?;
+
+    // An empty match is not an error: report it and produce nothing. This lets a
+    // workflow reference a dataset that is not (yet) available — e.g. the Global
+    // (GL) product for the Baltic Sea — without failing the run.
+    if nc_files.is_empty() {
+        eprintln!(
+            "No files matching '{}' under {}; nothing to do.",
+            pattern,
+            src_dir.display()
+        );
+        return Ok(0);
+    }
+
     let pairs = compute_output_pairs(&nc_files, output_dir, output_ext)?;
     check_duplicates(&pairs)?;
 
