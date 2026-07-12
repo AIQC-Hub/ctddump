@@ -21,6 +21,8 @@
 #   -t, --threads N   worker threads for ctddump          (default: 10)
 #   -s, --src DIR     root of the downloaded NetCDF tree  (default: input)
 #   -o, --out DIR     root for the generated outputs      (default: output)
+#   --sequential      Process regions one at a time (default: selected regions
+#                     run in parallel when more than one is chosen).
 #   -y, --yes         Skip the confirmation prompt and start immediately.
 #   -h, --help        Show this help.
 #
@@ -37,6 +39,7 @@ THREADS=10
 SRC=input
 OUT=output
 ASSUME_YES=0
+SEQUENTIAL=0
 
 # ---- Parse options -------------------------------------------------------
 # Options may appear anywhere; the remaining words are the command and regions.
@@ -49,6 +52,7 @@ while [[ $# -gt 0 ]]; do
     --src=*)      SRC="${1#*=}"; shift ;;
     -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
     --out=*)      OUT="${1#*=}"; shift ;;
+    --sequential) SEQUENTIAL=1; shift ;;
     -y|--yes)     ASSUME_YES=1; shift ;;
     -h|--help)    usage; exit 0 ;;
     --)           shift; ARGS+=("$@"); break ;;
@@ -69,7 +73,12 @@ REGIONS=(arctic baltic mediterranean)
 # Announce each step (timestamped, to stderr) so the currently running process
 # is visible. `log` prints a message; `run` logs the command then executes it.
 
-log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
+# Each parallel region worker sets REGION so its lines are tagged "[region]".
+log() {
+  local p=""
+  [[ -n "${REGION:-}" ]] && p="[$REGION] "
+  printf '[%s] %s%s\n' "$(date '+%H:%M:%S')" "$p" "$*" >&2
+}
 run() { log "RUN: $*"; "$@"; }
 
 # Print the resolved configuration, then ask for confirmation unless -y/--yes was
@@ -77,6 +86,8 @@ run() { log "RUN: $*"; "$@"; }
 # with a hint rather than hang.
 show_config() {  # <cmd> <region...>
   local cmd="$1"; shift
+  local mode="sequential"
+  [[ "$SEQUENTIAL" != 1 && $# -gt 1 ]] && mode="parallel (per region)"
   {
     echo "Configuration:"
     echo "  command : $cmd"
@@ -84,6 +95,7 @@ show_config() {  # <cmd> <region...>
     echo "  threads : $THREADS"
     echo "  src     : $SRC"
     echo "  out     : $OUT"
+    echo "  mode    : $mode"
   } >&2
 }
 
@@ -265,6 +277,50 @@ is_region() {
   return 1
 }
 
+# Run one region's pipeline for <cmd>.
+run_region() {  # <cmd> <region>
+  local cmd="$1" r="$2"
+  case "$cmd" in
+    download) "download_$r" ;;
+    process)  "process_$r" ;;
+    report)   "report_$r" ;;
+    all)      "download_$r"; "process_$r"; "report_$r" ;;
+  esac
+}
+
+# Run <cmd> for every region. Regions run in parallel (one background worker
+# each, with stdin detached) unless --sequential is set or only one region is
+# selected. Worker failures are collected and reported; exit is non-zero if any
+# region failed.
+run_regions() {  # <cmd> <region...>
+  local cmd="$1"; shift
+  local -a regions=("$@")
+
+  if [[ "$SEQUENTIAL" == 1 || ${#regions[@]} -le 1 ]]; then
+    local r
+    for r in "${regions[@]}"; do
+      log "===== $cmd: $r ====="
+      run_region "$cmd" "$r"
+    done
+    return 0
+  fi
+
+  log "starting ${#regions[@]} regions in parallel (--sequential to disable)"
+  local -a pids=() regs=()
+  local r
+  for r in "${regions[@]}"; do
+    ( REGION="$r"; log "===== $cmd: $r ====="; run_region "$cmd" "$r" ) </dev/null &
+    pids+=("$!"); regs+=("$r")
+  done
+  local fail=0 i
+  for i in "${!pids[@]}"; do
+    if ! wait "${pids[$i]}"; then
+      log "region '${regs[$i]}' FAILED"; fail=1
+    fi
+  done
+  return "$fail"
+}
+
 main() {
   local cmd="${1:-process}"
   [[ $# -gt 0 ]] && shift
@@ -288,15 +344,7 @@ main() {
   show_config "$cmd" "${regions[@]}"
   confirm || { log "aborted."; return 1; }
 
-  for r in "${regions[@]}"; do
-    log "===== $cmd: $r ====="
-    case "$cmd" in
-      download) "download_$r" ;;
-      process)  "process_$r" ;;
-      report)   "report_$r" ;;
-      all)      "download_$r"; "process_$r"; "report_$r" ;;
-    esac
-  done
+  run_regions "$cmd" "${regions[@]}" || { log "one or more regions failed."; return 1; }
   log "done."
 }
 

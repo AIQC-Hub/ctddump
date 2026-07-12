@@ -37,11 +37,12 @@ Before doing any work, a script prints the resolved configuration and asks for
 confirmation:
 
 ```console
-$ scripts/clean_data.sh dropqc arctic
+$ scripts/clean_data.sh dropqc
 Configuration:
   command : dropqc
-  regions : arctic
+  regions : arctic baltic mediterranean
   out     : output
+  mode    : parallel (per region)
 Proceed? [y/N]
 ```
 
@@ -51,6 +52,26 @@ pipe or CI job), where the script otherwise aborts with a hint rather than hang.
 While running, each step is announced with a timestamp so you can see what is
 currently in progress.
 
+### Region parallelism
+
+When more than one region is selected (the default), the regions run **in
+parallel** — one background worker each — since they are independent units of
+work. Each worker tags its log lines with its region so the interleaved output
+stays readable:
+
+```text
+[12:00:01] [arctic] dropqc arctic/nrt_ar_ar
+[12:00:01] [baltic] dropqc baltic/nrt_bo_bo
+[12:00:01] [mediterranean] dropqc mediterranean/nrt_mo_mo
+```
+
+If any region fails, the others still finish and the script exits non-zero after
+reporting which region failed. Pass `--sequential` to process regions one at a
+time instead (lower peak resource use; a single-region run is always
+sequential). Note that `prepare`/`clean`/`dedup` each already use multiple
+threads *within* a region, so parallel regions multiply the load accordingly —
+tune with `-t/--threads` (prepare) or `--sequential`.
+
 ### Options
 
 | Option | Scripts | Default | Meaning |
@@ -58,6 +79,7 @@ currently in progress.
 | `-t, --threads N` | prepare | `10` | Worker threads for `ctddump`. |
 | `-s, --src DIR` | prepare | `input` | Root of the downloaded NetCDF tree. |
 | `-o, --out DIR` | all | `output` | Root for the generated / consumed outputs. |
+| `--sequential` | all | — | Process regions one at a time instead of in parallel. |
 | `-y, --yes` | all | — | Skip the confirmation prompt. |
 | `-h, --help` | all | — | Show the script's help. |
 

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- The helper scripts (`prepare_data.sh`, `clean_data.sh`, `dedup_data.sh`) run the selected regions **in parallel** by default when more than one is chosen — one background worker per region, with log lines tagged `[region]`. Failures are collected and the script exits non-zero after reporting which region failed. Pass `--sequential` to process regions one at a time
+
 ## [0.10.0] - 2026-07-12
 
 ### Added

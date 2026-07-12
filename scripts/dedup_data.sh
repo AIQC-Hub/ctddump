@@ -30,6 +30,8 @@
 # Options (may appear anywhere on the command line):
 #   -o, --out DIR   root for the clean_data.sh outputs and the de-duplicated
 #                   outputs (default: output)
+#   --sequential    Process regions one at a time (default: selected regions
+#                   run in parallel when more than one is chosen).
 #   -y, --yes       Skip the confirmation prompt and start immediately.
 #   -h, --help      Show this help.
 #
@@ -43,19 +45,21 @@ usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 # ---- Configuration (defaults; override with the options below) -----------
 OUT=output
 ASSUME_YES=0
+SEQUENTIAL=0
 
 # ---- Parse options -------------------------------------------------------
 # Options may appear anywhere; the remaining words are the command and regions.
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -o|--out)  OUT="${2:?--out requires a directory}"; shift 2 ;;
-    --out=*)   OUT="${1#*=}"; shift ;;
-    -y|--yes)  ASSUME_YES=1; shift ;;
-    -h|--help) usage; exit 0 ;;
-    --)        shift; ARGS+=("$@"); break ;;
-    -*)        echo "Unknown option: $1" >&2; usage; exit 1 ;;
-    *)         ARGS+=("$1"); shift ;;
+    -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
+    --out=*)      OUT="${1#*=}"; shift ;;
+    --sequential) SEQUENTIAL=1; shift ;;
+    -y|--yes)     ASSUME_YES=1; shift ;;
+    -h|--help)    usage; exit 0 ;;
+    --)           shift; ARGS+=("$@"); break ;;
+    -*)           echo "Unknown option: $1" >&2; usage; exit 1 ;;
+    *)            ARGS+=("$1"); shift ;;
   esac
 done
 
@@ -81,18 +85,26 @@ stems_for() {  # <region>
 # Announce each step (timestamped, to stderr) so the currently running process
 # is visible.
 
-log() { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
+# Each parallel region worker sets REGION so its lines are tagged "[region]".
+log() {
+  local p=""
+  [[ -n "${REGION:-}" ]] && p="[$REGION] "
+  printf '[%s] %s%s\n' "$(date '+%H:%M:%S')" "$p" "$*" >&2
+}
 
 # Print the resolved configuration, then ask for confirmation unless -y/--yes was
 # given. In a non-interactive shell without -y there is nothing to read, so abort
 # with a hint rather than hang.
 show_config() {  # <cmd> <region...>
   local cmd="$1"; shift
+  local mode="sequential"
+  [[ "$SEQUENTIAL" != 1 && $# -gt 1 ]] && mode="parallel (per region)"
   {
     echo "Configuration:"
     echo "  command : $cmd"
     echo "  regions : $*"
     echo "  out     : $OUT"
+    echo "  mode    : $mode"
   } >&2
 }
 
@@ -160,6 +172,50 @@ is_region() {
   return 1
 }
 
+# Run one region's pipeline for <cmd>.
+run_region() {  # <cmd> <region>
+  local cmd="$1" r="$2"
+  case "$cmd" in
+    markdup) markdup_region "$r" ;;
+    dedup)   dedup_region "$r" ;;
+    report)  report_region "$r" ;;
+    all)     markdup_region "$r"; report_marked_region "$r"; dedup_region "$r"; report_deduped_region "$r" ;;
+  esac
+}
+
+# Run <cmd> for every region. Regions run in parallel (one background worker
+# each, with stdin detached) unless --sequential is set or only one region is
+# selected. Worker failures are collected and reported; exit is non-zero if any
+# region failed.
+run_regions() {  # <cmd> <region...>
+  local cmd="$1"; shift
+  local -a regions=("$@")
+
+  if [[ "$SEQUENTIAL" == 1 || ${#regions[@]} -le 1 ]]; then
+    local r
+    for r in "${regions[@]}"; do
+      log "===== $cmd: $r ====="
+      run_region "$cmd" "$r"
+    done
+    return 0
+  fi
+
+  log "starting ${#regions[@]} regions in parallel (--sequential to disable)"
+  local -a pids=() regs=()
+  local r
+  for r in "${regions[@]}"; do
+    ( REGION="$r"; log "===== $cmd: $r ====="; run_region "$cmd" "$r" ) </dev/null &
+    pids+=("$!"); regs+=("$r")
+  done
+  local fail=0 i
+  for i in "${!pids[@]}"; do
+    if ! wait "${pids[$i]}"; then
+      log "region '${regs[$i]}' FAILED"; fail=1
+    fi
+  done
+  return "$fail"
+}
+
 main() {
   local cmd="${1:-all}"
   [[ $# -gt 0 ]] && shift
@@ -182,15 +238,7 @@ main() {
   show_config "$cmd" "${regions[@]}"
   confirm || { log "aborted."; return 1; }
 
-  for r in "${regions[@]}"; do
-    log "===== $cmd: $r ====="
-    case "$cmd" in
-      markdup) "markdup_region" "$r" ;;
-      dedup)   "dedup_region" "$r" ;;
-      report)  "report_region" "$r" ;;
-      all)     "markdup_region" "$r"; "report_marked_region" "$r"; "dedup_region" "$r"; "report_deduped_region" "$r" ;;
-    esac
-  done
+  run_regions "$cmd" "${regions[@]}" || { log "one or more regions failed."; return 1; }
   log "done."
 }
 
