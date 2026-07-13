@@ -169,6 +169,12 @@ pub fn run(opts: &KeyOpts, src: &Path, dest: &Path, dups: &Path) -> Result<(), B
         };
         df.with_column(Series::new("is_dup".into(), flags))?;
         if df.height() > 0 {
+            // A slice spanning multiple input row groups collects into columns with
+            // several chunks, while the freshly built `is_dup` has a single chunk.
+            // `write_batch` emits one Arrow record batch per chunk and requires all
+            // columns to share chunk boundaries, so align them first (the filtering
+            // passes get this for free from `filter`; here we add a column instead).
+            df.align_chunks();
             writer.write_batch(&df)?;
             wrote_any = true;
         }
