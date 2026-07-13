@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `markdup` no longer panics ("RecordBatch requires all its arrays to have an equal number of rows") and truncate its output on inputs with more than one Parquet row group (any file over `CTDDUMP_CHUNK_ROWS` rows — e.g. the merged regional files). A read slice spanning several input row groups collects into multi-chunk columns; the appended single-chunk `is_dup` column left the columns with mismatched chunk boundaries, which the batched Parquet writer rejects. The pass-2 DataFrame is now chunk-aligned before writing
+
 ## [0.12.0] - 2026-07-13
 
 ### Changed
