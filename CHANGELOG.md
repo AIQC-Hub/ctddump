@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-14
+
+### Added
+- "Technical notes" documentation page: a plain-English, symptom/why/fix summary of the non-obvious problems encountered while building `ctddump` — streaming and memory use, the Polars parallel-op memory leak and multi-row-group slice-pushdown bug, the `markdup` chunk-alignment crash, batch threading (worker stack size, pinning Polars' internal threads, largest-first scheduling), `concat`'s per-platform streaming, empty-dataset tolerance, and the harmless HDF5 diagnostics
+
 ## [0.12.2] - 2026-07-13
 
 ### Changed
@@ -157,7 +162,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.2...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.11.0...v0.12.0

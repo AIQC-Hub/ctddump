@@ -20,6 +20,7 @@
 
 - [Configuration](./configuration.md)
 - [Output schema](./output-schema.md)
+- [Technical notes](./technical-notes.md)
 
 # Pipeline scripts
 
