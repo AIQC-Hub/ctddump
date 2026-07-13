@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-07-13
+
+### Changed
+- `batch convert`/`batch header` schedule files **largest-first** and dispatch **one file per work-stealing unit** (`with_max_len(1)`), improving multi-threaded throughput on file sets with mixed sizes. Rayon weights every file equally and cannot split a single file across threads, so previously a large file scheduled late left the other workers idle waiting on it; starting the heavy files first lets the small ones backfill that tail. No change to output (files convert independently)
+
 ## [0.12.1] - 2026-07-13
 
 ### Fixed

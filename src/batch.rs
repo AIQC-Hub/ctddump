@@ -111,8 +111,19 @@ where
         return Ok(0);
     }
 
-    let pairs = compute_output_pairs(&nc_files, output_dir, output_ext)?;
+    let mut pairs = compute_output_pairs(&nc_files, output_dir, output_ext)?;
     check_duplicates(&pairs)?;
+
+    // Schedule the largest files first (a longest-processing-time heuristic).
+    // Rayon has no notion of per-file cost, and a single large file is an
+    // indivisible unit of work: if one is scheduled late, the other workers finish
+    // the small files, find nothing left to steal, and idle until it completes.
+    // Starting the heavy files first lets the small ones backfill that tail, so the
+    // run finishes closer to `total_work / threads` instead of `slowest_file`.
+    // File order does not affect output (each file converts independently).
+    pairs.sort_by_key(|(src, _)| {
+        std::cmp::Reverse(std::fs::metadata(src).map(|m| m.len()).unwrap_or(0))
+    });
 
     if let Some(dir) = output_dir {
         std::fs::create_dir_all(dir)
@@ -133,6 +144,10 @@ where
     let run = || -> Vec<String> {
         pairs
             .par_iter()
+            // One file per scheduling unit: rayon never bundles a contiguous run
+            // of files into a single leaf task, so a free worker always steals the
+            // next individual file instead of waiting on a bundled neighbour.
+            .with_max_len(1)
             .filter_map(|(src, dest)| {
                 process_fn(
                     src.to_str().unwrap_or_default(),
