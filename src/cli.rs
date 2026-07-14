@@ -145,6 +145,15 @@ pub enum ReportFormat {
     Json,
 }
 
+/// Output format for a `report summary` page.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum SummaryFormat {
+    /// Markdown page
+    Md,
+    /// Self-contained HTML page
+    Html,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum ReportSubcommand {
     /// Summarise a Parquet data file
@@ -171,6 +180,27 @@ pub enum ReportSubcommand {
         src: PathBuf,
         /// Output file (default: stdout)
         dest: Option<PathBuf>,
+    },
+    /// Assemble a multi-section summary page for one file stem from the pipeline's
+    /// TSV reports. Section source files are auto-located under `--report-dir` (and
+    /// the markdup duplicates TSV under `--out-dir`); any section whose file is
+    /// absent is skipped.
+    #[command(name = "summary")]
+    Summary {
+        /// File stem whose reports to summarise, e.g. `nrt_ar_ar`
+        stem: String,
+        /// Root of the report/ TSV tree
+        #[arg(long, default_value = "report")]
+        report_dir: PathBuf,
+        /// Root of the output/ data tree (holds the markdup `.dups.tsv`)
+        #[arg(long, default_value = "output")]
+        out_dir: PathBuf,
+        /// Page format
+        #[arg(long, value_enum, default_value_t = SummaryFormat::Md)]
+        format: SummaryFormat,
+        /// Output file (default: stdout)
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
     },
 }
 

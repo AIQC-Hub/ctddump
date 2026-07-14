@@ -1,9 +1,9 @@
 # Helper scripts
 
 The [`scripts/`](https://github.com/AIQC-Hub/ctddump/tree/main/scripts)
-directory ships four Bash scripts that automate the full regional pipeline —
+directory ships five Bash scripts that automate the full regional pipeline —
 the same steps documented one command at a time in the
-[Regional workflows](./examples/arctic.md). They run in four phases, each
+[Regional workflows](./examples/arctic.md). They run in five phases, each
 consuming the previous phase's output:
 
 | Phase | Script | What it does |
@@ -12,6 +12,7 @@ consuming the previous phase's output:
 | 2. Convert | [`convert_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/convert_data.sh) | Convert + merge to Parquet, export + merge headers. |
 | 3. Clean | [`clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh) | Drop bad-QC profiles, drop all-NA profiles, restrict to the region. |
 | 4. De-duplicate | [`dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh) | Mark duplicate profiles, then remove them. |
+| 5. Summarise | [`summary_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/summary_data.sh) | Build a per-unit Markdown/HTML summary page from the reports. |
 
 Each phase handles the **Arctic**, **Baltic**, and **Mediterranean** regions.
 The scripts only orchestrate the `ctddump` binary, so it must be on your `PATH`
@@ -105,11 +106,13 @@ full list of tuning variables.
 |--------|---------|---------|---------|
 | `-t, --threads N` | convert | `2` | Worker threads for each `ctddump` call (kept low because up to 9 units run in parallel by default). |
 | `-s, --src DIR` | download, convert | `source` | Root of the source NetCDF tree (downloaded into / read from). |
-| `-o, --out DIR` | convert, clean, dedup | `output` | Root for the generated / consumed data outputs. |
-| `-r, --report DIR` | convert, clean, dedup | `report` | Root for the summary TSV reports (a sibling of `output/`). |
+| `-o, --out DIR` | convert, clean, dedup, summary | `output` | Root for the generated / consumed data outputs (summary reads the markdup `.dups.tsv` from here). |
+| `-r, --report DIR` | convert, clean, dedup, summary | `report` | Root for the summary TSV reports (a sibling of `output/`). |
+| `-d, --dest DIR` | summary | `summary` | Directory the generated summary pages are written to. |
+| `-f, --format FMT` | summary | `md` | Summary page format: `md` or `html`. |
 | `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
 | `--by-region` | convert, clean, dedup | — | Parallelise per region instead of per unit/file. |
-| `--sequential` | all | — | Process one unit at a time (no parallelism). |
+| `--sequential` | convert, clean, dedup | — | Process one unit at a time (no parallelism). |
 | `-y, --yes` | all | — | Skip the confirmation prompt. |
 | `-h, --help` | all | — | Show the script's help. |
 
@@ -174,9 +177,23 @@ Removes duplicate profiles from the cleaned data. Commands: `markdup`, `report`,
 scripts/dedup_data.sh                        # markdup → report → dedup → report, all regions
 ```
 
+## `summary_data.sh`
+
+Builds one [`report summary`](./commands/report.md#report-summary) page per
+*(region, product)* unit from the TSV reports the earlier phases produced —
+Markdown by default, `--format html` for HTML. It reads reports from `report/`
+(`-r/--report`) and the markdup `.dups.tsv` from `output/` (`-o/--out`), and
+writes one page per stem to `summary/` (`-d/--dest`). A stem with no report files
+(e.g. the not-yet-published Baltic GL product) is skipped, not an error.
+
+```bash
+scripts/summary_data.sh                       # summary/<stem>.md for every unit
+scripts/summary_data.sh -y -f html baltic     # HTML pages, Baltic only, no prompt
+```
+
 ## Full pipeline
 
-Run the four phases in order (skipping prompts) for every region. Log in once
+Run the five phases in order (skipping prompts) for every region. Log in once
 first if you have not already (`scripts/download_data.sh login`):
 
 ```bash
@@ -184,6 +201,7 @@ scripts/download_data.sh -y            # download every region into source/
 scripts/convert_data.sh  -y all
 scripts/clean_data.sh    -y all
 scripts/dedup_data.sh    -y all
+scripts/summary_data.sh  -y all
 ```
 
 For the equivalent commands spelled out step by step, see the

@@ -3,4 +3,5 @@
 
 pub mod format;
 pub mod parquet;
+pub mod summary;
 pub mod yaml;
