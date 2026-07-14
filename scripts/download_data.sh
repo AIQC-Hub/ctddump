@@ -15,7 +15,7 @@
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
 #
 # Options (may appear anywhere on the command line):
-#   -s, --src DIR   directory to download the NetCDF tree into  (default: input)
+#   -s, --src DIR   directory to download the NetCDF tree into  (default: source)
 #   --sequential    Download regions one at a time (default: selected regions
 #                   download in parallel when more than one is chosen).
 #   -y, --yes       Skip the confirmation prompt and start immediately.
@@ -29,7 +29,7 @@ set -euo pipefail
 usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 # ---- Configuration (defaults; override with the options below) -----------
-SRC=input
+SRC=source
 ASSUME_YES=0
 SEQUENTIAL=0
 

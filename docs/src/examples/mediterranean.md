@@ -14,12 +14,13 @@ account and the **Copernicus Marine Toolbox**
 which provides the `copernicusmarine` command used below.
 
 Run everything from a working directory (e.g. `ctddump`). Downloads land under
-`input/`; ctddump writes its results under `output/` (both created as needed).
-Create `input`, enter it, and log in once:
+`source/`; ctddump writes data products under `output/` and summary
+reports under `report/` (all created as needed). Create `source`, enter it, and
+log in once:
 
 ```shell
-mkdir input
-cd input
+mkdir source
+cd source
 copernicusmarine login
 ```
 
@@ -32,7 +33,7 @@ copernicusmarine get -i cmems_obs-ins_med_phybgcwav_mynrt_na_irr --dataset-part 
 # CORA — Mediterranean
 copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "mediterrane/*/*_PR_CT.nc"
 
-# Back to the working root; the steps below use input/ and output/ relative to it.
+# Back to the working root; the steps below use source/, output/, and report/ relative to it.
 cd ..
 ```
 
@@ -40,39 +41,39 @@ cd ..
 
 ```shell
 # NRT MO
-ctddump batch convert nrt_mo --threads 10 --output output/parquet/mo/mo input
+ctddump batch convert nrt_mo --threads 10 --output output/convert/mo/mo source
 
 # NRT GL
-ctddump batch convert nrt_gl --threads 10 --output output/parquet/mo/gl input/INSITU_MED_PHYBGCWAV_DISCRETE_MYNRT_013_035
+ctddump batch convert nrt_gl --threads 10 --output output/convert/mo/gl source/INSITU_MED_PHYBGCWAV_DISCRETE_MYNRT_013_035
 
 # CORA MO
-ctddump batch convert cora --threads 10 --output output/parquet/mo/cora input/INSITU_GLO_PHY_TS_DISCRETE_MY_013_001/cmems_obs-ins_glo_phy-temp-sal_my_cora_irr_202511/mediterrane
+ctddump batch convert cora --threads 10 --output output/convert/mo/cora source/INSITU_GLO_PHY_TS_DISCRETE_MY_013_001/cmems_obs-ins_glo_phy-temp-sal_my_cora_irr_202511/mediterrane
 ```
 
 ### 3. Merge the Parquet files
 
 ```shell
 # NRT MO
-ctddump concat convert --threads 10 output/parquet/mo/mo output/parquet/nrt_mo_mo.parquet
+ctddump concat convert --threads 10 output/convert/mo/mo output/convert/nrt_mo_mo.parquet
 
 # NRT GL
-ctddump concat convert --threads 10 output/parquet/mo/gl output/parquet/nrt_mo_gl.parquet
+ctddump concat convert --threads 10 output/convert/mo/gl output/convert/nrt_mo_gl.parquet
 
 # CORA MO
-ctddump concat convert --threads 10 output/parquet/mo/cora output/parquet/cora_mo.parquet
+ctddump concat convert --threads 10 output/convert/mo/cora output/convert/cora_mo.parquet
 ```
 
 ### 4. Export the metadata (headers)
 
 ```shell
 # NRT MO
-ctddump batch header nrt --threads 10 --pattern "MO_PR_CT_*.nc" --output output/header/mo/mo input/INSITU_MED_PHYBGCWAV_DISCRETE_MYNRT_013_035
+ctddump batch header nrt --threads 10 --pattern "MO_PR_CT_*.nc" --output output/header/mo/mo source/INSITU_MED_PHYBGCWAV_DISCRETE_MYNRT_013_035
 
 # NRT GL
-ctddump batch header nrt --threads 10 --pattern "GL_PR_CT_*.nc" --output output/header/mo/gl input/INSITU_MED_PHYBGCWAV_DISCRETE_MYNRT_013_035
+ctddump batch header nrt --threads 10 --pattern "GL_PR_CT_*.nc" --output output/header/mo/gl source/INSITU_MED_PHYBGCWAV_DISCRETE_MYNRT_013_035
 
 # CORA MO
-ctddump batch header cora --threads 10 --output output/header/mo/cora input/INSITU_GLO_PHY_TS_DISCRETE_MY_013_001/cmems_obs-ins_glo_phy-temp-sal_my_cora_irr_202511/mediterrane
+ctddump batch header cora --threads 10 --output output/header/mo/cora source/INSITU_GLO_PHY_TS_DISCRETE_MY_013_001/cmems_obs-ins_glo_phy-temp-sal_my_cora_irr_202511/mediterrane
 ```
 
 ### 5. Merge the header files
@@ -94,19 +95,19 @@ Write a platform-level summary of each merged Parquet file and a per-file summar
 of each merged header YAML (as TSV).
 
 ```shell
-mkdir -p output/report/convert
+mkdir -p report/convert report/header
 
 # NRT MO
-ctddump report parquet --level platform output/parquet/nrt_mo_mo.parquet output/report/convert/nrt_mo_mo.parquet.tsv
-ctddump report yaml output/header/nrt_mo_mo.yaml output/report/convert/nrt_mo_mo.yaml.tsv
+ctddump report parquet --level platform output/convert/nrt_mo_mo.parquet report/convert/nrt_mo_mo.parquet.tsv
+ctddump report yaml output/header/nrt_mo_mo.yaml report/header/nrt_mo_mo.yaml.tsv
 
 # NRT GL
-ctddump report parquet --level platform output/parquet/nrt_mo_gl.parquet output/report/convert/nrt_mo_gl.parquet.tsv
-ctddump report yaml output/header/nrt_mo_gl.yaml output/report/convert/nrt_mo_gl.yaml.tsv
+ctddump report parquet --level platform output/convert/nrt_mo_gl.parquet report/convert/nrt_mo_gl.parquet.tsv
+ctddump report yaml output/header/nrt_mo_gl.yaml report/header/nrt_mo_gl.yaml.tsv
 
 # CORA MO
-ctddump report parquet --level platform output/parquet/cora_mo.parquet output/report/convert/cora_mo.parquet.tsv
-ctddump report yaml output/header/cora_mo.yaml output/report/convert/cora_mo.yaml.tsv
+ctddump report parquet --level platform output/convert/cora_mo.parquet report/convert/cora_mo.parquet.tsv
+ctddump report yaml output/header/cora_mo.yaml report/header/cora_mo.yaml.tsv
 ```
 
 ## Data cleaning
@@ -118,7 +119,8 @@ step's output, so the stages chain `dropqc → dropna → filter`.
 Create the output directories:
 
 ```shell
-mkdir -p output/clean/dropqc output/clean/dropna output/clean/filter output/report/clean
+mkdir -p output/clean/dropqc output/clean/dropna output/clean/filter \
+         report/clean/dropqc report/clean/dropna report/clean/filter
 ```
 
 ### 1. Drop profiles with bad profile-level QC
@@ -128,13 +130,13 @@ profiles that are OK (`"1"`) or have missing QC are kept.
 
 ```shell
 # NRT MO
-ctddump dropqc output/parquet/nrt_mo_mo.parquet output/clean/dropqc/nrt_mo_mo.parquet
+ctddump dropqc output/convert/nrt_mo_mo.parquet output/clean/dropqc/nrt_mo_mo.parquet
 
 # NRT GL
-ctddump dropqc output/parquet/nrt_mo_gl.parquet output/clean/dropqc/nrt_mo_gl.parquet
+ctddump dropqc output/convert/nrt_mo_gl.parquet output/clean/dropqc/nrt_mo_gl.parquet
 
 # CORA MO
-ctddump dropqc output/parquet/cora_mo.parquet output/clean/dropqc/cora_mo.parquet
+ctddump dropqc output/convert/cora_mo.parquet output/clean/dropqc/cora_mo.parquet
 ```
 
 ### 2. Drop profiles with no usable data
@@ -179,15 +181,24 @@ ctddump filter --mode exclude --min-lon -5.61 --max-lon 0 --min-lat 42 --max-lat
 
 ### 4. Summarise the cleaned data
 
+Summarise each cleaning stage (as TSV), mirroring the data layout under
+`report/clean/`.
+
 ```shell
-# NRT MO
-ctddump report parquet --level platform output/clean/filter/nrt_mo_mo.parquet output/report/clean/nrt_mo_mo.parquet.tsv
+# after dropqc
+ctddump report parquet --level platform output/clean/dropqc/nrt_mo_mo.parquet report/clean/dropqc/nrt_mo_mo.parquet.tsv
+ctddump report parquet --level platform output/clean/dropqc/nrt_mo_gl.parquet report/clean/dropqc/nrt_mo_gl.parquet.tsv
+ctddump report parquet --level platform output/clean/dropqc/cora_mo.parquet   report/clean/dropqc/cora_mo.parquet.tsv
 
-# NRT GL
-ctddump report parquet --level platform output/clean/filter/nrt_mo_gl.parquet output/report/clean/nrt_mo_gl.parquet.tsv
+# after dropna
+ctddump report parquet --level platform output/clean/dropna/nrt_mo_mo.parquet report/clean/dropna/nrt_mo_mo.parquet.tsv
+ctddump report parquet --level platform output/clean/dropna/nrt_mo_gl.parquet report/clean/dropna/nrt_mo_gl.parquet.tsv
+ctddump report parquet --level platform output/clean/dropna/cora_mo.parquet   report/clean/dropna/cora_mo.parquet.tsv
 
-# CORA MO
-ctddump report parquet --level platform output/clean/filter/cora_mo.parquet output/report/clean/cora_mo.parquet.tsv
+# after filter
+ctddump report parquet --level platform output/clean/filter/nrt_mo_mo.parquet report/clean/filter/nrt_mo_mo.parquet.tsv
+ctddump report parquet --level platform output/clean/filter/nrt_mo_gl.parquet report/clean/filter/nrt_mo_gl.parquet.tsv
+ctddump report parquet --level platform output/clean/filter/cora_mo.parquet   report/clean/filter/cora_mo.parquet.tsv
 ```
 
 ## Data de-duplication
@@ -201,7 +212,7 @@ observations.
 Create the output directories:
 
 ```shell
-mkdir -p output/dedup/markdup output/dedup/dedup output/report/dedup/markdup output/report/dedup/dedup
+mkdir -p output/dedup/markdup output/dedup/dedup report/dedup/markdup report/dedup/dedup
 ```
 
 ### 1. Mark duplicate profiles
@@ -221,13 +232,13 @@ ctddump markdup output/clean/filter/cora_mo.parquet output/dedup/markdup/cora_mo
 
 ```shell
 # NRT MO
-ctddump report parquet --level platform output/dedup/markdup/nrt_mo_mo.parquet output/report/dedup/markdup/nrt_mo_mo.parquet.tsv
+ctddump report parquet --level platform output/dedup/markdup/nrt_mo_mo.parquet report/dedup/markdup/nrt_mo_mo.parquet.tsv
 
 # NRT GL
-ctddump report parquet --level platform output/dedup/markdup/nrt_mo_gl.parquet output/report/dedup/markdup/nrt_mo_gl.parquet.tsv
+ctddump report parquet --level platform output/dedup/markdup/nrt_mo_gl.parquet report/dedup/markdup/nrt_mo_gl.parquet.tsv
 
 # CORA MO
-ctddump report parquet --level platform output/dedup/markdup/cora_mo.parquet output/report/dedup/markdup/cora_mo.parquet.tsv
+ctddump report parquet --level platform output/dedup/markdup/cora_mo.parquet report/dedup/markdup/cora_mo.parquet.tsv
 ```
 
 ### 3. Remove duplicate profiles
@@ -247,13 +258,13 @@ ctddump dedup output/dedup/markdup/cora_mo.parquet output/dedup/dedup/cora_mo.pa
 
 ```shell
 # NRT MO
-ctddump report parquet --level platform output/dedup/dedup/nrt_mo_mo.parquet output/report/dedup/dedup/nrt_mo_mo.parquet.tsv
+ctddump report parquet --level platform output/dedup/dedup/nrt_mo_mo.parquet report/dedup/dedup/nrt_mo_mo.parquet.tsv
 
 # NRT GL
-ctddump report parquet --level platform output/dedup/dedup/nrt_mo_gl.parquet output/report/dedup/dedup/nrt_mo_gl.parquet.tsv
+ctddump report parquet --level platform output/dedup/dedup/nrt_mo_gl.parquet report/dedup/dedup/nrt_mo_gl.parquet.tsv
 
 # CORA MO
-ctddump report parquet --level platform output/dedup/dedup/cora_mo.parquet output/report/dedup/dedup/cora_mo.parquet.tsv
+ctddump report parquet --level platform output/dedup/dedup/cora_mo.parquet report/dedup/dedup/cora_mo.parquet.tsv
 ```
 
 > The pipeline is automated by

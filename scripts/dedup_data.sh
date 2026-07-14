@@ -13,7 +13,7 @@
 # latitude (rounded to 3 decimals) — ctddump's defaults. The stages chain
 # through sub-directories of $OUT/dedup:
 #   $OUT/clean/filter -> dedup/markdup -> dedup/dedup
-# and reports land in $OUT/report/dedup/{markdup,dedup}/.
+# and reports land in $REPORT/dedup/{markdup,dedup}/.
 #
 # Usage:
 #   scripts/dedup_data.sh [options] [command] [region ...]
@@ -30,6 +30,7 @@
 # Options (may appear anywhere on the command line):
 #   -o, --out DIR   root for the clean_data.sh outputs and the de-duplicated
 #                   outputs (default: output)
+#   -r, --report DIR  root for the summary reports (default: report)
 #   --chunk-rows N  streaming chunk size in rows for ctddump; lower uses less
 #                   memory but writes more Parquet row groups. Exported as
 #                   CTDDUMP_CHUNK_ROWS   (default: ctddump's built-in 1,000,000)
@@ -49,6 +50,7 @@ usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 # ---- Configuration (defaults; override with the options below) -----------
 OUT=output
+REPORT=report
 CHUNK_ROWS=     # empty → ctddump's built-in default (see CTDDUMP_CHUNK_ROWS)
 ASSUME_YES=0
 PARALLEL=file   # file | region | none
@@ -60,6 +62,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
     --out=*)      OUT="${1#*=}"; shift ;;
+    -r|--report)  REPORT="${2:?--report requires a directory}"; shift 2 ;;
+    --report=*)   REPORT="${1#*=}"; shift ;;
     --chunk-rows) CHUNK_ROWS="${2:?--chunk-rows requires a value}"; shift 2 ;;
     --chunk-rows=*) CHUNK_ROWS="${1#*=}"; shift ;;
     --by-region)  PARALLEL=region; shift ;;
@@ -80,8 +84,8 @@ done
 SRC_DIR="$OUT/clean/filter"          # clean_data.sh cleaned Parquet (input)
 MARK_DIR="$OUT/dedup/markdup"        # marked Parquet + dups TSV
 DEDUP_DIR="$OUT/dedup/dedup"         # final de-duplicated data
-REPORT_MARK_DIR="$OUT/report/dedup/markdup"
-REPORT_DEDUP_DIR="$OUT/report/dedup/dedup"
+REPORT_MARK_DIR="$REPORT/dedup/markdup"
+REPORT_DEDUP_DIR="$REPORT/dedup/dedup"
 
 REGIONS=(arctic baltic mediterranean)
 
@@ -125,6 +129,7 @@ show_config() {  # <cmd> <region...>
     echo "  regions : ${rs[*]}"
     echo "  files   : $nfiles"
     echo "  out     : $OUT"
+    echo "  report  : $REPORT"
     echo "  chunk   : ${CHUNK_ROWS:-default}"
     echo "  mode    : $mode"
   } >&2
