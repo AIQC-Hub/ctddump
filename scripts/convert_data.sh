@@ -20,6 +20,9 @@
 #   -t, --threads N   worker threads for ctddump          (default: 10)
 #   -s, --src DIR     root of the downloaded NetCDF tree  (default: input)
 #   -o, --out DIR     root for the generated outputs      (default: output)
+#   --chunk-rows N    streaming chunk size in rows for ctddump; lower uses less
+#                     memory but writes more Parquet row groups. Exported as
+#                     CTDDUMP_CHUNK_ROWS   (default: ctddump's built-in 1,000,000)
 #   --sequential      Process regions one at a time (default: selected regions
 #                     run in parallel when more than one is chosen).
 #   -y, --yes         Skip the confirmation prompt and start immediately.
@@ -35,6 +38,7 @@ usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 THREADS=10
 SRC=input
 OUT=output
+CHUNK_ROWS=      # empty → ctddump's built-in default (see CTDDUMP_CHUNK_ROWS)
 ASSUME_YES=0
 SEQUENTIAL=0
 
@@ -49,6 +53,8 @@ while [[ $# -gt 0 ]]; do
     --src=*)      SRC="${1#*=}"; shift ;;
     -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
     --out=*)      OUT="${1#*=}"; shift ;;
+    --chunk-rows) CHUNK_ROWS="${2:?--chunk-rows requires a value}"; shift 2 ;;
+    --chunk-rows=*) CHUNK_ROWS="${1#*=}"; shift ;;
     --sequential) SEQUENTIAL=1; shift ;;
     -y|--yes)     ASSUME_YES=1; shift ;;
     -h|--help)    usage; exit 0 ;;
@@ -57,6 +63,10 @@ while [[ $# -gt 0 ]]; do
     *)            ARGS+=("$1"); shift ;;
   esac
 done
+
+# A --chunk-rows value is passed to every ctddump child process via the env var
+# it reads (CTDDUMP_CHUNK_ROWS); leaving it unset keeps ctddump's built-in default.
+[[ -n "$CHUNK_ROWS" ]] && export CTDDUMP_CHUNK_ROWS="$CHUNK_ROWS"
 
 # Copernicus product directories under $SRC.
 NRT_AR_DIR="INSITU_ARC_PHYBGCWAV_DISCRETE_MYNRT_013_031"
@@ -91,6 +101,7 @@ show_config() {  # <cmd> <region...>
     echo "  threads : $THREADS"
     echo "  src     : $SRC"
     echo "  out     : $OUT"
+    echo "  chunk   : ${CHUNK_ROWS:-default}"
     echo "  mode    : $mode"
   } >&2
 }

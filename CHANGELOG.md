@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-14
+
+### Added
+- `convert_data.sh`, `clean_data.sh`, and `dedup_data.sh` accept `--chunk-rows N`, which exports `CTDDUMP_CHUNK_ROWS` for every `ctddump` process the script launches — a per-run knob to trade memory for Parquet row-group count without editing files. Omitting it keeps `ctddump`'s built-in default, and a value already in the environment is respected. The resolved value is shown in each script's configuration block and `--help`
+- "Environment variables" section in the Configuration docs documenting the three tuning variables `ctddump` respects (`CTDDUMP_CHUNK_ROWS`, `POLARS_MAX_THREADS`, `RUST_MIN_STACK`) — what each does and its default — with pointers from the Technical notes and Helper scripts pages
+
 ## [0.13.0] - 2026-07-14
 
 ### Added
@@ -162,7 +168,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.1...v0.12.2
 [0.12.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.0...v0.12.1

@@ -32,9 +32,11 @@ chunks.
 
 The chunk size defaults to one million rows and can be tuned with the
 `CTDDUMP_CHUNK_ROWS` environment variable — smaller means less memory but more
-row groups. Importantly, the chunking only changes *how the output is laid out
-on disk*; the actual data and its order are identical no matter what chunk size
-you pick.
+row groups. The [helper scripts](./scripts.md) expose it as `--chunk-rows N`, and
+it is listed alongside the other tuning variables under
+[Configuration](./configuration.md#environment-variables). Importantly, the
+chunking only changes *how the output is laid out on disk*; the actual data and
+its order are identical no matter what chunk size you pick.
 
 ---
 
