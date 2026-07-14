@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-07-14
+
+### Changed
+- `convert_data.sh` now parallelises **per unit** — one worker per *(region, product)*, where each region's three products are its regional NRT, the Global (GL), and CORA (9 units across the three regions) — instead of per region. Each unit runs its own convert → merge → header → merge-header chain in order. Pass `--by-region` for the previous per-region grouping (its three products in order), or `--sequential` for no parallelism
+- `convert_data.sh`'s `-t/--threads` default drops from `10` to `2`, since up to 9 units may now run at once (each `ctddump` call within a unit still uses this many worker threads). The refactor from hard-coded per-region functions to a generic per-unit pipeline is verified command-identical to the previous script for both `process` and `report`
+
 ## [0.15.0] - 2026-07-14
 
 ### Changed
@@ -174,7 +180,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.2...v0.13.0
