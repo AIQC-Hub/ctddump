@@ -18,8 +18,9 @@
 #
 # Options (may appear anywhere on the command line):
 #   -t, --threads N   worker threads for ctddump          (default: 10)
-#   -s, --src DIR     root of the downloaded NetCDF tree  (default: input)
-#   -o, --out DIR     root for the generated outputs      (default: output)
+#   -s, --src DIR     root of the downloaded NetCDF tree  (default: source)
+#   -o, --out DIR     root for the generated data outputs (default: output)
+#   -r, --report DIR  root for the summary reports        (default: report)
 #   --chunk-rows N    streaming chunk size in rows for ctddump; lower uses less
 #                     memory but writes more Parquet row groups. Exported as
 #                     CTDDUMP_CHUNK_ROWS   (default: ctddump's built-in 1,000,000)
@@ -36,8 +37,9 @@ usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 # ---- Configuration (defaults; override with the options below) -----------
 THREADS=10
-SRC=input
+SRC=source
 OUT=output
+REPORT=report
 CHUNK_ROWS=      # empty → ctddump's built-in default (see CTDDUMP_CHUNK_ROWS)
 ASSUME_YES=0
 SEQUENTIAL=0
@@ -53,6 +55,8 @@ while [[ $# -gt 0 ]]; do
     --src=*)      SRC="${1#*=}"; shift ;;
     -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
     --out=*)      OUT="${1#*=}"; shift ;;
+    -r|--report)  REPORT="${2:?--report requires a directory}"; shift 2 ;;
+    --report=*)   REPORT="${1#*=}"; shift ;;
     --chunk-rows) CHUNK_ROWS="${2:?--chunk-rows requires a value}"; shift 2 ;;
     --chunk-rows=*) CHUNK_ROWS="${1#*=}"; shift ;;
     --sequential) SEQUENTIAL=1; shift ;;
@@ -101,6 +105,7 @@ show_config() {  # <cmd> <region...>
     echo "  threads : $THREADS"
     echo "  src     : $SRC"
     echo "  out     : $OUT"
+    echo "  report  : $REPORT"
     echo "  chunk   : ${CHUNK_ROWS:-default}"
     echo "  mode    : $mode"
   } >&2
@@ -167,7 +172,7 @@ report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
 # ---- Per-region pipelines ------------------------------------------------
 
 process_arctic() {
-  local P="$OUT/parquet" H="$OUT/header"
+  local P="$OUT/convert" H="$OUT/header"
   local nrt="$SRC/$NRT_AR_DIR" cora="$SRC/$CORA/arctic"
 
   convert nrt_ar "$SRC"  "$P/ar/ar"
@@ -193,7 +198,7 @@ process_arctic() {
 # downstream scripts skip the missing nrt_bo_gl outputs. They activate
 # automatically once the GL data becomes available.
 process_baltic() {
-  local P="$OUT/parquet" H="$OUT/header"
+  local P="$OUT/convert" H="$OUT/header"
   local nrt="$SRC/$NRT_BO_DIR" cora="$SRC/$CORA/baltic"
 
   convert nrt_bo "$SRC"  "$P/bo/bo"
@@ -214,7 +219,7 @@ process_baltic() {
 }
 
 process_mediterranean() {
-  local P="$OUT/parquet" H="$OUT/header"
+  local P="$OUT/convert" H="$OUT/header"
   local nrt="$SRC/$NRT_MO_DIR" cora="$SRC/$CORA/mediterrane"
 
   convert nrt_mo "$SRC"  "$P/mo/mo"
@@ -235,38 +240,39 @@ process_mediterranean() {
 }
 
 # ---- Per-region reports (summaries of the merged outputs) ----------------
-# Parquet reports use the platform level; each report lands in
-# $OUT/report/convert/ named after its source, with a .parquet.tsv /
-# .yaml.tsv suffix. (clean_data.sh writes its reports to $OUT/report/clean/.)
+# Parquet reports use the platform level. Parquet-data summaries land in
+# $REPORT/convert/ and header (YAML) summaries in $REPORT/header/, each named
+# after its source with a .parquet.tsv / .yaml.tsv suffix. (clean_data.sh writes
+# its reports under $REPORT/clean/, dedup_data.sh under $REPORT/dedup/.)
 
 report_arctic() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
-  report_parquet "$P/nrt_ar_ar.parquet" "$R/nrt_ar_ar.parquet.tsv"
-  report_parquet "$P/nrt_ar_gl.parquet" "$R/nrt_ar_gl.parquet.tsv"
-  report_parquet "$P/cora_ar.parquet"   "$R/cora_ar.parquet.tsv"
-  report_yaml    "$H/nrt_ar_ar.yaml"     "$R/nrt_ar_ar.yaml.tsv"
-  report_yaml    "$H/nrt_ar_gl.yaml"     "$R/nrt_ar_gl.yaml.tsv"
-  report_yaml    "$H/cora_ar.yaml"       "$R/cora_ar.yaml.tsv"
+  local P="$OUT/convert" H="$OUT/header" RC="$REPORT/convert" RH="$REPORT/header"
+  report_parquet "$P/nrt_ar_ar.parquet" "$RC/nrt_ar_ar.parquet.tsv"
+  report_parquet "$P/nrt_ar_gl.parquet" "$RC/nrt_ar_gl.parquet.tsv"
+  report_parquet "$P/cora_ar.parquet"   "$RC/cora_ar.parquet.tsv"
+  report_yaml    "$H/nrt_ar_ar.yaml"     "$RH/nrt_ar_ar.yaml.tsv"
+  report_yaml    "$H/nrt_ar_gl.yaml"     "$RH/nrt_ar_gl.yaml.tsv"
+  report_yaml    "$H/cora_ar.yaml"       "$RH/cora_ar.yaml.tsv"
 }
 
 report_baltic() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
-  report_parquet "$P/nrt_bo_bo.parquet" "$R/nrt_bo_bo.parquet.tsv"
-  report_parquet "$P/nrt_bo_gl.parquet" "$R/nrt_bo_gl.parquet.tsv"
-  report_parquet "$P/cora_bo.parquet"   "$R/cora_bo.parquet.tsv"
-  report_yaml    "$H/nrt_bo_bo.yaml"     "$R/nrt_bo_bo.yaml.tsv"
-  report_yaml    "$H/nrt_bo_gl.yaml"     "$R/nrt_bo_gl.yaml.tsv"
-  report_yaml    "$H/cora_bo.yaml"       "$R/cora_bo.yaml.tsv"
+  local P="$OUT/convert" H="$OUT/header" RC="$REPORT/convert" RH="$REPORT/header"
+  report_parquet "$P/nrt_bo_bo.parquet" "$RC/nrt_bo_bo.parquet.tsv"
+  report_parquet "$P/nrt_bo_gl.parquet" "$RC/nrt_bo_gl.parquet.tsv"
+  report_parquet "$P/cora_bo.parquet"   "$RC/cora_bo.parquet.tsv"
+  report_yaml    "$H/nrt_bo_bo.yaml"     "$RH/nrt_bo_bo.yaml.tsv"
+  report_yaml    "$H/nrt_bo_gl.yaml"     "$RH/nrt_bo_gl.yaml.tsv"
+  report_yaml    "$H/cora_bo.yaml"       "$RH/cora_bo.yaml.tsv"
 }
 
 report_mediterranean() {
-  local P="$OUT/parquet" H="$OUT/header" R="$OUT/report/convert"
-  report_parquet "$P/nrt_mo_mo.parquet" "$R/nrt_mo_mo.parquet.tsv"
-  report_parquet "$P/nrt_mo_gl.parquet" "$R/nrt_mo_gl.parquet.tsv"
-  report_parquet "$P/cora_mo.parquet"   "$R/cora_mo.parquet.tsv"
-  report_yaml    "$H/nrt_mo_mo.yaml"     "$R/nrt_mo_mo.yaml.tsv"
-  report_yaml    "$H/nrt_mo_gl.yaml"     "$R/nrt_mo_gl.yaml.tsv"
-  report_yaml    "$H/cora_mo.yaml"       "$R/cora_mo.yaml.tsv"
+  local P="$OUT/convert" H="$OUT/header" RC="$REPORT/convert" RH="$REPORT/header"
+  report_parquet "$P/nrt_mo_mo.parquet" "$RC/nrt_mo_mo.parquet.tsv"
+  report_parquet "$P/nrt_mo_gl.parquet" "$RC/nrt_mo_gl.parquet.tsv"
+  report_parquet "$P/cora_mo.parquet"   "$RC/cora_mo.parquet.tsv"
+  report_yaml    "$H/nrt_mo_mo.yaml"     "$RH/nrt_mo_mo.yaml.tsv"
+  report_yaml    "$H/nrt_mo_gl.yaml"     "$RH/nrt_mo_gl.yaml.tsv"
+  report_yaml    "$H/cora_mo.yaml"       "$RH/cora_mo.yaml.tsv"
 }
 
 # ---- Dispatch ------------------------------------------------------------

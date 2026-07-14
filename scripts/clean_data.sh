@@ -7,11 +7,12 @@
 #   dropqc   Drop profiles flagged bad in time_qc / position_qc.
 #   dropna   Drop profiles that are all-NA in temp, psal, or pres.
 #   filter   Keep profiles inside the region's bounding box(es).
-#   report   Summarise the cleaned Parquet outputs as TSV.
+#   report   Summarise each stage's Parquet output as TSV.
 #
 # The stages chain through sub-directories of $OUT/clean:
-#   $OUT/parquet -> clean/dropqc -> clean/dropna -> clean/filter
-# and reports land in $OUT/report/clean/  (convert_data.sh uses report/convert/).
+#   $OUT/convert -> clean/dropqc -> clean/dropna -> clean/filter
+# and a summary of each stage lands in $REPORT/clean/{dropqc,dropna,filter}/
+# (convert_data.sh writes to $REPORT/convert/ and $REPORT/header/).
 #
 # Usage:
 #   scripts/clean_data.sh [options] [command] [region ...]
@@ -29,6 +30,7 @@
 # Options (may appear anywhere on the command line):
 #   -o, --out DIR   root for the convert_data.sh outputs and the cleaned
 #                   outputs (default: output)
+#   -r, --report DIR  root for the summary reports (default: report)
 #   --chunk-rows N  streaming chunk size in rows for ctddump; lower uses less
 #                   memory but writes more Parquet row groups. Exported as
 #                   CTDDUMP_CHUNK_ROWS   (default: ctddump's built-in 1,000,000)
@@ -40,7 +42,7 @@
 #
 # By default the selected files (a <stem> within a region) are processed in
 # parallel, one worker per file. Requires ctddump on PATH, and convert_data.sh's
-# merged Parquet in <out>/parquet.
+# merged Parquet in <out>/convert.
 
 set -euo pipefail
 
@@ -48,6 +50,7 @@ usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 # ---- Configuration (defaults; override with the options below) -----------
 OUT=output
+REPORT=report
 CHUNK_ROWS=     # empty → ctddump's built-in default (see CTDDUMP_CHUNK_ROWS)
 ASSUME_YES=0
 PARALLEL=file   # file | region | none
@@ -59,6 +62,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
     --out=*)      OUT="${1#*=}"; shift ;;
+    -r|--report)  REPORT="${2:?--report requires a directory}"; shift 2 ;;
+    --report=*)   REPORT="${1#*=}"; shift ;;
     --chunk-rows) CHUNK_ROWS="${2:?--chunk-rows requires a value}"; shift 2 ;;
     --chunk-rows=*) CHUNK_ROWS="${1#*=}"; shift ;;
     --by-region)  PARALLEL=region; shift ;;
@@ -76,11 +81,14 @@ done
 [[ -n "$CHUNK_ROWS" ]] && export CTDDUMP_CHUNK_ROWS="$CHUNK_ROWS"
 
 # Stage directories (each step reads the previous one).
-SRC_DIR="$OUT/parquet"          # convert_data.sh merged Parquet (input)
+SRC_DIR="$OUT/convert"          # convert_data.sh merged Parquet (input)
 QC_DIR="$OUT/clean/dropqc"
 NA_DIR="$OUT/clean/dropna"
 CLEAN_DIR="$OUT/clean/filter"   # final cleaned data
-REPORT_DIR="$OUT/report/clean"
+# Each stage's report mirrors its data dir under $REPORT/clean/.
+REPORT_QC_DIR="$REPORT/clean/dropqc"
+REPORT_NA_DIR="$REPORT/clean/dropna"
+REPORT_FILTER_DIR="$REPORT/clean/filter"
 
 REGIONS=(arctic baltic mediterranean)
 
@@ -124,6 +132,7 @@ show_config() {  # <cmd> <region...>
     echo "  regions : ${rs[*]}"
     echo "  files   : $nfiles"
     echo "  out     : $OUT"
+    echo "  report  : $REPORT"
     echo "  chunk   : ${CHUNK_ROWS:-default}"
     echo "  mode    : $mode"
   } >&2
@@ -190,14 +199,34 @@ do_filter() {  # <region> <stem>
   "filter_box_$1" "$NA_DIR/$2.parquet" "$CLEAN_DIR/$2.parquet"
 }
 
-do_report() {  # <region> <stem>
-  [[ -f "$CLEAN_DIR/$2.parquet" ]] || { log "skip report $2 (missing input)"; return 0; }
-  mkdir -p "$REPORT_DIR"; log "report $2"
-  ctddump report parquet --level platform "$CLEAN_DIR/$2.parquet" "$REPORT_DIR/$2.parquet.tsv"
+do_report_dropqc() {  # <region> <stem>
+  [[ -f "$QC_DIR/$2.parquet" ]] || { log "skip report (dropqc) $2 (missing input)"; return 0; }
+  mkdir -p "$REPORT_QC_DIR"; log "report (dropqc) $2"
+  ctddump report parquet --level platform "$QC_DIR/$2.parquet" "$REPORT_QC_DIR/$2.parquet.tsv"
 }
 
-# Run <cmd> for one file. For `all` the steps chain dropqc -> dropna -> filter ->
-# report on that file (each stage reads the previous stage's output).
+do_report_dropna() {  # <region> <stem>
+  [[ -f "$NA_DIR/$2.parquet" ]] || { log "skip report (dropna) $2 (missing input)"; return 0; }
+  mkdir -p "$REPORT_NA_DIR"; log "report (dropna) $2"
+  ctddump report parquet --level platform "$NA_DIR/$2.parquet" "$REPORT_NA_DIR/$2.parquet.tsv"
+}
+
+do_report_filter() {  # <region> <stem>
+  [[ -f "$CLEAN_DIR/$2.parquet" ]] || { log "skip report (filter) $2 (missing input)"; return 0; }
+  mkdir -p "$REPORT_FILTER_DIR"; log "report (filter) $2"
+  ctddump report parquet --level platform "$CLEAN_DIR/$2.parquet" "$REPORT_FILTER_DIR/$2.parquet.tsv"
+}
+
+# The standalone `report` command summarises whichever stages exist.
+do_report() {  # <region> <stem>
+  [[ -d "$QC_DIR" ]]    && do_report_dropqc "$1" "$2"
+  [[ -d "$NA_DIR" ]]    && do_report_dropna "$1" "$2"
+  [[ -d "$CLEAN_DIR" ]] && do_report_filter "$1" "$2"
+}
+
+# Run <cmd> for one file. For `all` the steps chain dropqc -> dropna -> filter on
+# that file (each stage reads the previous stage's output), reporting each stage
+# as it completes.
 run_file() {  # <cmd> <region> <stem>
   local cmd="$1" r="$2" s="$3"
   case "$cmd" in
@@ -205,7 +234,9 @@ run_file() {  # <cmd> <region> <stem>
     dropna) do_dropna "$r" "$s" ;;
     filter) do_filter "$r" "$s" ;;
     report) do_report "$r" "$s" ;;
-    all)    do_dropqc "$r" "$s"; do_dropna "$r" "$s"; do_filter "$r" "$s"; do_report "$r" "$s" ;;
+    all)    do_dropqc "$r" "$s"; do_report_dropqc "$r" "$s"
+            do_dropna "$r" "$s"; do_report_dropna "$r" "$s"
+            do_filter "$r" "$s"; do_report_filter "$r" "$s" ;;
   esac
 }
 

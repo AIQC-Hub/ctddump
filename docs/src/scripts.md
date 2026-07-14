@@ -8,7 +8,7 @@ consuming the previous phase's output:
 
 | Phase | Script | What it does |
 |-------|--------|--------------|
-| 1. Download | [`download_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/download_data.sh) | Download the source NetCDF from Copernicus Marine into `input/`. |
+| 1. Download | [`download_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/download_data.sh) | Download the source NetCDF from Copernicus Marine into `source/`. |
 | 2. Convert | [`convert_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/convert_data.sh) | Convert + merge to Parquet, export + merge headers. |
 | 3. Clean | [`clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh) | Drop bad-QC profiles, drop all-NA profiles, restrict to the region. |
 | 4. De-duplicate | [`dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh) | Mark duplicate profiles, then remove them. |
@@ -21,8 +21,8 @@ The scripts only orchestrate the `ctddump` binary, so it must be on your `PATH`
 ## Running a script
 
 Run the scripts from a working directory (e.g. `ctddump`). Source NetCDF is read
-from `input/` and results are written under `output/`; both are created as
-needed. They share one interface:
+from `source/`, data products are written under `output/`, and summary reports
+under `report/`; all are created as needed. They share one interface:
 
 ```
 scripts/<script>.sh [options] [command] [region ...]
@@ -45,6 +45,8 @@ Configuration:
   regions : arctic baltic mediterranean
   files   : 8
   out     : output
+  report  : report
+  chunk   : default
   mode    : parallel (per file)
 Proceed? [y/N]
 ```
@@ -96,8 +98,9 @@ full list of tuning variables.
 | Option | Scripts | Default | Meaning |
 |--------|---------|---------|---------|
 | `-t, --threads N` | convert | `10` | Worker threads for `ctddump`. |
-| `-s, --src DIR` | download, convert | `input` | Root of the source NetCDF tree (downloaded into / read from). |
-| `-o, --out DIR` | convert, clean, dedup | `output` | Root for the generated / consumed outputs. |
+| `-s, --src DIR` | download, convert | `source` | Root of the source NetCDF tree (downloaded into / read from). |
+| `-o, --out DIR` | convert, clean, dedup | `output` | Root for the generated / consumed data outputs. |
+| `-r, --report DIR` | convert, clean, dedup | `report` | Root for the summary TSV reports (a sibling of `output/`). |
 | `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
 | `--by-region` | clean, dedup | — | Parallelise per region instead of per file. |
 | `--sequential` | all | — | Process one unit at a time (no parallelism). |
@@ -120,11 +123,11 @@ Downloads the source NetCDF from Copernicus Marine. Commands: `login`,
 
 ```bash
 scripts/download_data.sh login             # one-time Copernicus login
-scripts/download_data.sh                   # download every region into input/
+scripts/download_data.sh                   # download every region into source/
 scripts/download_data.sh download arctic   # just the Arctic
 ```
 
-Each product's directory is downloaded under `input/` (override with
+Each product's directory is downloaded under `source/` (override with
 `-s/--src`), ready for `convert_data.sh`.
 
 ## `convert_data.sh`
@@ -137,16 +140,17 @@ scripts/convert_data.sh all                # process + report, all regions
 scripts/convert_data.sh process arctic     # just convert + merge the Arctic
 ```
 
-Reads the source NetCDF from `input/` (`-s/--src`); writes merged Parquet to
-`output/parquet/`, merged headers to `output/header/`, and summaries to
-`output/report/convert/`.
+Reads the source NetCDF from `source/` (`-s/--src`); writes merged Parquet to
+`output/convert/`, merged headers to `output/header/`, and summaries to
+`report/convert/` (Parquet data) and `report/header/` (header YAML).
 
 ## `clean_data.sh`
 
 Cleans the merged Parquet from phase 1. Commands: `dropqc`, `dropna`, `filter`,
 `report`, `all` *(default)*. The stages chain
-`output/parquet → clean/dropqc → clean/dropna → clean/filter`, with summaries in
-`output/report/clean/`. The `filter` step applies each region's bounding box(es).
+`output/convert → clean/dropqc → clean/dropna → clean/filter`, with a summary of
+each stage in `report/clean/{dropqc,dropna,filter}/`. The `filter` step applies
+each region's bounding box(es).
 
 ```bash
 scripts/clean_data.sh                       # dropqc → dropna → filter → report, all regions
@@ -158,7 +162,7 @@ scripts/clean_data.sh -y baltic             # skip the prompt, Baltic only
 Removes duplicate profiles from the cleaned data. Commands: `markdup`, `report`,
 `dedup`, `all` *(default)*. It reads `output/clean/filter`, writes marked data to
 `output/dedup/markdup/` (plus a duplicates TSV) and de-duplicated data to
-`output/dedup/dedup/`, with summaries under `output/report/dedup/`.
+`output/dedup/dedup/`, with summaries under `report/dedup/{markdup,dedup}/`.
 
 ```bash
 scripts/dedup_data.sh                        # markdup → report → dedup → report, all regions
@@ -170,7 +174,7 @@ Run the four phases in order (skipping prompts) for every region. Log in once
 first if you have not already (`scripts/download_data.sh login`):
 
 ```bash
-scripts/download_data.sh -y            # download every region into input/
+scripts/download_data.sh -y            # download every region into source/
 scripts/convert_data.sh  -y all
 scripts/clean_data.sh    -y all
 scripts/dedup_data.sh    -y all
