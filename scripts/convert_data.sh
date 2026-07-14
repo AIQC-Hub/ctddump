@@ -17,17 +17,22 @@
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
 #
 # Options (may appear anywhere on the command line):
-#   -t, --threads N   worker threads for ctddump          (default: 10)
-#   -s, --src DIR     root of the downloaded NetCDF tree  (default: source)
-#   -o, --out DIR     root for the generated data outputs (default: output)
-#   -r, --report DIR  root for the summary reports        (default: report)
+#   -t, --threads N   worker threads for ctddump           (default: 2)
+#   -s, --src DIR     root of the downloaded NetCDF tree   (default: source)
+#   -o, --out DIR     root for the generated data outputs  (default: output)
+#   -r, --report DIR  root for the summary reports         (default: report)
 #   --chunk-rows N    streaming chunk size in rows for ctddump; lower uses less
 #                     memory but writes more Parquet row groups. Exported as
 #                     CTDDUMP_CHUNK_ROWS   (default: ctddump's built-in 1,000,000)
-#   --sequential      Process regions one at a time (default: selected regions
-#                     run in parallel when more than one is chosen).
+#   --by-region     Parallelise per region instead of per unit (coarser: one
+#                   worker per region, its three products processed in order).
+#   --sequential    Process everything one unit at a time (no parallelism).
 #   -y, --yes         Skip the confirmation prompt and start immediately.
 #   -h, --help        Show this help.
+#
+# By default each (region, product) unit — the regional NRT, the Global (GL), and
+# the CORA product of every selected region — runs in parallel, one worker per
+# unit. Each ctddump call within a unit still uses -t/--threads worker threads.
 #
 # Requires: ctddump on PATH, and the source NetCDF in <src> (see download_data.sh).
 
@@ -36,13 +41,13 @@ set -euo pipefail
 usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 # ---- Configuration (defaults; override with the options below) -----------
-THREADS=10
+THREADS=2
 SRC=source
 OUT=output
 REPORT=report
 CHUNK_ROWS=      # empty → ctddump's built-in default (see CTDDUMP_CHUNK_ROWS)
 ASSUME_YES=0
-SEQUENTIAL=0
+PARALLEL=unit   # unit | region | none
 
 # ---- Parse options -------------------------------------------------------
 # Options may appear anywhere; the remaining words are the command and regions.
@@ -59,7 +64,8 @@ while [[ $# -gt 0 ]]; do
     --report=*)   REPORT="${1#*=}"; shift ;;
     --chunk-rows) CHUNK_ROWS="${2:?--chunk-rows requires a value}"; shift 2 ;;
     --chunk-rows=*) CHUNK_ROWS="${1#*=}"; shift ;;
-    --sequential) SEQUENTIAL=1; shift ;;
+    --by-region)  PARALLEL=region; shift ;;
+    --sequential) PARALLEL=none; shift ;;
     -y|--yes)     ASSUME_YES=1; shift ;;
     -h|--help)    usage; exit 0 ;;
     --)           shift; ARGS+=("$@"); break ;;
@@ -84,7 +90,7 @@ REGIONS=(arctic baltic mediterranean)
 # Announce each step (timestamped, to stderr) so the currently running process
 # is visible.
 
-# Each parallel region worker sets REGION so its lines are tagged "[region]".
+# Each parallel worker sets REGION so its lines are tagged "[region]".
 log() {
   local p=""
   [[ -n "${REGION:-}" ]] && p="[$REGION] "
@@ -96,12 +102,19 @@ log() {
 # with a hint rather than hang.
 show_config() {  # <cmd> <region...>
   local cmd="$1"; shift
-  local mode="sequential"
-  [[ "$SEQUENTIAL" != 1 && $# -gt 1 ]] && mode="parallel (per region)"
+  local -a rs=("$@")
+  local nunits=$(( ${#rs[@]} * ${#PRODUCTS[@]} ))
+  local mode
+  case "$PARALLEL" in
+    none)   mode="sequential" ;;
+    region) [[ ${#rs[@]} -gt 1 ]] && mode="parallel (per region)" || mode="sequential" ;;
+    unit)   [[ $nunits -gt 1 ]] && mode="parallel (per unit)" || mode="sequential" ;;
+  esac
   {
     echo "Configuration:"
     echo "  command : $cmd"
-    echo "  regions : $*"
+    echo "  regions : ${rs[*]}"
+    echo "  units   : $nunits"
     echo "  threads : $THREADS"
     echo "  src     : $SRC"
     echo "  out     : $OUT"
@@ -169,110 +182,75 @@ report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
   ctddump report yaml "$1" "$2"
 }
 
-# ---- Per-region pipelines ------------------------------------------------
+# ---- Per-unit pipeline ---------------------------------------------------
+# The work of a region splits into three independent products (units), each with
+# its own output sub-directory, so they can run in parallel:
+#   regional  the region's own NRT product (AR / BO / MO)
+#   gl        the Global (GL) NRT product
+#   cora      the CORA product
+PRODUCTS=(regional gl cora)
 
-process_arctic() {
-  local P="$OUT/convert" H="$OUT/header"
-  local nrt="$SRC/$NRT_AR_DIR" cora="$SRC/$CORA/arctic"
-
-  convert nrt_ar "$SRC"  "$P/ar/ar"
-  convert nrt_gl "$nrt"  "$P/ar/gl"
-  convert cora   "$cora" "$P/ar/cora"
-
-  merge "$P/ar/ar"   "$P/nrt_ar_ar.parquet"
-  merge "$P/ar/gl"   "$P/nrt_ar_gl.parquet"
-  merge "$P/ar/cora" "$P/cora_ar.parquet"
-
-  header_nrt "AR_PR_CT_*.nc" "$nrt"  "$H/ar/ar"
-  header_nrt "GL_PR_CT_*.nc" "$nrt"  "$H/ar/gl"
-  header_cora                "$cora" "$H/ar/cora"
-
-  merge_hdr "$H/ar/ar"   "$H/nrt_ar_ar.yaml"
-  merge_hdr "$H/ar/gl"   "$H/nrt_ar_gl.yaml"
-  merge_hdr "$H/ar/cora" "$H/cora_ar.yaml"
+# Per-region constants: "<code> <nrt_dir> <cora_subdir>". Note the CORA sub-dir
+# for the Mediterranean is "mediterrane" (as published), not "mediterranean".
+region_meta() {  # <region>
+  case "$1" in
+    arctic)        echo "ar $NRT_AR_DIR arctic" ;;
+    baltic)        echo "bo $NRT_BO_DIR baltic" ;;
+    mediterranean) echo "mo $NRT_MO_DIR mediterrane" ;;
+  esac
 }
 
-# The Baltic workflow uses the regional NRT (BO), Global (GL), and CORA products.
-# Copernicus does not yet publish the Global (GL) data for the Baltic, so the GL
-# steps currently match no files: the tools report this and write nothing, and the
-# downstream scripts skip the missing nrt_bo_gl outputs. They activate
-# automatically once the GL data becomes available.
-process_baltic() {
+# Convert + merge Parquet and export + merge headers for one (region, product).
+# Copernicus does not yet publish the Global (GL) product for the Baltic, so the
+# baltic/gl unit currently matches no files: the tools write nothing and the
+# downstream scripts skip the missing nrt_bo_gl outputs, activating automatically
+# once the GL data becomes available.
+process_unit() {  # <region> <product: regional|gl|cora>
+  local r="$1" prod="$2" rc nrtdir corasub
+  read -r rc nrtdir corasub <<<"$(region_meta "$r")"
   local P="$OUT/convert" H="$OUT/header"
-  local nrt="$SRC/$NRT_BO_DIR" cora="$SRC/$CORA/baltic"
-
-  convert nrt_bo "$SRC"  "$P/bo/bo"
-  convert nrt_gl "$nrt"  "$P/bo/gl"
-  convert cora   "$cora" "$P/bo/cora"
-
-  merge "$P/bo/bo"   "$P/nrt_bo_bo.parquet"
-  merge "$P/bo/gl"   "$P/nrt_bo_gl.parquet"
-  merge "$P/bo/cora" "$P/cora_bo.parquet"
-
-  header_nrt "BO_PR_CT_*.nc" "$nrt"  "$H/bo/bo"
-  header_nrt "GL_PR_CT_*.nc" "$nrt"  "$H/bo/gl"
-  header_cora                "$cora" "$H/bo/cora"
-
-  merge_hdr "$H/bo/bo"   "$H/nrt_bo_bo.yaml"
-  merge_hdr "$H/bo/gl"   "$H/nrt_bo_gl.yaml"
-  merge_hdr "$H/bo/cora" "$H/cora_bo.yaml"
+  local nrt="$SRC/$nrtdir" cora="$SRC/$CORA/$corasub"
+  case "$prod" in
+    regional)
+      local rcu; rcu=$(printf '%s' "$rc" | tr '[:lower:]' '[:upper:]')
+      convert    "nrt_$rc"          "$SRC" "$P/$rc/$rc"
+      merge      "$P/$rc/$rc"              "$P/nrt_${rc}_${rc}.parquet"
+      header_nrt "${rcu}_PR_CT_*.nc" "$nrt" "$H/$rc/$rc"
+      merge_hdr  "$H/$rc/$rc"              "$H/nrt_${rc}_${rc}.yaml"
+      ;;
+    gl)
+      convert    nrt_gl          "$nrt" "$P/$rc/gl"
+      merge      "$P/$rc/gl"             "$P/nrt_${rc}_gl.parquet"
+      header_nrt "GL_PR_CT_*.nc" "$nrt" "$H/$rc/gl"
+      merge_hdr  "$H/$rc/gl"             "$H/nrt_${rc}_gl.yaml"
+      ;;
+    cora)
+      convert     cora          "$cora" "$P/$rc/cora"
+      merge       "$P/$rc/cora"          "$P/cora_${rc}.parquet"
+      header_cora "$cora"                "$H/$rc/cora"
+      merge_hdr   "$H/$rc/cora"          "$H/cora_${rc}.yaml"
+      ;;
+  esac
 }
 
-process_mediterranean() {
-  local P="$OUT/convert" H="$OUT/header"
-  local nrt="$SRC/$NRT_MO_DIR" cora="$SRC/$CORA/mediterrane"
-
-  convert nrt_mo "$SRC"  "$P/mo/mo"
-  convert nrt_gl "$nrt"  "$P/mo/gl"
-  convert cora   "$cora" "$P/mo/cora"
-
-  merge "$P/mo/mo"   "$P/nrt_mo_mo.parquet"
-  merge "$P/mo/gl"   "$P/nrt_mo_gl.parquet"
-  merge "$P/mo/cora" "$P/cora_mo.parquet"
-
-  header_nrt "MO_PR_CT_*.nc" "$nrt"  "$H/mo/mo"
-  header_nrt "GL_PR_CT_*.nc" "$nrt"  "$H/mo/gl"
-  header_cora                "$cora" "$H/mo/cora"
-
-  merge_hdr "$H/mo/mo"   "$H/nrt_mo_mo.yaml"
-  merge_hdr "$H/mo/gl"   "$H/nrt_mo_gl.yaml"
-  merge_hdr "$H/mo/cora" "$H/cora_mo.yaml"
-}
-
-# ---- Per-region reports (summaries of the merged outputs) ----------------
+# ---- Per-unit reports (summaries of the merged outputs) ------------------
 # Parquet reports use the platform level. Parquet-data summaries land in
 # $REPORT/convert/ and header (YAML) summaries in $REPORT/header/, each named
 # after its source with a .parquet.tsv / .yaml.tsv suffix. (clean_data.sh writes
 # its reports under $REPORT/clean/, dedup_data.sh under $REPORT/dedup/.)
 
-report_arctic() {
+report_unit() {  # <region> <product: regional|gl|cora>
+  local r="$1" prod="$2" rc _nrtdir _corasub
+  read -r rc _nrtdir _corasub <<<"$(region_meta "$r")"
   local P="$OUT/convert" H="$OUT/header" RC="$REPORT/convert" RH="$REPORT/header"
-  report_parquet "$P/nrt_ar_ar.parquet" "$RC/nrt_ar_ar.parquet.tsv"
-  report_parquet "$P/nrt_ar_gl.parquet" "$RC/nrt_ar_gl.parquet.tsv"
-  report_parquet "$P/cora_ar.parquet"   "$RC/cora_ar.parquet.tsv"
-  report_yaml    "$H/nrt_ar_ar.yaml"     "$RH/nrt_ar_ar.yaml.tsv"
-  report_yaml    "$H/nrt_ar_gl.yaml"     "$RH/nrt_ar_gl.yaml.tsv"
-  report_yaml    "$H/cora_ar.yaml"       "$RH/cora_ar.yaml.tsv"
-}
-
-report_baltic() {
-  local P="$OUT/convert" H="$OUT/header" RC="$REPORT/convert" RH="$REPORT/header"
-  report_parquet "$P/nrt_bo_bo.parquet" "$RC/nrt_bo_bo.parquet.tsv"
-  report_parquet "$P/nrt_bo_gl.parquet" "$RC/nrt_bo_gl.parquet.tsv"
-  report_parquet "$P/cora_bo.parquet"   "$RC/cora_bo.parquet.tsv"
-  report_yaml    "$H/nrt_bo_bo.yaml"     "$RH/nrt_bo_bo.yaml.tsv"
-  report_yaml    "$H/nrt_bo_gl.yaml"     "$RH/nrt_bo_gl.yaml.tsv"
-  report_yaml    "$H/cora_bo.yaml"       "$RH/cora_bo.yaml.tsv"
-}
-
-report_mediterranean() {
-  local P="$OUT/convert" H="$OUT/header" RC="$REPORT/convert" RH="$REPORT/header"
-  report_parquet "$P/nrt_mo_mo.parquet" "$RC/nrt_mo_mo.parquet.tsv"
-  report_parquet "$P/nrt_mo_gl.parquet" "$RC/nrt_mo_gl.parquet.tsv"
-  report_parquet "$P/cora_mo.parquet"   "$RC/cora_mo.parquet.tsv"
-  report_yaml    "$H/nrt_mo_mo.yaml"     "$RH/nrt_mo_mo.yaml.tsv"
-  report_yaml    "$H/nrt_mo_gl.yaml"     "$RH/nrt_mo_gl.yaml.tsv"
-  report_yaml    "$H/cora_mo.yaml"       "$RH/cora_mo.yaml.tsv"
+  local stem
+  case "$prod" in
+    regional) stem="nrt_${rc}_${rc}" ;;
+    gl)       stem="nrt_${rc}_gl" ;;
+    cora)     stem="cora_${rc}" ;;
+  esac
+  report_parquet "$P/$stem.parquet" "$RC/$stem.parquet.tsv"
+  report_yaml    "$H/$stem.yaml"    "$RH/$stem.yaml.tsv"
 }
 
 # ---- Dispatch ------------------------------------------------------------
@@ -283,26 +261,41 @@ is_region() {
   return 1
 }
 
-# Run one region's pipeline for <cmd>.
-run_region() {  # <cmd> <region>
-  local cmd="$1" r="$2"
+# Run <cmd> for one (region, product) unit.
+run_unit() {  # <cmd> <region> <product>
+  local cmd="$1" r="$2" p="$3"
   case "$cmd" in
-    process) "process_$r" ;;
-    report)  "report_$r" ;;
-    all)     "process_$r"; "report_$r" ;;
+    process) process_unit "$r" "$p" ;;
+    report)  report_unit "$r" "$p" ;;
+    all)     process_unit "$r" "$p"; report_unit "$r" "$p" ;;
   esac
 }
 
-# Run <cmd> for every region. Regions run in parallel (one background worker
-# each, with stdin detached) unless --sequential is set or only one region is
-# selected. Worker failures are collected and reported; exit is non-zero if any
-# region failed.
-run_regions() {  # <cmd> <region...>
+# Run <cmd> for every product of <region>, in order.
+run_region() {  # <cmd> <region>
+  local cmd="$1" r="$2" p
+  for p in "${PRODUCTS[@]}"; do run_unit "$cmd" "$r" "$p"; done
+}
+
+# Run <cmd> across all units of the selected regions, honoring $PARALLEL:
+#   unit   (default) — one background worker per (region, product) unit
+#   region           — one background worker per region (its products run in order)
+#   none             — everything sequentially, on the main shell
+# Each worker detaches stdin and tags its log lines with its region. Worker
+# failures are collected; exit is non-zero if any unit failed.
+run_all() {  # <cmd> <region...>
   local cmd="$1"; shift
   local -a regions=("$@")
 
-  if [[ "$SEQUENTIAL" == 1 || ${#regions[@]} -le 1 ]]; then
-    local r
+  # Build the (region, product) unit list.
+  local -a jr=() jp=()
+  local r p
+  for r in "${regions[@]}"; do
+    for p in "${PRODUCTS[@]}"; do jr+=("$r"); jp+=("$p"); done
+  done
+
+  # Sequential, or nothing worth parallelizing.
+  if [[ "$PARALLEL" == none || ${#jr[@]} -le 1 ]]; then
     for r in "${regions[@]}"; do
       log "===== $cmd: $r ====="
       run_region "$cmd" "$r"
@@ -310,17 +303,26 @@ run_regions() {  # <cmd> <region...>
     return 0
   fi
 
-  log "starting ${#regions[@]} regions in parallel (--sequential to disable)"
-  local -a pids=() regs=()
-  local r
-  for r in "${regions[@]}"; do
-    ( REGION="$r"; log "===== $cmd: $r ====="; run_region "$cmd" "$r" ) </dev/null &
-    pids+=("$!"); regs+=("$r")
-  done
-  local fail=0 i
+  local -a pids=() labels=()
+  local i
+  if [[ "$PARALLEL" == region ]]; then
+    log "starting ${#regions[@]} regions in parallel (--sequential to disable)"
+    for r in "${regions[@]}"; do
+      ( REGION="$r"; run_region "$cmd" "$r" ) </dev/null &
+      pids+=("$!"); labels+=("$r")
+    done
+  else  # unit (default)
+    log "starting ${#jr[@]} units in parallel (--by-region or --sequential to change)"
+    for i in "${!jr[@]}"; do
+      ( REGION="${jr[$i]}"; run_unit "$cmd" "${jr[$i]}" "${jp[$i]}" ) </dev/null &
+      pids+=("$!"); labels+=("${jr[$i]}/${jp[$i]}")
+    done
+  fi
+
+  local fail=0
   for i in "${!pids[@]}"; do
     if ! wait "${pids[$i]}"; then
-      log "region '${regs[$i]}' FAILED"; fail=1
+      log "'${labels[$i]}' FAILED"; fail=1
     fi
   done
   return "$fail"
@@ -348,7 +350,7 @@ main() {
   show_config "$cmd" "${regions[@]}"
   confirm || { log "aborted."; return 1; }
 
-  run_regions "$cmd" "${regions[@]}" || { log "one or more regions failed."; return 1; }
+  run_all "$cmd" "${regions[@]}" || { log "one or more units failed."; return 1; }
   log "done."
 }
 

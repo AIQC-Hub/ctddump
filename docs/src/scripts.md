@@ -76,14 +76,20 @@ The granularity differs by script:
   across the three regions). Each file runs its whole stage chain (e.g.
   `dropqc → dropna → filter → report`) in order. Pass `--by-region` for one
   worker per region instead (coarser), or `--sequential` for no parallelism.
-- **`download_data.sh` and `convert_data.sh`** parallelise **per region**;
-  `--sequential` disables it.
+- **`convert_data.sh`** defaults to **per unit** — one worker per
+  *(region, product)*, where each region's three products are its regional NRT,
+  the Global (GL), and CORA (9 units across the three regions). Each unit runs
+  its own convert → merge → header → merge-header chain in order. Pass
+  `--by-region` for one worker per region instead (its three products in order),
+  or `--sequential` for no parallelism.
+- **`download_data.sh`** parallelises **per region**; `--sequential` disables it.
 
 If any unit fails, the others still finish and the script exits non-zero after
 reporting which unit failed. A run with only one unit is always sequential.
 Note that `convert`/`clean`/`dedup` each also use multiple threads *within* a
-unit, so parallel units multiply the load accordingly — throttle with
-`--by-region` / `--sequential`, or `-t/--threads` for `convert`. For
+unit, so parallel units multiply the load accordingly — `convert_data.sh`'s
+`-t/--threads` therefore defaults to just `2`, since up to 9 units may run at
+once. Throttle further with `--by-region` / `--sequential`. For
 `download_data.sh`, `--sequential` also helps if concurrent Copernicus transfers
 hit rate limits.
 
@@ -97,12 +103,12 @@ full list of tuning variables.
 
 | Option | Scripts | Default | Meaning |
 |--------|---------|---------|---------|
-| `-t, --threads N` | convert | `10` | Worker threads for `ctddump`. |
+| `-t, --threads N` | convert | `2` | Worker threads for each `ctddump` call (kept low because up to 9 units run in parallel by default). |
 | `-s, --src DIR` | download, convert | `source` | Root of the source NetCDF tree (downloaded into / read from). |
 | `-o, --out DIR` | convert, clean, dedup | `output` | Root for the generated / consumed data outputs. |
 | `-r, --report DIR` | convert, clean, dedup | `report` | Root for the summary TSV reports (a sibling of `output/`). |
 | `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
-| `--by-region` | clean, dedup | — | Parallelise per region instead of per file. |
+| `--by-region` | convert, clean, dedup | — | Parallelise per region instead of per unit/file. |
 | `--sequential` | all | — | Process one unit at a time (no parallelism). |
 | `-y, --yes` | all | — | Skip the confirmation prompt. |
 | `-h, --help` | all | — | Show the script's help. |
