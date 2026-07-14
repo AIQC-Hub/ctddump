@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- `report summary` subcommand: assembles a single Markdown (default) or HTML (`--format html`) page for one file stem from the per-stage TSV reports the pipeline already produced. Given a stem it auto-locates the section source files under `--report-dir` (default `report`) and `--out-dir` (default `output`) — File summary (header YAML report), Conversion, Cleaning (Drop bad QC / Drop all-NA / Filter by region), and Deduplication (Mark duplicates / Remove duplicates) — and skips any section whose file is absent. Stage tables show platforms/profiles/observations with `% of original` and `Deleted` columns relative to the Conversion baseline; the Mark-duplicates section additionally splits duplicates into within-platform (a `dup_group` confined to one platform) and across-platform (spanning two or more) from the markdup `.dups.tsv`. Output goes to `-o/--output` or stdout
+- `summary_data.sh` helper script: builds one `report summary` page per *(region, product)* unit for the Arctic, Baltic, and Mediterranean, reading reports from `-r/--report` (default `report`) and the markdup `.dups.tsv` from `-o/--out` (default `output`), writing pages to `-d/--dest` (default `summary`) in `-f/--format` `md` or `html`. A stem with no reports is skipped
+
 ## [0.16.0] - 2026-07-14
 
 ### Changed

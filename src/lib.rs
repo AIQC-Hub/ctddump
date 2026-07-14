@@ -230,6 +230,10 @@ fn dispatch_report(subcommand: ReportSubcommand) -> Result<Config, Box<dyn Error
             report::yaml::run(format, &src, dest.as_deref())?;
             Ok(Config { module: "report".to_string(), target: "yaml".to_string(), args: vec![] })
         }
+        ReportSubcommand::Summary { stem, report_dir, out_dir, format, output } => {
+            report::summary::run(&stem, &report_dir, &out_dir, format, output.as_deref())?;
+            Ok(Config { module: "report".to_string(), target: "summary".to_string(), args: vec![] })
+        }
     }
 }
 

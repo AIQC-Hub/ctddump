@@ -1,11 +1,13 @@
 # `report`
 
 Summarise a produced **Parquet** data file or **YAML** header file as a
-text report — TSV (default), plain text, or JSON.
+text report — TSV (default), plain text, or JSON — or assemble a multi-section
+**summary page** (`report summary`) from the per-stage TSV reports.
 
 ```
 ctddump report parquet [--level global|platform|profile] [--format tsv|text|json] <src.parquet> [dest]
 ctddump report yaml    [--format tsv|text|json] <src.yaml> [dest]
+ctddump report summary [--report-dir report] [--out-dir output] [--format md|html] [-o dest] <stem>
 ```
 
 The report is written to `dest`, or to **stdout** when `dest` is omitted (so it
@@ -62,4 +64,51 @@ measurements (`CNDC`, `SVEL`, …) without a hard-coded list.
 ```bash
 # YAML header summary as JSON
 ctddump report yaml --format json merged.yaml report.json
+```
+
+## `report summary`
+
+Assembles a single **Markdown** (default) or **HTML** (`--format html`) page for
+one file *stem* (e.g. `nrt_ar_ar`) by reading the TSV reports the pipeline already
+produced. It does not scan any Parquet itself — it aggregates the small per-stage
+report TSVs — so it is instant.
+
+Given a stem, the source files are **auto-located** at their standard pipeline
+paths under `--report-dir` (default `report`) and `--out-dir` (default `output`):
+
+| Section | Source file(s) |
+|---------|----------------|
+| File summary | `report/header/<stem>.yaml.tsv` |
+| Conversion | `report/convert/<stem>.parquet.tsv` |
+| Cleaning → Drop bad QC | `report/clean/dropqc/<stem>.parquet.tsv` |
+| Cleaning → Drop all-NA profiles | `report/clean/dropna/<stem>.parquet.tsv` |
+| Cleaning → Filter by region | `report/clean/filter/<stem>.parquet.tsv` |
+| Deduplication → Mark duplicates | `report/dedup/markdup/<stem>.parquet.tsv` **and** `output/dedup/markdup/<stem>.dups.tsv` |
+| Deduplication → Remove duplicates | `report/dedup/dedup/<stem>.parquet.tsv` |
+
+Any section whose file is absent is **skipped**, so a partially-run pipeline still
+produces a valid page (a parent heading appears only when it has at least one
+present subsection). The Mark-duplicates section shows its within/across tables
+only when the `.dups.tsv` is also present.
+
+Each stage table reports **platforms / profiles / observations**. The
+`% of original` and `Deleted` columns compare against the **Conversion** stage
+(the baseline "original"); if Conversion is absent, the earliest present stage is
+used. The Mark-duplicates section additionally lists the duplicate profiles that
+`dedup` would remove, split into:
+
+- **within a platform** — a `dup_group` confined to a single `platform_code`;
+- **across platforms** — a group spanning two or more.
+
+(A `dup_group` is a set of profiles sharing the duplicate key — date + rounded
+position — so an across-platform group is the same cast reported by more than one
+platform.)
+
+```bash
+# Markdown page for the Arctic AR stem, to stdout
+ctddump report summary nrt_ar_ar
+
+# HTML page, with non-default roots, to a file
+ctddump report summary nrt_bo_bo --report-dir report --out-dir output \
+  --format html -o summary/nrt_bo_bo.html
 ```
