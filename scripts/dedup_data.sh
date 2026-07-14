@@ -30,6 +30,9 @@
 # Options (may appear anywhere on the command line):
 #   -o, --out DIR   root for the clean_data.sh outputs and the de-duplicated
 #                   outputs (default: output)
+#   --chunk-rows N  streaming chunk size in rows for ctddump; lower uses less
+#                   memory but writes more Parquet row groups. Exported as
+#                   CTDDUMP_CHUNK_ROWS   (default: ctddump's built-in 1,000,000)
 #   --by-region     Parallelise per region instead of per file (coarser: one
 #                   worker per region, its files processed in order).
 #   --sequential    Process everything one file at a time (no parallelism).
@@ -46,6 +49,7 @@ usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 
 # ---- Configuration (defaults; override with the options below) -----------
 OUT=output
+CHUNK_ROWS=     # empty → ctddump's built-in default (see CTDDUMP_CHUNK_ROWS)
 ASSUME_YES=0
 PARALLEL=file   # file | region | none
 
@@ -56,6 +60,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -o|--out)     OUT="${2:?--out requires a directory}"; shift 2 ;;
     --out=*)      OUT="${1#*=}"; shift ;;
+    --chunk-rows) CHUNK_ROWS="${2:?--chunk-rows requires a value}"; shift 2 ;;
+    --chunk-rows=*) CHUNK_ROWS="${1#*=}"; shift ;;
     --by-region)  PARALLEL=region; shift ;;
     --sequential) PARALLEL=none; shift ;;
     -y|--yes)     ASSUME_YES=1; shift ;;
@@ -65,6 +71,10 @@ while [[ $# -gt 0 ]]; do
     *)            ARGS+=("$1"); shift ;;
   esac
 done
+
+# A --chunk-rows value is passed to every ctddump child process via the env var
+# it reads (CTDDUMP_CHUNK_ROWS); leaving it unset keeps ctddump's built-in default.
+[[ -n "$CHUNK_ROWS" ]] && export CTDDUMP_CHUNK_ROWS="$CHUNK_ROWS"
 
 # Stage directories (each step reads the previous one).
 SRC_DIR="$OUT/clean/filter"          # clean_data.sh cleaned Parquet (input)
@@ -115,6 +125,7 @@ show_config() {  # <cmd> <region...>
     echo "  regions : ${rs[*]}"
     echo "  files   : $nfiles"
     echo "  out     : $OUT"
+    echo "  chunk   : ${CHUNK_ROWS:-default}"
     echo "  mode    : $mode"
   } >&2
 }

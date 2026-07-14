@@ -85,6 +85,12 @@ unit, so parallel units multiply the load accordingly — throttle with
 `download_data.sh`, `--sequential` also helps if concurrent Copernicus transfers
 hit rate limits.
 
+If memory is tight (parallel units each hold a chunk in memory at once), lower
+the streaming chunk size with `--chunk-rows N` on `convert`/`clean`/`dedup` — it
+trades a smaller memory footprint for more Parquet row groups without changing
+the output. See [Configuration](./configuration.md#environment-variables) for the
+full list of tuning variables.
+
 ### Options
 
 | Option | Scripts | Default | Meaning |
@@ -92,6 +98,7 @@ hit rate limits.
 | `-t, --threads N` | convert | `10` | Worker threads for `ctddump`. |
 | `-s, --src DIR` | download, convert | `input` | Root of the source NetCDF tree (downloaded into / read from). |
 | `-o, --out DIR` | convert, clean, dedup | `output` | Root for the generated / consumed outputs. |
+| `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
 | `--by-region` | clean, dedup | — | Parallelise per region instead of per file. |
 | `--sequential` | all | — | Process one unit at a time (no parallelism). |
 | `-y, --yes` | all | — | Skip the confirmation prompt. |
