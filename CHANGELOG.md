@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-14
+
+### Changed
+- Reworked the helper-script directory layout. The source NetCDF tree is now `source/` (was `input/`; the `-s/--src` default in `download_data.sh`/`convert_data.sh`) and the first-stage Parquet dir is `output/convert/` (was `output/parquet/`), so each `output/` sub-directory matches a command name. Summary reports move out of `output/` into a top-level `report/` sibling, selectable with a new `-r/--report DIR` option (default `report`) on `convert_data.sh`/`clean_data.sh`/`dedup_data.sh`
+- The `report/` tree mirrors `output/` minus the regional sub-directories: `convert_data.sh` now writes Parquet-data summaries to `report/convert/` and header (YAML) summaries to `report/header/` (previously both landed together in `output/report/convert/`), and `clean_data.sh` now summarises **every** stage into `report/clean/{dropqc,dropna,filter}` (previously only the final `filter` output), interleaved into its `all` chain like `dedup_data.sh`'s per-stage reports (`report/dedup/{markdup,dedup}`)
+
 ## [0.14.0] - 2026-07-14
 
 ### Added
@@ -168,7 +174,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.2...v0.13.0
 [0.12.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.12.1...v0.12.2
