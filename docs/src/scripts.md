@@ -191,6 +191,13 @@ scripts/summary_data.sh                       # summary/<stem>.md for every unit
 scripts/summary_data.sh -y -f html baltic     # HTML pages, Baltic only, no prompt
 ```
 
+The script gives each page a human-readable **title** and any product-specific
+**notes** (passed to `report summary` as `--title` / `--note`). Both live in the
+*Page text* section near the top of the script — `title_for` and `notes_for`, one
+`case` arm per stem — and that is the place to edit what a page says about a
+region or dataset. The section prose on the page is generic and comes from
+`ctddump` itself.
+
 ## Full pipeline
 
 Run the five phases in order (skipping prompts) for every region. Log in once

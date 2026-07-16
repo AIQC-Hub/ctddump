@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-07-16
+
+### Added
+- `report summary` gains `--title TEXT`, replacing the default `Summary: <stem>` page heading with a human-readable one, and `--note TEXT` (repeatable), rendering caller-supplied notes under the title. Both are plain text and escaped in HTML output, and are the place for region- or product-specific remarks
+- Every `report summary` section now carries a short explanation of what the stage did. The prose is generic across regions and datasets; anything specific belongs in a `--note`
+- The `report summary` Mark-duplicates section gains a **Duplicate group sizes** table — how many groups hold 2, 3, … profiles, with one row per distinct size up to 10 and an `11+` row for the tail
+- `summary_data.sh` now gives each page a human-readable title and product-specific notes, defined per stem by `title_for` / `notes_for` near the top of the script
+
+### Changed
+- The `report summary` Deduplication stages are now also compared against the **cleaned** data they actually ran on, not only the original: their tables gain `Cleaned`, `% of cleaned` and `Deleted (cleaned)` columns, taken from the last cleaning stage present (Filter, else Drop all-NA, else Drop bad QC). When no cleaning stage ran, the columns are omitted
+- The Mark-duplicates "Duplicate profiles" row now reports its share under the percentage columns and leaves the `Deleted` cells blank, since that stage removes nothing (it previously printed the share in the `Deleted` column)
+
 ## [0.17.0] - 2026-07-15
 
 ### Added
@@ -186,7 +198,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.14.0...v0.15.0
