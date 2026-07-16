@@ -173,6 +173,9 @@ impl Counts {
 
 struct Table {
     title: Option<String>,
+    /// Optional prose under the table's title; empty for the unlabelled tables
+    /// whose section description already explains them.
+    desc: String,
     headers: Vec<String>,
     rows: Vec<Vec<String>>,
 }
@@ -190,9 +193,10 @@ struct Section {
 // Generic across every region and dataset; anything region- or product-specific
 // belongs in a `--note` passed by the caller.
 
-const DESC_FILES: &str = "Coverage of the core parameters across the source NetCDF files. \
-    A file counts as having a parameter if the variable is present, regardless of how many \
-    of its values are valid. \"Extra parameters\" lists the non-core variables seen in any file.";
+const DESC_FILES: &str = "Coverage of the core measurement variables and the two profile-level \
+    QC flags across the source NetCDF files. A file counts as having one if the variable is \
+    present, regardless of how many of its values are valid. \"Extra parameters\" lists the \
+    non-core variables seen in any file.";
 
 const DESC_CONVERT: &str = "Counts after converting the source NetCDF files to Parquet, before \
     any profile is dropped. These are the \"original\" numbers every later stage is compared against.";
@@ -219,6 +223,18 @@ const DESC_DEDUP: &str = "Stages that find and remove profiles measuring the sam
 const DESC_MARKDUP: &str = "Flags every profile that shares its (date, position) key with at least \
     one other. Nothing is removed here, so the counts match the previous stage; \"Duplicate \
     profiles\" is the pool the next stage picks a survivor from.";
+
+const DESC_DUPS_WITHIN: &str = "Duplicate groups whose profiles all carry the same platform code: \
+    one platform reporting the same cast more than once. Percentages are shares of all duplicate \
+    profiles.";
+
+const DESC_DUPS_ACROSS: &str = "Duplicate groups whose profiles carry two or more different \
+    platform codes: the same cast reaching the archive under more than one platform, typically \
+    via overlapping products. Percentages are shares of all duplicate profiles.";
+
+const DESC_GROUP_SIZES: &str = "How many profiles each duplicate group holds. A group of 2 is a \
+    cast recorded twice; larger groups are the same cast repeated more often. Sizes above 10 are \
+    pooled into the final row.";
 
 const DESC_REMOVE_DUPS: &str = "Keeps one profile per duplicate key and drops the rest. The \
     survivor is the profile with the most observations, with ties broken by first appearance. \
@@ -332,8 +348,8 @@ fn file_summary_section(t: &Tsv, path: String) -> Section {
         ("with PSAL", "has_psal"),
         ("with PRES", "has_pres"),
         ("with DEPH", "has_deph"),
-        ("with TIME", "has_time"),
-        ("with POSITION_QC", "has_position"),
+        ("with TIME_QC", "has_time_qc"),
+        ("with POSITION_QC", "has_position_qc"),
     ] {
         let n = t.count_eq(colname, "true");
         rows.push(vec![label.into(), fmt_int(n), fmt_pct(pct(n, n_files))]);
@@ -365,6 +381,7 @@ fn file_summary_section(t: &Tsv, path: String) -> Section {
         files: vec![path],
         tables: vec![Table {
             title: None,
+            desc: String::new(),
             headers: vec!["Metric".into(), "Count".into(), "% of files".into()],
             rows,
         }],
@@ -416,8 +433,20 @@ fn markdup_section(
         let (within, across) = dup_split(&groups);
         let total_profiles = within.profiles + across.profiles;
         let total_obs = within.obs + across.obs;
-        tables.push(dup_table("Duplicates within a platform", &within, total_profiles, total_obs));
-        tables.push(dup_table("Duplicates across platforms", &across, total_profiles, total_obs));
+        tables.push(dup_table(
+            "Duplicates within a platform",
+            DESC_DUPS_WITHIN,
+            &within,
+            total_profiles,
+            total_obs,
+        ));
+        tables.push(dup_table(
+            "Duplicates across platforms",
+            DESC_DUPS_ACROSS,
+            &across,
+            total_profiles,
+            total_obs,
+        ));
         tables.push(group_size_table(&groups, total_profiles));
     }
 
@@ -460,6 +489,7 @@ fn group_size_table(groups: &[DupGroup], total_profiles: u64) -> Table {
 
     Table {
         title: Some("Duplicate group sizes".into()),
+        desc: DESC_GROUP_SIZES.into(),
         headers: vec![
             "Profiles per group".into(),
             "Groups".into(),
@@ -520,9 +550,10 @@ fn dup_split(groups: &[DupGroup]) -> (DupStats, DupStats) {
     (within, across)
 }
 
-fn dup_table(title: &str, s: &DupStats, total_profiles: u64, total_obs: u64) -> Table {
+fn dup_table(title: &str, desc: &str, s: &DupStats, total_profiles: u64, total_obs: u64) -> Table {
     Table {
         title: Some(title.into()),
+        desc: desc.into(),
         headers: vec!["Metric".into(), "Count".into(), "% of duplicates".into()],
         rows: vec![
             vec!["Duplicate groups".into(), fmt_int(s.groups), String::new()],
@@ -543,6 +574,7 @@ fn dup_table(title: &str, s: &DupStats, total_profiles: u64, total_obs: u64) -> 
 fn counts_table(c: Counts) -> Table {
     Table {
         title: None,
+        desc: String::new(),
         headers: vec!["Metric".into(), "Count".into()],
         rows: vec![
             vec!["Platforms".into(), fmt_int(c.platforms)],
@@ -580,6 +612,7 @@ fn stage_table(c: Counts, baseline: Option<Counts>, cleaned: Option<Counts>) -> 
 
     Table {
         title: None,
+        desc: String::new(),
         headers,
         rows: vec![
             row("Platforms", c.platforms, b.platforms, cleaned.map(|x| x.platforms)),
@@ -661,6 +694,9 @@ fn render_md(title: &str, notes: &[String], sections: &[Section]) -> String {
             if let Some(title) = &t.title {
                 s.push_str(&format!("**{title}**\n\n"));
             }
+            if !t.desc.is_empty() {
+                s.push_str(&format!("{}\n\n", t.desc));
+            }
             s.push_str(&format!("| {} |\n", t.headers.join(" | ")));
             s.push_str(&format!("|{}|\n", t.headers.iter().map(|_| " --- ").collect::<Vec<_>>().join("|")));
             for row in &t.rows {
@@ -720,6 +756,9 @@ fn render_html(title: &str, notes: &[String], sections: &[Section]) -> String {
         for t in &sec.tables {
             if let Some(title) = &t.title {
                 b.push_str(&format!("<p class=\"tabletitle\">{}</p>\n", esc(title)));
+            }
+            if !t.desc.is_empty() {
+                b.push_str(&format!("<p class=\"desc\">{}</p>\n", esc(&t.desc)));
             }
             b.push_str("<table>\n<thead><tr>");
             for h in &t.headers {

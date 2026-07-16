@@ -28,8 +28,8 @@ pub fn run(format_: ReportFormat, src: &Path, dest: Option<&Path>) -> Result<(),
     let mut has_psal = Vec::new();
     let mut has_pres = Vec::new();
     let mut has_deph = Vec::new();
-    let mut has_time = Vec::new();
-    let mut has_position = Vec::new();
+    let mut has_time_qc = Vec::new();
+    let mut has_position_qc = Vec::new();
     let mut extra_params = Vec::new();
 
     for (key, value) in map {
@@ -42,8 +42,10 @@ pub fn run(format_: ReportFormat, src: &Path, dest: Option<&Path>) -> Result<(),
         has_psal.push(present("PSAL"));
         has_pres.push(present("PRES"));
         has_deph.push(present("DEPH"));
-        has_time.push(present("TIME"));
-        has_position.push(present("POSITION_QC"));
+        // The two profile-level QC flags, as a pair. These are what `dropqc`
+        // filters on, and match the `time_qc` / `position_qc` output columns.
+        has_time_qc.push(present("TIME_QC"));
+        has_position_qc.push(present("POSITION_QC"));
         extra_params.push(detect_extra_params(vars).join(";"));
     }
 
@@ -53,8 +55,8 @@ pub fn run(format_: ReportFormat, src: &Path, dest: Option<&Path>) -> Result<(),
         Series::new("has_psal".into(), has_psal),
         Series::new("has_pres".into(), has_pres),
         Series::new("has_deph".into(), has_deph),
-        Series::new("has_time".into(), has_time),
-        Series::new("has_position".into(), has_position),
+        Series::new("has_time_qc".into(), has_time_qc),
+        Series::new("has_position_qc".into(), has_position_qc),
         Series::new("extra_params".into(), extra_params),
     ])?;
 

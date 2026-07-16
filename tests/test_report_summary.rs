@@ -34,7 +34,7 @@ fn write_yaml_tsv(path: &Path) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(
         path,
-        "filename\thas_temp\thas_psal\thas_pres\thas_deph\thas_time\thas_position\textra_params\n\
+        "filename\thas_temp\thas_psal\thas_pres\thas_deph\thas_time_qc\thas_position_qc\textra_params\n\
          AR001\ttrue\ttrue\ttrue\tfalse\ttrue\ttrue\tDOXY;FLU2\n\
          AR002\ttrue\tfalse\ttrue\tfalse\ttrue\ttrue\tDOXY\n",
     )
@@ -187,6 +187,11 @@ fn markdown_has_all_sections_and_correct_percentages() {
         "markdup duplicate row wrong\n{md}"
     );
 
+    // Each labelled duplicate table carries its own short explanation.
+    assert!(md.contains("all carry the same platform code"), "within desc missing\n{md}");
+    assert!(md.contains("two or more different platform codes"), "across desc missing\n{md}");
+    assert!(md.contains("A group of 2 is a cast recorded twice"), "group-size desc missing\n{md}");
+
     // Group sizes: two groups of 2 (4 profiles, 57.1%), one group of 3 (42.9%).
     assert!(md.contains("**Duplicate group sizes**"), "no group-size table\n{md}");
     assert!(md.contains("| 2 | 2 | 4 | 57.1% |"), "size-2 row wrong\n{md}");
@@ -304,7 +309,7 @@ fn empty_extra_params_render_as_none() {
     fs::create_dir_all(rep.join("header")).unwrap();
     fs::write(
         rep.join("header").join("bare.yaml.tsv"),
-        "filename\thas_temp\thas_psal\thas_pres\thas_deph\thas_time\thas_position\textra_params\n\
+        "filename\thas_temp\thas_psal\thas_pres\thas_deph\thas_time_qc\thas_position_qc\textra_params\n\
          B1\ttrue\ttrue\ttrue\tfalse\ttrue\ttrue\t\n",
     )
     .unwrap();
