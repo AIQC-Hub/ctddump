@@ -23,6 +23,11 @@
 #   -y, --yes          Skip the confirmation prompt and start immediately.
 #   -h, --help         Show this help.
 #
+# Each page gets a human-readable title and any product-specific notes; both are
+# defined in the "Page text" section below and are the place to edit what a page
+# says about a region or dataset. The section prose itself is generic and comes
+# from ctddump.
+#
 # A stem with no report files is skipped (e.g. the not-yet-published Baltic GL),
 # not an error. Reports read from <report> and <out> are produced by the earlier
 # pipeline scripts. Requires ctddump on PATH.
@@ -73,6 +78,37 @@ stems_for() {  # <region>
     arctic)        echo nrt_ar_ar nrt_ar_gl cora_ar ;;
     baltic)        echo nrt_bo_bo nrt_bo_gl cora_bo ;;
     mediterranean) echo nrt_mo_mo nrt_mo_gl cora_mo ;;
+  esac
+}
+
+# ---- Page text -----------------------------------------------------------
+# The page's section prose is generic and lives in ctddump. The title and the
+# notes below are the region- and product-specific bits — edit them here.
+
+# Human-readable page title, replacing the default "Summary: <stem>".
+title_for() {  # <stem>
+  case "$1" in
+    nrt_ar_ar) echo "Arctic Ocean — Near Real Time, regional product (AR)" ;;
+    nrt_ar_gl) echo "Arctic Ocean — Near Real Time, global product (GL)" ;;
+    cora_ar)   echo "Arctic Ocean — CORA reanalysis" ;;
+    nrt_bo_bo) echo "Baltic Sea — Near Real Time, regional product (BO)" ;;
+    nrt_bo_gl) echo "Baltic Sea — Near Real Time, global product (GL)" ;;
+    cora_bo)   echo "Baltic Sea — CORA reanalysis" ;;
+    nrt_mo_mo) echo "Mediterranean Sea — Near Real Time, regional product (MO)" ;;
+    nrt_mo_gl) echo "Mediterranean Sea — Near Real Time, global product (GL)" ;;
+    cora_mo)   echo "Mediterranean Sea — CORA reanalysis" ;;
+    *)         echo "Summary: $1" ;;
+  esac
+}
+
+# Notes shown under the page title, one per line (blank lines are ignored). Each
+# becomes a `--note`. Put anything dataset- or region-specific here.
+notes_for() {  # <stem>
+  # Product-specific note. The *_gl pattern must precede the general nrt_* one.
+  case "$1" in
+    nrt_*_gl) echo "Global (GL) Near Real Time product restricted to this region's bounding box. It overlaps the regional product, so a profile can appear in both and duplicates are expected." ;;
+    nrt_*)    echo "Regional Near Real Time product. Each source file holds a single platform." ;;
+    cora_*)   echo "CORA delayed-mode reanalysis. Source files hold many platforms each, and the profiles are re-processed rather than near real time." ;;
   esac
 }
 
@@ -134,9 +170,19 @@ has_any_report() {  # <stem>
 }
 
 do_summary() {  # <stem>
-  if ! has_any_report "$1"; then log "skip summary $1 (no reports)"; return 0; fi
-  mkdir -p "$DEST"; log "summary $1 -> $DEST/$1.$EXT"
-  ctddump report summary "$1" --report-dir "$REPORT" --out-dir "$OUT" --format "$FORMAT" -o "$DEST/$1.$EXT"
+  local s="$1"
+  if ! has_any_report "$s"; then log "skip summary $s (no reports)"; return 0; fi
+  mkdir -p "$DEST"; log "summary $s -> $DEST/$s.$EXT"
+
+  local -a nargs=()
+  local n
+  while IFS= read -r n; do
+    [[ -n "$n" ]] && nargs+=(--note "$n")
+  done < <(notes_for "$s")
+
+  ctddump report summary "$s" --report-dir "$REPORT" --out-dir "$OUT" \
+    --format "$FORMAT" --title "$(title_for "$s")" \
+    ${nargs[@]+"${nargs[@]}"} -o "$DEST/$s.$EXT"
 }
 
 # ---- Dispatch ------------------------------------------------------------

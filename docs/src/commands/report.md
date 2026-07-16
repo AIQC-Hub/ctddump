@@ -7,7 +7,8 @@ text report — TSV (default), plain text, or JSON — or assemble a multi-secti
 ```
 ctddump report parquet [--level global|platform|profile] [--format tsv|text|json] <src.parquet> [dest]
 ctddump report yaml    [--format tsv|text|json] <src.yaml> [dest]
-ctddump report summary [--report-dir report] [--out-dir output] [--format md|html] [-o dest] <stem>
+ctddump report summary [--report-dir report] [--out-dir output] [--format md|html]
+                       [--title TEXT] [--note TEXT]... [-o dest] <stem>
 ```
 
 The report is written to `dest`, or to **stdout** when `dest` is omitted (so it
@@ -94,8 +95,16 @@ only when the `.dups.tsv` is also present.
 Each stage table reports **platforms / profiles / observations**. The
 `% of original` and `Deleted` columns compare against the **Conversion** stage
 (the baseline "original"); if Conversion is absent, the earliest present stage is
-used. The Mark-duplicates section additionally lists the duplicate profiles that
-`dedup` would remove, split into:
+used.
+
+The two **Deduplication** stages ran on the cleaned data, not on the original, so
+their tables carry three further columns — `Cleaned`, `% of cleaned` and
+`Deleted (cleaned)` — comparing them against the **last cleaning stage present**
+(Filter, else Drop all-NA, else Drop bad QC). When no cleaning stage ran there is
+nothing to compare against and the columns are omitted.
+
+The Mark-duplicates section additionally lists the duplicate profiles that `dedup`
+would remove, split into:
 
 - **within a platform** — a `dup_group` confined to a single `platform_code`;
 - **across platforms** — a group spanning two or more.
@@ -104,11 +113,28 @@ used. The Mark-duplicates section additionally lists the duplicate profiles that
 position — so an across-platform group is the same cast reported by more than one
 platform.)
 
+A third table, **Duplicate group sizes**, shows how many profiles the groups hold:
+one row per distinct size up to 10, then a single `11+` row for the tail.
+
+### Title and notes
+
+Each section carries a short, generic explanation of what the stage did — the same
+prose for every region and dataset. Anything region- or product-specific goes in:
+
+- `--title TEXT` — replaces the default `Summary: <stem>` heading.
+- `--note TEXT` — a note rendered under the title; repeat for several notes.
+
+Both are plain text and are escaped in HTML output. In the pipeline these are
+supplied per stem by [`summary_data.sh`](../scripts.md), which is the place to edit
+what a page says about a given region or product.
+
 ```bash
 # Markdown page for the Arctic AR stem, to stdout
 ctddump report summary nrt_ar_ar
 
-# HTML page, with non-default roots, to a file
+# HTML page, with a title, notes, and non-default roots, to a file
 ctddump report summary nrt_bo_bo --report-dir report --out-dir output \
-  --format html -o summary/nrt_bo_bo.html
+  --format html --title "Baltic Sea — Near Real Time, regional product (BO)" \
+  --note "Each source file holds a single platform." \
+  -o summary/nrt_bo_bo.html
 ```

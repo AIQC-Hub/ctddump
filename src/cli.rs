@@ -198,6 +198,12 @@ pub enum ReportSubcommand {
         /// Page format
         #[arg(long, value_enum, default_value_t = SummaryFormat::Md)]
         format: SummaryFormat,
+        /// Page title (default: `Summary: <stem>`)
+        #[arg(long)]
+        title: Option<String>,
+        /// Note shown under the page title; repeat for several notes
+        #[arg(long, value_name = "TEXT")]
+        note: Vec<String>,
         /// Output file (default: stdout)
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
