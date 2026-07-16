@@ -53,7 +53,8 @@ one row per source file.
 | Column | Meaning |
 |--------|---------|
 | `filename` | source file stem |
-| `has_temp`, `has_psal`, `has_pres`, `has_deph`, `has_time`, `has_position` | presence of each core column |
+| `has_temp`, `has_psal`, `has_pres`, `has_deph` | presence of each core measurement variable |
+| `has_time_qc`, `has_position_qc` | presence of each profile-level QC flag (`TIME_QC` / `POSITION_QC`) |
 | `extra_params` | `;`-joined list of the extra measurement parameters present |
 
 `extra_params` is detected automatically: any `Float` variable dimensioned
@@ -134,7 +135,7 @@ ctddump report summary nrt_ar_ar
 
 # HTML page, with a title, notes, and non-default roots, to a file
 ctddump report summary nrt_bo_bo --report-dir report --out-dir output \
-  --format html --title "Baltic Sea — Near Real Time, regional product (BO)" \
+  --format html --title "Baltic Sea: Near Real Time, regional product (BO)" \
   --note "Each source file holds a single platform." \
   -o summary/nrt_bo_bo.html
 ```

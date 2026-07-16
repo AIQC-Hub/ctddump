@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-17
+
+### Added
+- The three labelled Mark-duplicates tables in `report summary` (Duplicates within a platform, Duplicates across platforms, Duplicate group sizes) each carry a short explanation of what they show, alongside the existing per-section prose
+- `summary_site.sh` helper script: renders the Markdown summary pages from `summary_data.sh` into a static local web site with [mdBook](https://rust-lang.github.io/mdBook/). Reads pages from `-s/--src` (default `summary`) and writes the built site to `-d/--dest` (default `site`), grouping chapters into one part per region. Each chapter's name is taken from the page's own top-level heading, so titles stay defined in one place. A `book.toml` is written for you, or pass `-c/--config FILE` to use your own (`-t/--title` sets the title of the built-in template). A region with no pages is skipped; no pages at all is an error rather than an empty site. Requires mdbook on PATH
+
+### Fixed
+- `report yaml` reported an inconsistent pair: `has_time` tested for the `TIME` data variable while `has_position` tested for the `POSITION_QC` flag, so the `report summary` File summary listed "with TIME" beside "with POSITION_QC". The two columns are now the profile-level QC pair they were meant to be, renamed `has_time_qc` / `has_position_qc` (testing `TIME_QC` / `POSITION_QC`), matching the `time_qc` / `position_qc` output columns and what `dropqc` filters on. **Breaking** for anything consuming the `report yaml` TSV by column name
+
+### Changed
+- Every helper script's configuration block now ends with `Run with -h/--help to see all options.`, so the full option list is discoverable from the confirmation prompt that each script prints by default
+- Generated summary pages no longer use em dashes. The section prose is reworded, the pipeline page titles now separate region and product with a colon (`Arctic Ocean: CORA reanalysis`), and an empty "Extra parameters" cell reads `none` instead of a dash. Guarded by a test over both the Markdown and HTML renderers
+
 ## [0.18.0] - 2026-07-16
 
 ### Added
@@ -198,7 +211,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.15.0...v0.16.0

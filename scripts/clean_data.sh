@@ -135,6 +135,7 @@ show_config() {  # <cmd> <region...>
     echo "  report  : $REPORT"
     echo "  chunk   : ${CHUNK_ROWS:-default}"
     echo "  mode    : $mode"
+    echo "Run with -h/--help to see all options."
   } >&2
 }
 

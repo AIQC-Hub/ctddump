@@ -182,6 +182,9 @@ FILE_B:
     DOXY_QC:
       data_type: Int(I8)
       dimensions: [TIME, DEPTH]
+    TIME_QC:
+      data_type: Int(I8)
+      dimensions: [TIME]
     POSITION_QC:
       data_type: Int(I8)
       dimensions: [TIME]
@@ -205,12 +208,15 @@ fn test_report_yaml() {
     assert_eq!(a["has_temp"], "true");
     assert_eq!(a["has_psal"], "true");
     assert_eq!(a["has_pres"], "false");
-    assert_eq!(a["has_position"], "false");
+    // The two profile-level QC flags are reported as a pair: FILE_A has neither.
+    assert_eq!(a["has_time_qc"], "false");
+    assert_eq!(a["has_position_qc"], "false");
     assert_eq!(a["extra_params"], "", "TEMP/PSAL are core; TEMP_QC excluded");
 
     let b = &by_file["FILE_B"];
     assert_eq!(b["has_temp"], "true");
     assert_eq!(b["has_psal"], "false");
-    assert_eq!(b["has_position"], "true");
+    assert_eq!(b["has_time_qc"], "true");
+    assert_eq!(b["has_position_qc"], "true");
     assert_eq!(b["extra_params"], "DOXY;TUR3", "sorted, QC/core excluded");
 }

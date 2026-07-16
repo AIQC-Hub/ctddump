@@ -76,6 +76,7 @@ show_config() {  # <cmd> <region...>
     echo "  regions : $*"
     echo "  src     : $SRC"
     echo "  mode    : $mode"
+    echo "Run with -h/--help to see all options."
   } >&2
 }
 
