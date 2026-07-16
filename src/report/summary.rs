@@ -202,7 +202,7 @@ const DESC_CLEANING: &str = "Stages that drop whole profiles that are unusable o
     monotonically.";
 
 const DESC_DROPQC: &str = "Drops whole profiles whose profile-level quality flags are bad. \
-    A profile is kept only if both its time and position QC are good (flag 1) or absent — many \
+    A profile is kept only if both its time and position QC are good (flag 1) or absent. Many \
     files ship no profile-level QC, and those profiles are kept.";
 
 const DESC_DROPNA: &str = "Drops whole profiles that carry no valid measurement at all in any one \
@@ -213,16 +213,17 @@ const DESC_FILTER: &str = "Keeps only the profiles whose position falls inside t
     bounding box. A profile with a missing position counts as outside and is dropped.";
 
 const DESC_DEDUP: &str = "Stages that find and remove profiles measuring the same time and place. \
-    Profiles match on date and rounded longitude/latitude — the platform is not part of the key, \
+    Profiles match on date and rounded longitude/latitude. The platform is not part of the key, \
     so duplicates are found across platforms as well as within one.";
 
 const DESC_MARKDUP: &str = "Flags every profile that shares its (date, position) key with at least \
     one other. Nothing is removed here, so the counts match the previous stage; \"Duplicate \
     profiles\" is the pool the next stage picks a survivor from.";
 
-const DESC_REMOVE_DUPS: &str = "Keeps one profile per duplicate key — the one with the most \
-    observations, ties broken by first appearance — and drops the rest. Profiles with no key \
-    (missing time or position) are never treated as duplicates and always survive.";
+const DESC_REMOVE_DUPS: &str = "Keeps one profile per duplicate key and drops the rest. The \
+    survivor is the profile with the most observations, with ties broken by first appearance. \
+    Profiles with no key (missing time or position) are never treated as duplicates and \
+    always survive.";
 
 // ── Section assembly ──────────────────────────────────────────────────────────
 
@@ -353,7 +354,7 @@ fn file_summary_section(t: &Tsv, path: String) -> Section {
     extra_list.sort();
     rows.push(vec![
         "Extra parameters".into(),
-        if extra_list.is_empty() { "—".into() } else { extra_list.join(", ") },
+        if extra_list.is_empty() { "none".into() } else { extra_list.join(", ") },
         String::new(),
     ]);
 

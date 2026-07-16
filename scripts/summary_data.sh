@@ -88,15 +88,15 @@ stems_for() {  # <region>
 # Human-readable page title, replacing the default "Summary: <stem>".
 title_for() {  # <stem>
   case "$1" in
-    nrt_ar_ar) echo "Arctic Ocean — Near Real Time, regional product (AR)" ;;
-    nrt_ar_gl) echo "Arctic Ocean — Near Real Time, global product (GL)" ;;
-    cora_ar)   echo "Arctic Ocean — CORA reanalysis" ;;
-    nrt_bo_bo) echo "Baltic Sea — Near Real Time, regional product (BO)" ;;
-    nrt_bo_gl) echo "Baltic Sea — Near Real Time, global product (GL)" ;;
-    cora_bo)   echo "Baltic Sea — CORA reanalysis" ;;
-    nrt_mo_mo) echo "Mediterranean Sea — Near Real Time, regional product (MO)" ;;
-    nrt_mo_gl) echo "Mediterranean Sea — Near Real Time, global product (GL)" ;;
-    cora_mo)   echo "Mediterranean Sea — CORA reanalysis" ;;
+    nrt_ar_ar) echo "Arctic Ocean: Near Real Time, regional product (AR)" ;;
+    nrt_ar_gl) echo "Arctic Ocean: Near Real Time, global product (GL)" ;;
+    cora_ar)   echo "Arctic Ocean: CORA reanalysis" ;;
+    nrt_bo_bo) echo "Baltic Sea: Near Real Time, regional product (BO)" ;;
+    nrt_bo_gl) echo "Baltic Sea: Near Real Time, global product (GL)" ;;
+    cora_bo)   echo "Baltic Sea: CORA reanalysis" ;;
+    nrt_mo_mo) echo "Mediterranean Sea: Near Real Time, regional product (MO)" ;;
+    nrt_mo_gl) echo "Mediterranean Sea: Near Real Time, global product (GL)" ;;
+    cora_mo)   echo "Mediterranean Sea: CORA reanalysis" ;;
     *)         echo "Summary: $1" ;;
   esac
 }
@@ -136,6 +136,7 @@ show_config() {  # <region...>
     echo "  out     : $OUT"
     echo "  dest    : $DEST"
     echo "  format  : $FORMAT"
+    echo "Run with -h/--help to see all options."
   } >&2
 }
 

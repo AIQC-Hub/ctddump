@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- `summary_site.sh` helper script: renders the Markdown summary pages from `summary_data.sh` into a static local web site with [mdBook](https://rust-lang.github.io/mdBook/). Reads pages from `-s/--src` (default `summary`) and writes the built site to `-d/--dest` (default `site`), grouping chapters into one part per region. Each chapter's name is taken from the page's own top-level heading, so titles stay defined in one place. A `book.toml` is written for you, or pass `-c/--config FILE` to use your own (`-t/--title` sets the title of the built-in template). A region with no pages is skipped; no pages at all is an error rather than an empty site. Requires mdbook on PATH
+
+### Changed
+- Every helper script's configuration block now ends with `Run with -h/--help to see all options.`, so the full option list is discoverable from the confirmation prompt that each script prints by default
+- Generated summary pages no longer use em dashes. The section prose is reworded, the pipeline page titles now separate region and product with a colon (`Arctic Ocean: CORA reanalysis`), and an empty "Extra parameters" cell reads `none` instead of a dash. Guarded by a test over both the Markdown and HTML renderers
+
 ## [0.18.0] - 2026-07-16
 
 ### Added

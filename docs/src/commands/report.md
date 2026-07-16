@@ -134,7 +134,7 @@ ctddump report summary nrt_ar_ar
 
 # HTML page, with a title, notes, and non-default roots, to a file
 ctddump report summary nrt_bo_bo --report-dir report --out-dir output \
-  --format html --title "Baltic Sea — Near Real Time, regional product (BO)" \
+  --format html --title "Baltic Sea: Near Real Time, regional product (BO)" \
   --note "Each source file holds a single platform." \
   -o summary/nrt_bo_bo.html
 ```

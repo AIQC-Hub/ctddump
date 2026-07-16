@@ -1,9 +1,9 @@
 # Helper scripts
 
 The [`scripts/`](https://github.com/AIQC-Hub/ctddump/tree/main/scripts)
-directory ships five Bash scripts that automate the full regional pipeline —
+directory ships six Bash scripts that automate the full regional pipeline —
 the same steps documented one command at a time in the
-[Regional workflows](./examples/arctic.md). They run in five phases, each
+[Regional workflows](./examples/arctic.md). They run in six phases, each
 consuming the previous phase's output:
 
 | Phase | Script | What it does |
@@ -13,11 +13,14 @@ consuming the previous phase's output:
 | 3. Clean | [`clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh) | Drop bad-QC profiles, drop all-NA profiles, restrict to the region. |
 | 4. De-duplicate | [`dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh) | Mark duplicate profiles, then remove them. |
 | 5. Summarise | [`summary_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/summary_data.sh) | Build a per-unit Markdown/HTML summary page from the reports. |
+| 6. Publish | [`summary_site.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/summary_site.sh) | Render the Markdown summary pages into a static mdBook site. |
 
 Each phase handles the **Arctic**, **Baltic**, and **Mediterranean** regions.
 The scripts only orchestrate the `ctddump` binary, so it must be on your `PATH`
 — except `download_data.sh`, which instead needs the `copernicusmarine` toolbox
-(and a free Copernicus Marine account) and does not use `ctddump` at all.
+(and a free Copernicus Marine account) and does not use `ctddump` at all, and
+`summary_site.sh`, which needs [mdBook](https://rust-lang.github.io/mdBook/)
+(`cargo install mdbook`).
 
 ## Running a script
 
@@ -49,12 +52,15 @@ Configuration:
   report  : report
   chunk   : default
   mode    : parallel (per file)
+Run with -h/--help to see all options.
 Proceed? [y/N]
 ```
 
 Answer `y` to proceed; anything else (including a bare Enter) aborts. Pass
 `-y`/`--yes` to skip the prompt — required when running non-interactively (a
 pipe or CI job), where the script otherwise aborts with a hint rather than hang.
+Every script closes its configuration block with the `-h`/`--help` reminder shown
+above, so the full option list is always one step away.
 While running, each step is announced with a timestamp so you can see what is
 currently in progress.
 
@@ -106,9 +112,13 @@ full list of tuning variables.
 |--------|---------|---------|---------|
 | `-t, --threads N` | convert | `2` | Worker threads for each `ctddump` call (kept low because up to 9 units run in parallel by default). |
 | `-s, --src DIR` | download, convert | `source` | Root of the source NetCDF tree (downloaded into / read from). |
+| `-s, --src DIR` | site | `summary` | Directory holding the `<stem>.md` summary pages to render. |
 | `-o, --out DIR` | convert, clean, dedup, summary | `output` | Root for the generated / consumed data outputs (summary reads the markdup `.dups.tsv` from here). |
 | `-r, --report DIR` | convert, clean, dedup, summary | `report` | Root for the summary TSV reports (a sibling of `output/`). |
 | `-d, --dest DIR` | summary | `summary` | Directory the generated summary pages are written to. |
+| `-d, --dest DIR` | site | `site` | Directory the built static site is written to. |
+| `-c, --config FILE` | site | built-in | Custom `book.toml` to use instead of the built-in template. |
+| `-t, --title TEXT` | site | `CTD data summary reports` | Book title (built-in template only; ignored with `--config`). |
 | `-f, --format FMT` | summary | `md` | Summary page format: `md` or `html`. |
 | `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
 | `--by-region` | convert, clean, dedup | — | Parallelise per region instead of per unit/file. |
@@ -198,9 +208,41 @@ The script gives each page a human-readable **title** and any product-specific
 region or dataset. The section prose on the page is generic and comes from
 `ctddump` itself.
 
+## `summary_site.sh`
+
+Renders the Markdown pages from `summary_data.sh` into a **static local web
+site** with [mdBook](https://rust-lang.github.io/mdBook/). Pages are read from
+`summary/` (`-s/--src`) and the built site is written to `site/` (`-d/--dest`);
+open `site/index.html` in a browser, or serve the directory as-is.
+
+Chapters are grouped into one part per region, in the same order the other
+scripts use. Each chapter's name comes from the page's own top-level heading (the
+title `summary_data.sh` gave it), so titles are defined in exactly one place. A
+region whose pages are absent is skipped rather than left as an empty part; if no
+pages are found at all, that is an error rather than an empty site.
+
+The book is assembled in a temporary directory, so only the rendered site is left
+behind. This phase needs the Markdown pages, so run `summary_data.sh` with its
+default `-f md` (an HTML run has nothing for mdBook to render).
+
+```bash
+scripts/summary_site.sh                      # site/ from summary/, every region
+scripts/summary_site.sh -y arctic            # Arctic pages only, no prompt
+scripts/summary_site.sh -t "Arctic CTD QC"   # override the book title
+```
+
+By default the script writes a `book.toml` for you. Pass `-c/--config FILE` to use
+your own instead; it is used verbatim, so it must keep mdBook's default
+`src = "src"` — the script assembles the chapters into a `src/` directory beside
+it. With `--config`, `--title` is ignored (your file sets the title).
+
+```bash
+scripts/summary_site.sh -c my-book.toml -y all
+```
+
 ## Full pipeline
 
-Run the five phases in order (skipping prompts) for every region. Log in once
+Run the six phases in order (skipping prompts) for every region. Log in once
 first if you have not already (`scripts/download_data.sh login`):
 
 ```bash
@@ -209,6 +251,7 @@ scripts/convert_data.sh  -y all
 scripts/clean_data.sh    -y all
 scripts/dedup_data.sh    -y all
 scripts/summary_data.sh  -y all
+scripts/summary_site.sh  -y all        # site/index.html
 ```
 
 For the equivalent commands spelled out step by step, see the

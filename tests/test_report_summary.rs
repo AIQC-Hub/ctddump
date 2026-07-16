@@ -199,9 +199,9 @@ fn title_and_notes_are_used() {
     let (rep, out) = full_tree(dir.path(), "nrt_ar_ar");
     let md = run_summary_with(
         &rep, &out, "nrt_ar_ar", "md", &dir.path().join("t.md"),
-        &["--title", "NRT Arctic — regional (AR)", "--note", "First note.", "--note", "Second <note>."],
+        &["--title", "NRT Arctic: regional (AR)", "--note", "First note.", "--note", "Second <note>."],
     );
-    assert!(md.starts_with("# NRT Arctic — regional (AR)\n"), "custom title missing\n{md}");
+    assert!(md.starts_with("# NRT Arctic: regional (AR)\n"), "custom title missing\n{md}");
     assert!(!md.contains("Summary: nrt_ar_ar"), "default title should be replaced\n{md}");
     assert!(md.contains("> First note.") && md.contains("> Second <note>."), "notes missing\n{md}");
 
@@ -280,6 +280,38 @@ fn missing_files_skip_their_sections() {
     assert!(!md.contains("Deduplication"), "dedup section should be skipped\n{md}");
     // Baseline falls back to Conversion: Filter 60/100 = 60.0%.
     assert!(md.contains("| Profiles | 60 | 60.0% | 40.0% |"), "filter % wrong\n{md}");
+}
+
+/// House style: no em dashes in generated pages. Guards the section prose and the
+/// table placeholders, in both renderers.
+#[test]
+fn pages_contain_no_em_dashes() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = full_tree(dir.path(), "nrt_ar_ar");
+    for format in ["md", "html"] {
+        let dest = dir.path().join(format!("dash.{format}"));
+        let page = run_summary(&rep, &out, "nrt_ar_ar", format, &dest);
+        assert!(!page.contains('\u{2014}'), "{format} page contains an em dash\n{page}");
+    }
+}
+
+/// A file with no extra parameters renders the word "none", not a dash.
+#[test]
+fn empty_extra_params_render_as_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let rep = dir.path().join("report");
+    let out = dir.path().join("output");
+    fs::create_dir_all(rep.join("header")).unwrap();
+    fs::write(
+        rep.join("header").join("bare.yaml.tsv"),
+        "filename\thas_temp\thas_psal\thas_pres\thas_deph\thas_time\thas_position\textra_params\n\
+         B1\ttrue\ttrue\ttrue\tfalse\ttrue\ttrue\t\n",
+    )
+    .unwrap();
+
+    let md = run_summary(&rep, &out, "bare", "md", &dir.path().join("bare.md"));
+    assert!(md.contains("| Extra parameters | none |"), "extras placeholder wrong\n{md}");
+    assert!(!md.contains('\u{2014}'), "page contains an em dash\n{md}");
 }
 
 #[test]
