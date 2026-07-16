@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-07-16
+
 ### Added
 - `report summary` gains `--title TEXT`, replacing the default `Summary: <stem>` page heading with a human-readable one, and `--note TEXT` (repeatable), rendering caller-supplied notes under the title. Both are plain text and escaped in HTML output, and are the place for region- or product-specific remarks
 - Every `report summary` section now carries a short explanation of what the stage did. The prose is generic across regions and datasets; anything specific belongs in a `--note`
@@ -196,7 +198,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.14.0...v0.15.0
