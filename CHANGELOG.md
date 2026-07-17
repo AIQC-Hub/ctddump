@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- `convert_data.sh`, `clean_data.sh`, and `dedup_data.sh` gain a `--time` option (off by default): each `ctddump` step is wrapped in GNU time and its wall-clock seconds and peak resident memory are logged as a `timed <step>: …` line. Requires GNU time (the `time` package, not the shell builtin); the scripts resolve `/usr/bin/time` or `gtime` and verify it up front, and honour `CTDDUMP_TIME_BIN`. Peak RSS is per `ctddump` process; for comparable per-step wall times pair it with `--sequential`
+
 ## [0.21.1] - 2026-07-17
 
 ### Added

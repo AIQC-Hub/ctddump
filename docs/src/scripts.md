@@ -124,8 +124,37 @@ full list of tuning variables.
 | `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
 | `--by-region` | convert, clean, dedup | — | Parallelise per region instead of per unit/file. |
 | `--sequential` | convert, clean, dedup | — | Process one unit at a time (no parallelism). |
+| `--time` | convert, clean, dedup | off | Measure each `ctddump` step with GNU time and log its wall clock and peak memory (see [Timing steps](#timing-steps)). |
 | `-y, --yes` | all | — | Skip the confirmation prompt. |
 | `-h, --help` | all | — | Show the script's help. |
+
+### Timing steps
+
+`convert_data.sh`, `clean_data.sh`, and `dedup_data.sh` accept `--time` (off by
+default). When on, every `ctddump` step is wrapped in [GNU
+time](https://www.gnu.org/software/time/) and its wall-clock seconds and peak
+resident memory are logged as a `timed <step>: …s, … MiB peak RSS, …% CPU` line
+after the step completes:
+
+```text
+[12:00:03] dropqc nrt_ar_ar
+[12:00:15] timed dropqc nrt_ar_ar: 11.72s, 512 MiB peak RSS, 148% CPU
+```
+
+Notes:
+
+- It requires **GNU time** (the `time` package: `sudo apt-get install time`), not
+  the shell `time` builtin, which cannot report memory. The scripts resolve
+  `/usr/bin/time` (or `gtime`), and check it up front so a missing tool fails fast
+  rather than mid-run. Override the binary with the `CTDDUMP_TIME_BIN` environment
+  variable.
+- Peak RSS is measured **per `ctddump` process**. A multi-step stage such as the
+  multi-box `filter` logs one line per underlying process (`… (include)`, `…
+  (exclude 1)`, …).
+- Under the default parallelism, wall-clock times of concurrent steps overlap and
+  CPU% can exceed 100% (each `ctddump` is itself multi-threaded). For clean,
+  comparable per-step wall times, pair `--time` with `--sequential`; peak RSS is
+  per process and meaningful either way.
 
 ### Missing datasets
 

@@ -37,6 +37,10 @@
 #   --by-region     Parallelise per region instead of per file (coarser: one
 #                   worker per region, its files processed in order).
 #   --sequential    Process everything one file at a time (no parallelism).
+#   --time          Measure each ctddump step with GNU time and log its wall
+#                   clock and peak memory. Off by default; needs the `time`
+#                   package (not the shell builtin). Peak RSS is per process;
+#                   for meaningful wall times pair it with --sequential.
 #   -y, --yes       Skip the confirmation prompt and start immediately.
 #   -h, --help      Show this help.
 #
@@ -54,6 +58,7 @@ REPORT=report
 CHUNK_ROWS=     # empty → ctddump's built-in default (see CTDDUMP_CHUNK_ROWS)
 ASSUME_YES=0
 PARALLEL=file   # file | region | none
+TIMING=0        # 1 → wrap each ctddump step in GNU time (--time)
 
 # ---- Parse options -------------------------------------------------------
 # Options may appear anywhere; the remaining words are the command and regions.
@@ -68,6 +73,7 @@ while [[ $# -gt 0 ]]; do
     --chunk-rows=*) CHUNK_ROWS="${1#*=}"; shift ;;
     --by-region)  PARALLEL=region; shift ;;
     --sequential) PARALLEL=none; shift ;;
+    --time)       TIMING=1; shift ;;
     -y|--yes)     ASSUME_YES=1; shift ;;
     -h|--help)    usage; exit 0 ;;
     --)           shift; ARGS+=("$@"); break ;;
@@ -79,6 +85,32 @@ done
 # A --chunk-rows value is passed to every ctddump child process via the env var
 # it reads (CTDDUMP_CHUNK_ROWS); leaving it unset keeps ctddump's built-in default.
 [[ -n "$CHUNK_ROWS" ]] && export CTDDUMP_CHUNK_ROWS="$CHUNK_ROWS"
+
+# --time measures each ctddump step with GNU time (wall clock + peak RSS). Resolve
+# a GNU-compatible `time` binary (the shell builtin cannot report memory) and
+# verify it supports -f up front, so the run fails fast with an install hint rather
+# than mid-pipeline. Override the binary with CTDDUMP_TIME_BIN if needed.
+TIME_BIN="${CTDDUMP_TIME_BIN:-}"
+if [[ "$TIMING" == 1 ]]; then
+  if [[ -z "$TIME_BIN" ]]; then
+    if [[ -x /usr/bin/time ]]; then
+      TIME_BIN=/usr/bin/time
+    elif command -v gtime >/dev/null 2>&1; then
+      TIME_BIN=$(command -v gtime)
+    fi
+  fi
+  # Probe with -o so we confirm time actually wraps the command and writes stats
+  # (a binary that merely ignores -f, or one like /bin/true that swallows every
+  # argument, would pass a bare exit-status check yet capture nothing).
+  probe=$(mktemp)
+  if [[ -z "$TIME_BIN" ]] || ! "$TIME_BIN" -o "$probe" -f '%e' true 2>/dev/null || [[ ! -s "$probe" ]]; then
+    rm -f "$probe"
+    echo "Error: --time needs GNU time (the 'time' package), not the shell builtin." >&2
+    echo "       Install it (e.g. sudo apt-get install time) or set CTDDUMP_TIME_BIN." >&2
+    exit 1
+  fi
+  rm -f "$probe"
+fi
 
 # Stage directories (each step reads the previous one).
 SRC_DIR="$OUT/convert"          # convert_data.sh merged Parquet (input)
@@ -112,6 +144,26 @@ log() {
   printf '[%s] %s%s\n' "$(date '+%H:%M:%S')" "$p" "$*" >&2
 }
 
+# When --time is on, run <cmd...> under GNU time and log its wall-clock seconds and
+# peak resident memory; otherwise run <cmd...> unchanged. Each call captures time's
+# own output in a private temp file, so it is safe under parallel workers. The
+# command's exit status is preserved (propagated to the set -e caller).
+measure() {  # <label> <cmd...>
+  local label="$1"; shift
+  if [[ "$TIMING" != 1 ]]; then
+    "$@"
+    return
+  fi
+  local tf rc=0 es rss cpu
+  tf=$(mktemp)
+  "$TIME_BIN" -o "$tf" -f '%e %M %P' -- "$@" || rc=$?
+  if [[ "$rc" -eq 0 ]] && read -r es rss cpu < "$tf"; then
+    log "timed $label: ${es}s, $(( (rss + 1023) / 1024 )) MiB peak RSS, $cpu CPU"
+  fi
+  rm -f "$tf"
+  return "$rc"
+}
+
 # Print the resolved configuration, then ask for confirmation unless -y/--yes was
 # given. In a non-interactive shell without -y there is nothing to read, so abort
 # with a hint rather than hang.
@@ -126,6 +178,8 @@ show_config() {  # <cmd> <region...>
     region) [[ ${#rs[@]} -gt 1 ]] && mode="parallel (per region)" || mode="sequential" ;;
     file)   [[ $nfiles -gt 1 ]] && mode="parallel (per file)" || mode="sequential" ;;
   esac
+  local timing_desc=off
+  if [[ "$TIMING" == 1 ]]; then timing_desc="on ($TIME_BIN)"; fi
   {
     echo "Configuration:"
     echo "  command : $cmd"
@@ -135,6 +189,7 @@ show_config() {  # <cmd> <region...>
     echo "  report  : $REPORT"
     echo "  chunk   : ${CHUNK_ROWS:-default}"
     echo "  mode    : $mode"
+    echo "  timing  : $timing_desc"
     echo "Run with -h/--help to see all options."
   } >&2
 }
@@ -155,22 +210,23 @@ confirm() {
 # defaults to --mode include (keep inside the box); --mode exclude drops inside
 # it. Multi-box regions chain through temp files, removed afterwards.
 
-filter_box_arctic() {  # <src> <dest>
-  ctddump filter --min-lon -180 --max-lon 180 --min-lat 60 --max-lat 90 "$1" "$2"
+filter_box_arctic() {  # <src> <dest> [label]
+  local s="${3:-arctic}"
+  measure "filter $s" ctddump filter --min-lon -180 --max-lon 180 --min-lat 60 --max-lat 90 "$1" "$2"
 }
 
-filter_box_baltic() {  # <src> <dest>
-  local t="$2.tmp1"
-  ctddump filter                --min-lon 6 --max-lon 30 --min-lat 53 --max-lat 66 "$1" "$t"
-  ctddump filter --mode exclude --min-lon 6 --max-lon 15 --min-lat 60 --max-lat 66 "$t" "$2"
+filter_box_baltic() {  # <src> <dest> [label]
+  local t="$2.tmp1" s="${3:-baltic}"
+  measure "filter $s (include)" ctddump filter                --min-lon 6 --max-lon 30 --min-lat 53 --max-lat 66 "$1" "$t"
+  measure "filter $s (exclude)" ctddump filter --mode exclude --min-lon 6 --max-lon 15 --min-lat 60 --max-lat 66 "$t" "$2"
   rm -f "$t"
 }
 
-filter_box_mediterranean() {  # <src> <dest>
-  local t1="$2.tmp1" t2="$2.tmp2"
-  ctddump filter                --min-lon -5.61 --max-lon 35.567 --min-lat 28.378 --max-lat 45.755 "$1"  "$t1"
-  ctddump filter --mode exclude --min-lon 27    --max-lon 36     --min-lat 41     --max-lat 46      "$t1" "$t2"
-  ctddump filter --mode exclude --min-lon -5.61 --max-lon 0      --min-lat 42     --max-lat 46      "$t2" "$2"
+filter_box_mediterranean() {  # <src> <dest> [label]
+  local t1="$2.tmp1" t2="$2.tmp2" s="${3:-mediterranean}"
+  measure "filter $s (include)"   ctddump filter                --min-lon -5.61 --max-lon 35.567 --min-lat 28.378 --max-lat 45.755 "$1"  "$t1"
+  measure "filter $s (exclude 1)" ctddump filter --mode exclude --min-lon 27    --max-lon 36     --min-lat 41     --max-lat 46      "$t1" "$t2"
+  measure "filter $s (exclude 2)" ctddump filter --mode exclude --min-lon -5.61 --max-lon 0      --min-lat 42     --max-lat 46      "$t2" "$2"
   rm -f "$t1" "$t2"
 }
 
@@ -185,37 +241,37 @@ filter_box_mediterranean() {  # <src> <dest>
 do_dropqc() {  # <region> <stem>
   [[ -f "$SRC_DIR/$2.parquet" ]] || { log "skip dropqc $2 (missing input)"; return 0; }
   mkdir -p "$QC_DIR"; log "dropqc $2"
-  ctddump dropqc "$SRC_DIR/$2.parquet" "$QC_DIR/$2.parquet"
+  measure "dropqc $2" ctddump dropqc "$SRC_DIR/$2.parquet" "$QC_DIR/$2.parquet"
 }
 
 do_dropna() {  # <region> <stem>
   [[ -f "$QC_DIR/$2.parquet" ]] || { log "skip dropna $2 (missing input)"; return 0; }
   mkdir -p "$NA_DIR"; log "dropna $2"
-  ctddump dropna "$QC_DIR/$2.parquet" "$NA_DIR/$2.parquet"
+  measure "dropna $2" ctddump dropna "$QC_DIR/$2.parquet" "$NA_DIR/$2.parquet"
 }
 
 do_filter() {  # <region> <stem>
   [[ -f "$NA_DIR/$2.parquet" ]] || { log "skip filter $2 (missing input)"; return 0; }
   mkdir -p "$CLEAN_DIR"; log "filter $2"
-  "filter_box_$1" "$NA_DIR/$2.parquet" "$CLEAN_DIR/$2.parquet"
+  "filter_box_$1" "$NA_DIR/$2.parquet" "$CLEAN_DIR/$2.parquet" "$2"
 }
 
 do_report_dropqc() {  # <region> <stem>
   [[ -f "$QC_DIR/$2.parquet" ]] || { log "skip report (dropqc) $2 (missing input)"; return 0; }
   mkdir -p "$REPORT_QC_DIR"; log "report (dropqc) $2"
-  ctddump report parquet --level platform "$QC_DIR/$2.parquet" "$REPORT_QC_DIR/$2.parquet.tsv"
+  measure "report dropqc $2" ctddump report parquet --level platform "$QC_DIR/$2.parquet" "$REPORT_QC_DIR/$2.parquet.tsv"
 }
 
 do_report_dropna() {  # <region> <stem>
   [[ -f "$NA_DIR/$2.parquet" ]] || { log "skip report (dropna) $2 (missing input)"; return 0; }
   mkdir -p "$REPORT_NA_DIR"; log "report (dropna) $2"
-  ctddump report parquet --level platform "$NA_DIR/$2.parquet" "$REPORT_NA_DIR/$2.parquet.tsv"
+  measure "report dropna $2" ctddump report parquet --level platform "$NA_DIR/$2.parquet" "$REPORT_NA_DIR/$2.parquet.tsv"
 }
 
 do_report_filter() {  # <region> <stem>
   [[ -f "$CLEAN_DIR/$2.parquet" ]] || { log "skip report (filter) $2 (missing input)"; return 0; }
   mkdir -p "$REPORT_FILTER_DIR"; log "report (filter) $2"
-  ctddump report parquet --level platform "$CLEAN_DIR/$2.parquet" "$REPORT_FILTER_DIR/$2.parquet.tsv"
+  measure "report filter $2" ctddump report parquet --level platform "$CLEAN_DIR/$2.parquet" "$REPORT_FILTER_DIR/$2.parquet.tsv"
 }
 
 # The standalone `report` command summarises whichever stages exist.
