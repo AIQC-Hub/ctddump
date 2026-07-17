@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Removed em dashes from all human-facing documentation for a consistent house style: `README.md` (whose documentation links are now a bulleted list) and every page under `docs/src/`. The no-em-dash convention is recorded in `CLAUDE.md`
+
 ## [0.22.0] - 2026-07-17
 
 ### Added

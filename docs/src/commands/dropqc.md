@@ -10,7 +10,7 @@ ctddump dropqc <src.parquet> <dest.parquet>
 
 A profile is **kept** only if **both** `time_qc` and `position_qc` are either
 `"1"` (OK) or **missing**. A missing flag is one that is absent from the source
-NetCDF, or stored as the NA byte `-128` — both render as the empty string `""`
+NetCDF, or stored as the NA byte `-128`, both render as the empty string `""`
 in the Parquet output. Any other flag (`"0"`, `"2"`…`"9"`, or a non-numeric char
 code) **drops** the whole profile.
 

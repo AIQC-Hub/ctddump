@@ -26,7 +26,7 @@ is controlled by a few flags:
 | `--pattern <GLOB>` | Merge only files whose name matches the pattern. |
 
 > Renumbering processes platform ranges in parallel via temporary files in the
-> output folder. Higher thread counts are faster but use more memory — **the
+> output folder. Higher thread counts are faster but use more memory, **the
 > merged result is identical either way.**
 
 ### Examples
@@ -53,7 +53,7 @@ ctddump concat convert --pattern "AR_PR_CT_*.parquet" ./parquet merged.parquet
 
 ## `concat header`
 
-Merges YAML header files — each file contributes its top-level keys to the
+Merges YAML header files, each file contributes its top-level keys to the
 combined output. An error is raised if any two files share the same key.
 
 ```bash

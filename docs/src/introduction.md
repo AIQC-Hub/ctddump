@@ -4,8 +4,8 @@
 **CTD** (Conductivity, Temperature, Depth) data from NetCDF into analysis-ready
 formats:
 
-- **Parquet** — the observation data, as a uniform flat table.
-- **YAML** — the file metadata (dimensions, variables, global attributes).
+- **Parquet**: the observation data, as a uniform flat table.
+- **YAML**: the file metadata (dimensions, variables, global attributes).
 
 It is written in Rust, streams data in bounded memory, and processes whole
 directory trees in parallel.
@@ -16,8 +16,8 @@ Two families of source files are supported:
 
 | Source | Description |
 |--------|-------------|
-| **NRT** | Near Real Time — Arctic Sea (`nrt_ar`), Baltic Sea (`nrt_bo`), Mediterranean Sea (`nrt_mo`), Global (`nrt_gl`) |
-| **CORA** | Copernicus Ocean Reanalysis — current format (`cora`), legacy format (`cora_legacy`) |
+| **NRT** | Near Real Time: Arctic Sea (`nrt_ar`), Baltic Sea (`nrt_bo`), Mediterranean Sea (`nrt_mo`), Global (`nrt_gl`) |
+| **CORA** | Copernicus Ocean Reanalysis: current format (`cora`), legacy format (`cora_legacy`) |
 
 ## What you can do
 

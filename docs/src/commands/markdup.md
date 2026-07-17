@@ -9,9 +9,9 @@ ctddump markdup [OPTIONS] <src.parquet> <dest.parquet> <dups.tsv>
 
 Two profiles are **duplicates** when they share the same key, built from:
 
-- **`profile_timestamp`** — formatted with a strftime string; **date only**
+- **`profile_timestamp`**: formatted with a strftime string; **date only**
   (`%Y-%m-%d`) by default.
-- **`longitude`** and **`latitude`** — rounded to **3 decimals** by default.
+- **`longitude`** and **`latitude`**: rounded to **3 decimals** by default.
 
 `platform_code` is deliberately **not** part of the key, so duplicates are
 detected *across platforms*. A profile whose position is NaN or whose timestamp
@@ -31,8 +31,8 @@ size.
 
 ## Outputs
 
-1. **`dest.parquet`** — the input plus the `is_dup` column.
-2. **`dups.tsv`** — one row per duplicated profile, grouped by `dup_group`:
+1. **`dest.parquet`**: the input plus the `is_dup` column.
+2. **`dups.tsv`**: one row per duplicated profile, grouped by `dup_group`:
    `dup_group, platform_code, profile_no, profile_time, profile_timestamp,
    longitude, latitude, n_obs`.
 

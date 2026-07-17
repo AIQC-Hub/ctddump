@@ -10,12 +10,12 @@ The subcommand selects the source format and its defaults:
 
 | Subcommand | Source |
 |------------|--------|
-| `nrt_ar` | NRT — Arctic Sea |
-| `nrt_bo` | NRT — Baltic Sea |
-| `nrt_mo` | NRT — Mediterranean Sea |
-| `nrt_gl` | NRT — Global |
-| `cora` | CORA — current format |
-| `cora_legacy` | CORA — legacy format |
+| `nrt_ar` | NRT: Arctic Sea |
+| `nrt_bo` | NRT: Baltic Sea |
+| `nrt_mo` | NRT: Mediterranean Sea |
+| `nrt_gl` | NRT: Global |
+| `cora` | CORA: current format |
+| `cora_legacy` | CORA: legacy format |
 
 ## Examples
 

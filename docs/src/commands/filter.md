@@ -14,7 +14,7 @@ matching `--max-*` (an inverted box is rejected; antimeridian wrap is not
 supported).
 
 Because a profile's `longitude`/`latitude` are constant across its observations,
-the box acts on **whole profiles** — every observation of a matching profile is
+the box acts on **whole profiles**, every observation of a matching profile is
 kept or dropped together.
 
 `--mode` (default `include`):

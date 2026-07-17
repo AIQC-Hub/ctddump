@@ -52,8 +52,8 @@ pattern         = "*.nc"  # optional
 ## Environment variables
 
 `ctddump` honours a few environment variables for operational tuning. They do
-**not** change the *contents* of the output — only memory use, speed, and the
-on-disk row-group layout — which is why they live in the environment rather than
+**not** change the *contents* of the output, only memory use, speed, and the
+on-disk row-group layout, which is why they live in the environment rather than
 as per-command flags.
 
 | Variable | Effect | When unset |
@@ -62,7 +62,7 @@ as per-command flags.
 | `POLARS_MAX_THREADS` | Size of Polars' internal thread pool. `batch` / `concat` pin this to `1` so their own `--threads` is the real knob, but a value you set is respected. | pinned to `1` by `batch` / `concat` |
 | `RUST_MIN_STACK` | Worker-thread stack size, in bytes. Raised to 16 MiB for the deep call chains in Polars' Parquet writer; a larger value you set is respected. | raised to 16 MiB |
 
-`CTDDUMP_CHUNK_ROWS` is the only one most users would ever change — see
+`CTDDUMP_CHUNK_ROWS` is the only one most users would ever change, see
 [Technical notes](./technical-notes.md) for why streaming in chunks matters. The
 [helper scripts](./scripts.md) expose it directly as `--chunk-rows N`, which
 exports it for every `ctddump` process they launch.

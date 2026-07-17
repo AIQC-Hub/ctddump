@@ -1,6 +1,6 @@
 # `header`
 
-Extract the **metadata** of a single NetCDF file to a YAML file — dimensions,
+Extract the **metadata** of a single NetCDF file to a YAML file, dimensions,
 variables, and global attributes. No observation data is read.
 
 ```

@@ -27,10 +27,10 @@ copernicusmarine login
 ### 1. Download the data
 
 ```shell
-# NRT — Mediterranean (MO) and Global (GL)
+# NRT: Mediterranean (MO) and Global (GL)
 copernicusmarine get -i cmems_obs-ins_med_phybgcwav_mynrt_na_irr --dataset-part "history" --filter "*/CT/*"
 
-# CORA — Mediterranean
+# CORA: Mediterranean
 copernicusmarine get -i cmems_obs-ins_glo_phy-temp-sal_my_cora_irr --filter "mediterrane/*/*_PR_CT.nc"
 
 # Back to the working root; the steps below use source/, output/, and report/ relative to it.
@@ -205,7 +205,7 @@ ctddump report parquet --level platform output/clean/filter/cora_mo.parquet   re
 
 De-duplicate the cleaned Parquet from the previous phase. Two profiles are
 duplicates when they share the same date and position (longitude/latitude rounded
-to 3 decimals) — ctddump's defaults, across platforms. `markdup` flags them (and
+to 3 decimals), ctddump's defaults, across platforms. `markdup` flags them (and
 lists them in a TSV); `dedup` removes them, keeping the profile with the most
 observations.
 
@@ -271,5 +271,5 @@ ctddump report parquet --level platform output/dedup/dedup/cora_mo.parquet repor
 > [`scripts/download_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/download_data.sh),
 > [`scripts/convert_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/convert_data.sh),
 > [`scripts/clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh),
-> and [`scripts/dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh)
-> — see [Helper scripts](../scripts.md) for their commands and options.
+> and [`scripts/dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh).
+> See [Helper scripts](../scripts.md) for their commands and options.
