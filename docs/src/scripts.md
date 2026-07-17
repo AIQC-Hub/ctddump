@@ -233,6 +233,10 @@ to override or `--license ""` to skip) and a short `README.md` describing the
 site. This is what makes the output directory suitable to push straight to a
 publishing repository such as `ctddump-report-example`.
 
+A live example of a built site is published at
+<https://aiqc-hub.github.io/ctddump-report-example/> (a static, point-in-time
+sample of this phase's output).
+
 ```bash
 scripts/summary_site.sh                      # site/ from summary/, every region
 scripts/summary_site.sh -y arctic            # Arctic pages only, no prompt
