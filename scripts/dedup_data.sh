@@ -41,6 +41,8 @@
 #                   clock and peak memory. Off by default; needs the `time`
 #                   package (not the shell builtin). Peak RSS is per process;
 #                   for meaningful wall times pair it with --sequential.
+#   --time-log FILE Write the --time measurements to FILE (implies --time), so
+#                   the screen keeps only the normal progress output.
 #   -y, --yes       Skip the confirmation prompt and start immediately.
 #   -h, --help      Show this help.
 #
@@ -59,6 +61,7 @@ CHUNK_ROWS=     # empty → ctddump's built-in default (see CTDDUMP_CHUNK_ROWS)
 ASSUME_YES=0
 PARALLEL=file   # file | region | none
 TIMING=0        # 1 → wrap each ctddump step in GNU time (--time)
+TIME_LOG=       # non-empty → write timing lines here, not to stderr (--time-log)
 
 # ---- Parse options -------------------------------------------------------
 # Options may appear anywhere; the remaining words are the command and regions.
@@ -74,6 +77,8 @@ while [[ $# -gt 0 ]]; do
     --by-region)  PARALLEL=region; shift ;;
     --sequential) PARALLEL=none; shift ;;
     --time)       TIMING=1; shift ;;
+    --time-log)   TIME_LOG="${2:?--time-log requires a file}"; TIMING=1; shift 2 ;;
+    --time-log=*) TIME_LOG="${1#*=}"; TIMING=1; shift ;;
     -y|--yes)     ASSUME_YES=1; shift ;;
     -h|--help)    usage; exit 0 ;;
     --)           shift; ARGS+=("$@"); break ;;
@@ -112,6 +117,16 @@ if [[ "$TIMING" == 1 ]]; then
   rm -f "$probe"
 fi
 
+# --time-log routes the timing lines to a file (and implies --time). Create it
+# fresh up front so a bad path fails now, and parallel workers can append to it.
+if [[ -n "$TIME_LOG" ]]; then
+  mkdir -p "$(dirname "$TIME_LOG")" 2>/dev/null || true
+  if ! : > "$TIME_LOG"; then
+    echo "Error: cannot write --time-log file: $TIME_LOG" >&2
+    exit 1
+  fi
+fi
+
 # Stage directories (each step reads the previous one).
 SRC_DIR="$OUT/clean/filter"          # clean_data.sh cleaned Parquet (input)
 MARK_DIR="$OUT/dedup/markdup"        # marked Parquet + dups TSV
@@ -141,6 +156,17 @@ log() {
   printf '[%s] %s%s\n' "$(date '+%H:%M:%S')" "$p" "$*" >&2
 }
 
+# Emit one timing line, routed by --time-log: to that file when given (so the
+# screen keeps only normal progress), otherwise to the log stream (stderr). The
+# file path mirrors log()'s "[time] [region] ..." format; a short single-line
+# append is atomic, so parallel workers do not interleave mid-line.
+timing_log() {  # <message>
+  if [[ -z "$TIME_LOG" ]]; then log "$*"; return; fi
+  local p=""
+  [[ -n "${REGION:-}" ]] && p="[$REGION] "
+  printf '[%s] %s%s\n' "$(date '+%H:%M:%S')" "$p" "$*" >> "$TIME_LOG"
+}
+
 # When --time is on, run <cmd...> under GNU time and log its wall-clock seconds and
 # peak resident memory; otherwise run <cmd...> unchanged. Each call captures time's
 # own output in a private temp file, so it is safe under parallel workers. The
@@ -155,7 +181,7 @@ measure() {  # <label> <cmd...>
   tf=$(mktemp)
   "$TIME_BIN" -o "$tf" -f '%e %M %P' -- "$@" || rc=$?
   if [[ "$rc" -eq 0 ]] && read -r es rss cpu < "$tf"; then
-    log "timed $label: ${es}s, $(( (rss + 1023) / 1024 )) MiB peak RSS, $cpu CPU"
+    timing_log "timed $label: ${es}s, $(( (rss + 1023) / 1024 )) MiB peak RSS, $cpu CPU"
   fi
   rm -f "$tf"
   return "$rc"
@@ -176,7 +202,10 @@ show_config() {  # <cmd> <region...>
     file)   [[ $nfiles -gt 1 ]] && mode="parallel (per file)" || mode="sequential" ;;
   esac
   local timing_desc=off
-  if [[ "$TIMING" == 1 ]]; then timing_desc="on ($TIME_BIN)"; fi
+  if [[ "$TIMING" == 1 ]]; then
+    timing_desc="on ($TIME_BIN)"
+    if [[ -n "$TIME_LOG" ]]; then timing_desc="$timing_desc -> $TIME_LOG"; fi
+  fi
   {
     echo "Configuration:"
     echo "  command : $cmd"

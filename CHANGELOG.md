@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- `convert_data.sh`, `clean_data.sh`, and `dedup_data.sh` gain `--time-log FILE`: the `--time` measurements are written to FILE (the option implies `--time`) instead of the screen, so normal progress stays visible. The file is created fresh each run, and in parallel mode each worker appends its own `timed …` lines. A bad path fails fast up front
+
 ## [0.22.1] - 2026-07-17
 
 ### Changed

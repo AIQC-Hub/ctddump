@@ -125,6 +125,7 @@ full list of tuning variables.
 | `--by-region` | convert, clean, dedup | off | Parallelise per region instead of per unit/file. |
 | `--sequential` | convert, clean, dedup | off | Process one unit at a time (no parallelism). |
 | `--time` | convert, clean, dedup | off | Measure each `ctddump` step with GNU time and log its wall clock and peak memory (see [Timing steps](#timing-steps)). |
+| `--time-log FILE` | convert, clean, dedup | off | Write the `--time` measurements to FILE (implies `--time`), so the screen keeps only the normal progress output. |
 | `-y, --yes` | all | off | Skip the confirmation prompt. |
 | `-h, --help` | all | off | Show the script's help. |
 
@@ -155,6 +156,12 @@ Notes:
   CPU% can exceed 100% (each `ctddump` is itself multi-threaded). For clean,
   comparable per-step wall times, pair `--time` with `--sequential`; peak RSS is
   per process and meaningful either way.
+- The measurements share the log stream (stderr) with the normal progress, so a
+  plain redirect captures both (`... --time --sequential -y all 2> run.log`). To
+  keep them apart, pass `--time-log FILE`: the `timed …` lines go to FILE (which
+  implies `--time` and is truncated fresh each run) while the screen keeps only
+  the normal progress. In parallel mode each worker appends its own lines, so the
+  file holds every step's timing, ordered by completion.
 
 ### Missing datasets
 
