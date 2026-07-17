@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- `summary_site.sh` now makes the built site directory a self-contained, publishable repository: alongside the `.nojekyll` that mdBook already writes, it copies in a `LICENSE` (the project's own by default; `-l/--license FILE` to override, `--license ""` to skip) and writes a short `README.md` describing the site. This lets the output directory be pushed straight to a publishing repository (e.g. `ctddump-report-example`)
+
 ## [0.20.0] - 2026-07-17
 
 ### Changed

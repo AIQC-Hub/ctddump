@@ -119,6 +119,7 @@ full list of tuning variables.
 | `-d, --dest DIR` | site | `site` | Directory the built static site is written to. |
 | `-c, --config FILE` | site | built-in | Custom `book.toml` to use instead of the built-in template. |
 | `-t, --title TEXT` | site | `ctddump: CTD data summary reports` | Book title (built-in template only; ignored with `--config`). |
+| `-l, --license FILE` | site | the `LICENSE` beside the script | LICENSE copied into the built site. Pass `--license ""` to skip it. |
 | `-f, --format FMT` | summary | `md` | Summary page format: `md` or `html`. |
 | `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
 | `--by-region` | convert, clean, dedup | — | Parallelise per region instead of per unit/file. |
@@ -224,6 +225,13 @@ pages are found at all, that is an error rather than an empty site.
 The book is assembled in a temporary directory, so only the rendered site is left
 behind. This phase needs the Markdown pages, so run `summary_data.sh` with its
 default `-f md` (an HTML run has nothing for mdBook to render).
+
+The built directory is made self-contained and ready to publish: mdBook writes a
+`.nojekyll` (so GitHub Pages serves its `FontAwesome/` and other asset folders),
+and the script adds a `LICENSE` (the project's own by default, `-l/--license FILE`
+to override or `--license ""` to skip) and a short `README.md` describing the
+site. This is what makes the output directory suitable to push straight to a
+publishing repository such as `ctddump-report-example`.
 
 ```bash
 scripts/summary_site.sh                      # site/ from summary/, every region
