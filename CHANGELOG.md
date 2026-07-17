@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-07-17
+
+### Changed
+- `summary_site.sh`'s built-in book title default is now `ctddump: CTD data summary reports` (was `CTD data summary reports`), so the generated site identifies itself as ctddump output. Still overridable with `-t/--title` and ignored when a custom `--config` is supplied
+
 ## [0.19.0] - 2026-07-17
 
 ### Added
@@ -211,7 +216,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.16.0...v0.17.0
