@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-07-17
+
+### Added
+- Link the published live example report site (<https://aiqc-hub.github.io/ctddump-report-example/>) from the README and the `summary_site.sh` section of the docs, as a static, point-in-time sample of that pipeline phase's output
+
 ## [0.21.0] - 2026-07-17
 
 ### Added
@@ -221,7 +226,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.21.1...HEAD
+[0.21.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.18.0...v0.19.0
