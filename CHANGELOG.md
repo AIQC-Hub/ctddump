@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-07-17
+
+### Changed
+- Removed em dashes from all human-facing documentation for a consistent house style: `README.md` (whose documentation links are now a bulleted list) and every page under `docs/src/`. The no-em-dash convention is recorded in `CLAUDE.md`
+
 ## [0.22.0] - 2026-07-17
 
 ### Added
@@ -231,7 +236,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.20.0...v0.21.0

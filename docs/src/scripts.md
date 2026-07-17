@@ -1,7 +1,7 @@
 # Helper scripts
 
 The [`scripts/`](https://github.com/AIQC-Hub/ctddump/tree/main/scripts)
-directory ships six Bash scripts that automate the full regional pipeline —
+directory ships six Bash scripts that automate the full regional pipeline,
 the same steps documented one command at a time in the
 [Regional workflows](./examples/arctic.md). They run in six phases, each
 consuming the previous phase's output:
@@ -16,8 +16,8 @@ consuming the previous phase's output:
 | 6. Publish | [`summary_site.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/summary_site.sh) | Render the Markdown summary pages into a static mdBook site. |
 
 Each phase handles the **Arctic**, **Baltic**, and **Mediterranean** regions.
-The scripts only orchestrate the `ctddump` binary, so it must be on your `PATH`
-— except `download_data.sh`, which instead needs the `copernicusmarine` toolbox
+The scripts only orchestrate the `ctddump` binary, so it must be on your `PATH`,
+except `download_data.sh`, which instead needs the `copernicusmarine` toolbox
 (and a free Copernicus Marine account) and does not use `ctddump` at all, and
 `summary_site.sh`, which needs [mdBook](https://rust-lang.github.io/mdBook/)
 (`cargo install mdbook`).
@@ -32,11 +32,11 @@ under `report/`; all are created as needed. They share one interface:
 scripts/<script>.sh [options] [command] [region ...]
 ```
 
-- **command** — the step (or `all`) to run; each script defaults to its most
+- **command**: the step (or `all`) to run; each script defaults to its most
   common command when omitted (see below).
-- **region** — one or more of `arctic`, `baltic`, `mediterranean`. Omitting them
+- **region**: one or more of `arctic`, `baltic`, `mediterranean`. Omitting them
   (or passing `all`) runs every region.
-- **options** — may appear anywhere on the line, in either `--out DIR` or
+- **options**: may appear anywhere on the line, in either `--out DIR` or
   `--out=DIR` form.
 
 Before doing any work, a script prints the resolved configuration and asks for
@@ -57,7 +57,7 @@ Proceed? [y/N]
 ```
 
 Answer `y` to proceed; anything else (including a bare Enter) aborts. Pass
-`-y`/`--yes` to skip the prompt — required when running non-interactively (a
+`-y`/`--yes` to skip the prompt, required when running non-interactively (a
 pipe or CI job), where the script otherwise aborts with a hint rather than hang.
 Every script closes its configuration block with the `-h`/`--help` reminder shown
 above, so the full option list is always one step away.
@@ -78,12 +78,12 @@ output stays readable:
 
 The granularity differs by script:
 
-- **`clean_data.sh` and `dedup_data.sh`** default to **per file** — one worker
+- **`clean_data.sh` and `dedup_data.sh`** default to **per file**: one worker
   per merged file (a *stem* within a region), the finest granularity (8 files
   across the three regions). Each file runs its whole stage chain (e.g.
   `dropqc → dropna → filter → report`) in order. Pass `--by-region` for one
   worker per region instead (coarser), or `--sequential` for no parallelism.
-- **`convert_data.sh`** defaults to **per unit** — one worker per
+- **`convert_data.sh`** defaults to **per unit**: one worker per
   *(region, product)*, where each region's three products are its regional NRT,
   the Global (GL), and CORA (9 units across the three regions). Each unit runs
   its own convert → merge → header → merge-header chain in order. Pass
@@ -94,14 +94,14 @@ The granularity differs by script:
 If any unit fails, the others still finish and the script exits non-zero after
 reporting which unit failed. A run with only one unit is always sequential.
 Note that `convert`/`clean`/`dedup` each also use multiple threads *within* a
-unit, so parallel units multiply the load accordingly — `convert_data.sh`'s
+unit, so parallel units multiply the load accordingly, `convert_data.sh`'s
 `-t/--threads` therefore defaults to just `2`, since up to 9 units may run at
 once. Throttle further with `--by-region` / `--sequential`. For
 `download_data.sh`, `--sequential` also helps if concurrent Copernicus transfers
 hit rate limits.
 
 If memory is tight (parallel units each hold a chunk in memory at once), lower
-the streaming chunk size with `--chunk-rows N` on `convert`/`clean`/`dedup` — it
+the streaming chunk size with `--chunk-rows N` on `convert`/`clean`/`dedup`, it
 trades a smaller memory footprint for more Parquet row groups without changing
 the output. See [Configuration](./configuration.md#environment-variables) for the
 full list of tuning variables.
@@ -121,12 +121,12 @@ full list of tuning variables.
 | `-t, --title TEXT` | site | `ctddump: CTD data summary reports` | Book title (built-in template only; ignored with `--config`). |
 | `-l, --license FILE` | site | the `LICENSE` beside the script | LICENSE copied into the built site. Pass `--license ""` to skip it. |
 | `-f, --format FMT` | summary | `md` | Summary page format: `md` or `html`. |
-| `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
-| `--by-region` | convert, clean, dedup | — | Parallelise per region instead of per unit/file. |
-| `--sequential` | convert, clean, dedup | — | Process one unit at a time (no parallelism). |
+| `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows: lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
+| `--by-region` | convert, clean, dedup | off | Parallelise per region instead of per unit/file. |
+| `--sequential` | convert, clean, dedup | off | Process one unit at a time (no parallelism). |
 | `--time` | convert, clean, dedup | off | Measure each `ctddump` step with GNU time and log its wall clock and peak memory (see [Timing steps](#timing-steps)). |
-| `-y, --yes` | all | — | Skip the confirmation prompt. |
-| `-h, --help` | all | — | Show the script's help. |
+| `-y, --yes` | all | off | Skip the confirmation prompt. |
+| `-h, --help` | all | off | Show the script's help. |
 
 ### Timing steps
 
@@ -220,7 +220,7 @@ scripts/dedup_data.sh                        # markdup → report → dedup → 
 ## `summary_data.sh`
 
 Builds one [`report summary`](./commands/report.md#report-summary) page per
-*(region, product)* unit from the TSV reports the earlier phases produced —
+*(region, product)* unit from the TSV reports the earlier phases produced:
 Markdown by default, `--format html` for HTML. It reads reports from `report/`
 (`-r/--report`) and the markdup `.dups.tsv` from `output/` (`-o/--out`), and
 writes one page per stem to `summary/` (`-d/--dest`). A stem with no report files
@@ -233,8 +233,8 @@ scripts/summary_data.sh -y -f html baltic     # HTML pages, Baltic only, no prom
 
 The script gives each page a human-readable **title** and any product-specific
 **notes** (passed to `report summary` as `--title` / `--note`). Both live in the
-*Page text* section near the top of the script — `title_for` and `notes_for`, one
-`case` arm per stem — and that is the place to edit what a page says about a
+*Page text* section near the top of the script, `title_for` and `notes_for`, one
+`case` arm per stem, and that is the place to edit what a page says about a
 region or dataset. The section prose on the page is generic and comes from
 `ctddump` itself.
 
@@ -274,7 +274,7 @@ scripts/summary_site.sh -t "Arctic CTD QC"   # override the book title
 
 By default the script writes a `book.toml` for you. Pass `-c/--config FILE` to use
 your own instead; it is used verbatim, so it must keep mdBook's default
-`src = "src"` — the script assembles the chapters into a `src/` directory beside
+`src = "src"`, the script assembles the chapters into a `src/` directory beside
 it. With `--config`, `--title` is ignored (your file sets the title).
 
 ```bash

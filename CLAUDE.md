@@ -10,6 +10,10 @@ Guidance for Claude Code when working in this repository.
 
 Top-level commands: `convert` (single file → Parquet), `batch` (directory tree → Parquet/YAML, multi-threaded), `header` (NetCDF → YAML metadata), `concat` (merge Parquet files), `report` (summarise a Parquet/YAML file as text), `filter` (keep/drop profiles by a bounding box), `dropna` (drop profiles that are all-NA in any of temp/psal/pres), `dropqc` (drop profiles flagged bad in time_qc/position_qc), `markdup` (mark duplicate profiles with an is_dup column), `dedup` (remove duplicate profiles).
 
+## Documentation style
+
+Do not use em dashes (`—`) in any human-facing document: `README.md`, the mdBook docs under `docs/`, `CHANGELOG.md`, the generated reports and summary pages, and the summary web site. This covers both prose committed to the repo and text the tools emit at runtime (report/summary renderers, script log lines, help text). Use a colon, comma, parentheses, semicolon, or a reworded sentence instead.
+
 ## Git Workflow
 
 Permanent branches: `main` (stable releases), `develop` (integration). Commit day-to-day work directly to `develop`. `git-flow` (AVH Edition) is installed for multi-session features (`feature start/finish`) and hotfixes (`hotfix …`) — use it only when it adds value.

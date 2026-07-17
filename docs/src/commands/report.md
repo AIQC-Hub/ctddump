@@ -1,7 +1,7 @@
 # `report`
 
 Summarise a produced **Parquet** data file or **YAML** header file as a
-text report — TSV (default), plain text, or JSON — or assemble a multi-section
+text report, TSV (default), plain text, or JSON, or assemble a multi-section
 **summary page** (`report summary`) from the per-stage TSV reports.
 
 ```
@@ -26,14 +26,14 @@ Aggregates a data file at one of three levels (`--level`, default `platform`):
 
 Every row also reports:
 
-- `n_obs` — number of observations.
-- `time_qc_good` / `position_qc_good` — number of **profiles** whose flag is
+- `n_obs`: number of observations.
+- `time_qc_good` / `position_qc_good`: number of **profiles** whose flag is
   `"1"` (CMEMS "good"). These flags are per-profile; at `--level profile` the
   single flag value is shown instead.
-- `na_temp` / `na_psal` / `na_pres` — count of missing (null/NaN) values.
-- `{temp,psal,pres}_{min,max,mean}` — statistics over the valid (non-NaN)
+- `na_temp` / `na_psal` / `na_pres`: count of missing (null/NaN) values.
+- `{temp,psal,pres}_{min,max,mean}`: statistics over the valid (non-NaN)
   values. (Median is intentionally not computed.)
-- `{longitude,latitude}_{min,max}` — geographic bounding box over the valid
+- `{longitude,latitude}_{min,max}`: geographic bounding box over the valid
   positions (`global` and `platform` levels only; at `profile` level the single
   `longitude`/`latitude` is already shown).
 
@@ -72,8 +72,8 @@ ctddump report yaml --format json merged.yaml report.json
 
 Assembles a single **Markdown** (default) or **HTML** (`--format html`) page for
 one file *stem* (e.g. `nrt_ar_ar`) by reading the TSV reports the pipeline already
-produced. It does not scan any Parquet itself — it aggregates the small per-stage
-report TSVs — so it is instant.
+produced. It does not scan any Parquet itself, it aggregates the small per-stage
+report TSVs, so it is instant.
 
 Given a stem, the source files are **auto-located** at their standard pipeline
 paths under `--report-dir` (default `report`) and `--out-dir` (default `output`):
@@ -99,19 +99,19 @@ Each stage table reports **platforms / profiles / observations**. The
 used.
 
 The two **Deduplication** stages ran on the cleaned data, not on the original, so
-their tables carry three further columns — `Cleaned`, `% of cleaned` and
-`Deleted (cleaned)` — comparing them against the **last cleaning stage present**
+their tables carry three further columns, `Cleaned`, `% of cleaned` and
+`Deleted (cleaned)`, comparing them against the **last cleaning stage present**
 (Filter, else Drop all-NA, else Drop bad QC). When no cleaning stage ran there is
 nothing to compare against and the columns are omitted.
 
 The Mark-duplicates section additionally lists the duplicate profiles that `dedup`
 would remove, split into:
 
-- **within a platform** — a `dup_group` confined to a single `platform_code`;
-- **across platforms** — a group spanning two or more.
+- **within a platform**: a `dup_group` confined to a single `platform_code`;
+- **across platforms**: a group spanning two or more.
 
-(A `dup_group` is a set of profiles sharing the duplicate key — date + rounded
-position — so an across-platform group is the same cast reported by more than one
+(A `dup_group` is a set of profiles sharing the duplicate key, date + rounded
+position, so an across-platform group is the same cast reported by more than one
 platform.)
 
 A third table, **Duplicate group sizes**, shows how many profiles the groups hold:
@@ -119,11 +119,11 @@ one row per distinct size up to 10, then a single `11+` row for the tail.
 
 ### Title and notes
 
-Each section carries a short, generic explanation of what the stage did — the same
+Each section carries a short, generic explanation of what the stage did, the same
 prose for every region and dataset. Anything region- or product-specific goes in:
 
-- `--title TEXT` — replaces the default `Summary: <stem>` heading.
-- `--note TEXT` — a note rendered under the title; repeat for several notes.
+- `--title TEXT`: replaces the default `Summary: <stem>` heading.
+- `--note TEXT`: a note rendered under the title; repeat for several notes.
 
 Both are plain text and are escaped in HTML output. In the pipeline these are
 supplied per stem by [`summary_data.sh`](../scripts.md), which is the place to edit

@@ -2,15 +2,17 @@
 
 A Rust CLI tool for converting oceanographic CTD (Conductivity, Temperature, Depth) data from NetCDF to Parquet (data) or YAML (metadata).
 
-📖 **Documentation: <https://aiqc-hub.github.io/ctddump/>**
-🌊 **Live example report site: <https://aiqc-hub.github.io/ctddump-report-example/>** — sample output of the `summary_site.sh` pipeline phase
+**Links:**
+
+- 📖 [Documentation](https://aiqc-hub.github.io/ctddump/)
+- 🌊 [Live example report site](https://aiqc-hub.github.io/ctddump-report-example/): sample output of the `summary_site.sh` pipeline phase
 
 Two data sources are supported:
 
 | Source | Description |
 |--------|-------------|
-| **NRT** | Near Real Time — Arctic Sea (`nrt_ar`), Baltic Sea (`nrt_bo`), Mediterranean Sea (`nrt_mo`), Global (`nrt_gl`) |
-| **CORA** | Copernicus Ocean Reanalysis — current format (`cora`), legacy format (`cora_legacy`) |
+| **NRT** | Near Real Time: Arctic Sea (`nrt_ar`), Baltic Sea (`nrt_bo`), Mediterranean Sea (`nrt_mo`), Global (`nrt_gl`) |
+| **CORA** | Copernicus Ocean Reanalysis: current format (`cora`), legacy format (`cora_legacy`) |
 
 ## Installation
 
@@ -40,7 +42,7 @@ The binary is placed at `target/release/ctddump`.
 
 Every command and subcommand supports `-h` / `--help`.
 
-### `convert` — single NetCDF → Parquet
+### `convert`: single NetCDF → Parquet
 
 ```
 ctddump convert <subcommand> [OPTIONS] <src_file> <target_file>
@@ -61,7 +63,7 @@ ctddump convert nrt_ar --config my_preset.toml input.nc output.parquet
 ctddump convert nrt_bo --no-deph-source input.nc output.parquet
 ```
 
-### `batch` — directory tree NetCDF → Parquet or YAML (multi-threaded)
+### `batch`: directory tree NetCDF → Parquet or YAML (multi-threaded)
 
 ```
 ctddump batch convert <subcommand> [OPTIONS] <src_dir>
@@ -95,7 +97,7 @@ Default filename patterns:
 | `cora`, `cora_legacy` | `*.nc` |
 | `batch header nrt`, `batch header cora` | `*.nc` |
 
-### `header` — single NetCDF → YAML metadata
+### `header`: single NetCDF → YAML metadata
 
 ```
 ctddump header <subcommand> <src_file> <target_file>
@@ -106,7 +108,7 @@ ctddump header nrt  input.nc output.yaml
 ctddump header cora input.nc output.yaml
 ```
 
-### `concat` — merge files from a directory tree into a single file
+### `concat`: merge files from a directory tree into a single file
 
 ```
 ctddump concat convert [OPTIONS] <src_dir> <output_file>
@@ -115,7 +117,7 @@ ctddump concat header  [OPTIONS] <src_dir> <output_file>
 
 `concat convert` merges Parquet files and re-assigns `profile_no` and `observation_no` by default (pass `--no-renumber` to skip). Renumbering sorts rows by `platform_code, profile_timestamp, longitude, latitude, pres`; pass `--no-pres-sort` to sort without `pres`, keeping each profile's observations in their original source order instead of reordering them by pressure. Rows with missing (null/NaN) `pres` are dropped before merging by default (this keeps `observation_no` contiguous over the remaining rows); pass `--keep-na-pres` to retain them. Renumbering processes platform ranges in parallel across all CPU cores by default (via temporary files in the output folder); pass `--threads N` to cap the worker count, or `--threads 1` for the sequential, lowest-memory path. Peak memory rises with the thread count, but the result is identical either way.
 
-`concat header` merges YAML header files — each file contributes its top-level keys to the combined output. An error is raised if any two files share the same key.
+`concat header` merges YAML header files: each file contributes its top-level keys to the combined output. An error is raised if any two files share the same key.
 
 ```bash
 # Merge all Parquet files with profile renumbering
@@ -143,7 +145,7 @@ ctddump concat convert --pattern "AR_PR_CT_*.parquet" /data/parquet merged.parqu
 ctddump concat header /data/yaml merged.yaml
 ```
 
-### `report` — summarise a Parquet or YAML file
+### `report`: summarise a Parquet or YAML file
 
 ```
 ctddump report parquet [--level global|platform|profile] [--format tsv|text|json] <src.parquet> [dest]
@@ -154,7 +156,7 @@ Writes a text summary to `dest`, or to stdout when omitted. Default format is `t
 
 `report parquet` aggregates a data file at one of three `--level`s (default `platform`): `global` (one row), `platform` (one row per `platform_code`), or `profile` (one row per profile). Each row reports profile / observation counts, per-profile "good" QC counts (`time_qc`/`position_qc == "1"`), missing-value counts, min / max / mean for `temp`, `psal`, and `pres`, and the geographic bounding box (`longitude`/`latitude` min/max; `global` and `platform` levels only).
 
-`report yaml` summarises a merged header YAML: one row per source file with presence flags for the core columns (`TEMP`, `PSAL`, `PRES`, `DEPH`, `TIME`, position) and an `extra_params` list of the extra measurement parameters detected — biogeochemical/biological and other non-core variables (e.g. `DOXY;FLU2;TUR3`).
+`report yaml` summarises a merged header YAML: one row per source file with presence flags for the core columns (`TEMP`, `PSAL`, `PRES`, `DEPH`, `TIME`, position) and an `extra_params` list of the extra measurement parameters detected: biogeochemical/biological and other non-core variables (e.g. `DOXY;FLU2;TUR3`).
 
 ```bash
 # Per-platform summary of a merged Parquet file
@@ -167,7 +169,7 @@ ctddump report parquet --level global --format text merged.parquet
 ctddump report yaml --format json merged.yaml report.json
 ```
 
-### `filter` — filter a Parquet file's profiles by a bounding box
+### `filter`: filter a Parquet file's profiles by a bounding box
 
 ```
 ctddump filter [--mode include|exclude] --min-lon <W> --max-lon <E> --min-lat <S> --max-lat <N> <src.parquet> <dest.parquet>
@@ -183,33 +185,33 @@ ctddump filter --min-lon 5 --max-lon 15 --min-lat 35 --max-lat 40 merged.parquet
 ctddump filter --mode exclude --min-lon 5 --max-lon 15 --min-lat 35 --max-lat 40 merged.parquet outside.parquet
 ```
 
-### `dropna` — drop profiles with no usable data in a core parameter
+### `dropna`: drop profiles with no usable data in a core parameter
 
 ```
 ctddump dropna <src.parquet> <dest.parquet>
 ```
 
-`dropna` keeps a profile only if **each** of `temp`, `psal`, and `pres` has at least one non-NA observation, and drops the whole profile if **any one** of them is entirely NA (null or NaN). Partial NAs are fine — a kept profile keeps all its rows. It runs in two streaming passes, so peak memory stays bounded regardless of file size and the output is independent of chunking.
+`dropna` keeps a profile only if **each** of `temp`, `psal`, and `pres` has at least one non-NA observation, and drops the whole profile if **any one** of them is entirely NA (null or NaN). Partial NAs are fine: a kept profile keeps all its rows. It runs in two streaming passes, so peak memory stays bounded regardless of file size and the output is independent of chunking.
 
 ```bash
 # Drop profiles with an all-NA temp, psal, or pres
 ctddump dropna merged.parquet cleaned.parquet
 ```
 
-### `dropqc` — drop profiles flagged bad by profile-level QC
+### `dropqc`: drop profiles flagged bad by profile-level QC
 
 ```
 ctddump dropqc <src.parquet> <dest.parquet>
 ```
 
-`dropqc` keeps a profile only if **both** `time_qc` and `position_qc` are either `"1"` (OK) or **missing** (absent QC or the NA byte `-128`, both stored as `""`). Any other flag (`"0"`, `"2"`…`"9"`, or a non-numeric code) drops the whole profile. Missing QC is kept on purpose — several source files ship no profile-level QC at all. Since these flags are constant within a profile, it is a plain per-row predicate; the file is streamed one row group at a time, so peak memory stays bounded regardless of size.
+`dropqc` keeps a profile only if **both** `time_qc` and `position_qc` are either `"1"` (OK) or **missing** (absent QC or the NA byte `-128`, both stored as `""`). Any other flag (`"0"`, `"2"`…`"9"`, or a non-numeric code) drops the whole profile. Missing QC is kept on purpose: several source files ship no profile-level QC at all. Since these flags are constant within a profile, it is a plain per-row predicate; the file is streamed one row group at a time, so peak memory stays bounded regardless of size.
 
 ```bash
 # Drop profiles flagged bad in time_qc or position_qc
 ctddump dropqc merged.parquet cleaned.parquet
 ```
 
-### `markdup` — mark duplicate profiles
+### `markdup`: mark duplicate profiles
 
 ```
 ctddump markdup [OPTIONS] <src.parquet> <dest.parquet> <dups.tsv>
@@ -221,13 +223,13 @@ ctddump markdup [OPTIONS] <src.parquet> <dest.parquet> <dups.tsv>
 ctddump markdup merged.parquet marked.parquet duplicates.tsv
 ```
 
-### `dedup` — remove duplicate profiles
+### `dedup`: remove duplicate profiles
 
 ```
 ctddump dedup [OPTIONS] <src.parquet> <dest.parquet>
 ```
 
-`dedup` re-derives the same key as `markdup` (pass the same options) and keeps one profile per duplicate group — the one with the most observation rows, ties broken by first appearance. Profiles with no key (NaN position / null timestamp) are always kept; an `is_dup` column, if present, is reset to `false`.
+`dedup` re-derives the same key as `markdup` (pass the same options) and keeps one profile per duplicate group: the one with the most observation rows, ties broken by first appearance. Profiles with no key (NaN position / null timestamp) are always kept; an `is_dup` column, if present, is reset to `false`.
 
 ```bash
 ctddump dedup marked.parquet deduped.parquet
@@ -307,7 +309,7 @@ cargo test test_convert_nrt_ar_1
 scripts/fetch_test_data.sh
 ```
 
-> **Note:** HDF5-DIAG messages may appear in test output on systems with HDF5 ≤ 1.10. They are harmless — the data is read correctly and all tests pass.
+> **Note:** HDF5-DIAG messages may appear in test output on systems with HDF5 ≤ 1.10. They are harmless: the data is read correctly and all tests pass.
 
 Releases are versioned, changelogged, and published following [RELEASING.md](RELEASING.md).
 

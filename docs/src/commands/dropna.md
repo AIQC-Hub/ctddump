@@ -11,7 +11,7 @@ ctddump dropna <src.parquet> <dest.parquet>
 A profile is **kept** only if **each** of `temp`, `psal`, and `pres` has at
 least one non-NA observation. It is **dropped** if **any one** of those
 parameters is entirely NA (null or NaN) across the profile. Partial NAs within a
-parameter are fine — a kept profile retains *all* of its observations, including
+parameter are fine, a kept profile retains *all* of its observations, including
 the NA ones.
 
 | Profile | `temp` | `psal` | `pres` | Result |
