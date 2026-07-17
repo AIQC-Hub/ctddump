@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-07-18
+
+### Added
+- `convert_data.sh`, `clean_data.sh`, and `dedup_data.sh` gain `--time-log FILE`: the `--time` measurements are written to FILE (the option implies `--time`) instead of the screen, so normal progress stays visible. The file is created fresh each run, and in parallel mode each worker appends its own `timed …` lines. A bad path fails fast up front
+
 ## [0.22.1] - 2026-07-17
 
 ### Changed
@@ -236,7 +241,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.21.0...v0.21.1
