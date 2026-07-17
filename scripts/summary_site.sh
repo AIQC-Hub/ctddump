@@ -15,7 +15,7 @@
 #   -d, --dest DIR     directory to write the built site into     (default: site)
 #   -c, --config FILE  custom book.toml to use instead of the built-in template
 #   -t, --title TEXT   book title (built-in template only)
-#                      (default: "CTD data summary reports")
+#                      (default: "ctddump: CTD data summary reports")
 #   -y, --yes          Skip the confirmation prompt and start immediately.
 #   -h, --help         Show this help.
 #
@@ -39,7 +39,7 @@ usage() { awk 'NR<3 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"; }
 SRC=summary
 DEST=site
 CONFIG=""
-TITLE="CTD data summary reports"
+TITLE="ctddump: CTD data summary reports"
 ASSUME_YES=0
 
 # ---- Parse options -------------------------------------------------------

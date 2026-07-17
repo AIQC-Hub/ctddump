@@ -118,7 +118,7 @@ full list of tuning variables.
 | `-d, --dest DIR` | summary | `summary` | Directory the generated summary pages are written to. |
 | `-d, --dest DIR` | site | `site` | Directory the built static site is written to. |
 | `-c, --config FILE` | site | built-in | Custom `book.toml` to use instead of the built-in template. |
-| `-t, --title TEXT` | site | `CTD data summary reports` | Book title (built-in template only; ignored with `--config`). |
+| `-t, --title TEXT` | site | `ctddump: CTD data summary reports` | Book title (built-in template only; ignored with `--config`). |
 | `-f, --format FMT` | summary | `md` | Summary page format: `md` or `html`. |
 | `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows — lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
 | `--by-region` | convert, clean, dedup | — | Parallelise per region instead of per unit/file. |
