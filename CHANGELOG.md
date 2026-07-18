@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-07-18
+
+### Added
+- The "Filter by region" section of `report summary` gains a **Bounding box** table: the minimum and maximum longitude and latitude of the profiles that survived the filter, in decimal degrees. The extremes are aggregated from the per-platform extent columns of the stage TSV, so they span every platform in the file. When the Conversion report is present a second `Original` column gives the same extremes before any cleaning ran, showing how far the filter tightened the box. Profiles with a missing position are ignored, and the table is omitted when no profile has a valid position (so stage TSVs without the extent columns are unaffected)
+
 ## [0.23.0] - 2026-07-18
 
 ### Added
@@ -241,7 +246,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.21.1...v0.22.0
