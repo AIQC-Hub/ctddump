@@ -141,6 +141,22 @@ impl Tsv {
         let Some(i) = self.col(name) else { return 0 };
         self.rows.iter().filter(|r| r.get(i).map(String::as_str) == Some(val)).count() as u64
     }
+
+    /// Every parseable float in a column. The report writer renders NaN and null
+    /// as an empty cell, so unparseable cells are simply skipped and a column of
+    /// them yields an empty iterator (no extreme is reported).
+    fn floats<'a>(&'a self, name: &str) -> impl Iterator<Item = f64> + 'a {
+        let i = self.col(name);
+        self.rows.iter().filter_map(move |r| r.get(i?)?.trim().parse::<f64>().ok())
+    }
+
+    fn min_f64(&self, name: &str) -> Option<f64> {
+        self.floats(name).fold(None, |acc, v| Some(acc.map_or(v, |a: f64| a.min(v))))
+    }
+
+    fn max_f64(&self, name: &str) -> Option<f64> {
+        self.floats(name).fold(None, |acc, v| Some(acc.map_or(v, |a: f64| a.max(v))))
+    }
 }
 
 fn parse_u64(cell: Option<&String>) -> u64 {
@@ -168,6 +184,36 @@ impl Counts {
             profiles: t.sum_u64("n_profiles"),
             obs: t.sum_u64("n_obs"),
         }
+    }
+}
+
+/// Geographic extent of a stage, aggregated from the per-platform `longitude_min`
+/// / `longitude_max` / `latitude_min` / `latitude_max` columns. Each field is
+/// `None` when no platform reported a valid value for it.
+#[derive(Clone, Copy)]
+struct BBox {
+    lon_min: Option<f64>,
+    lon_max: Option<f64>,
+    lat_min: Option<f64>,
+    lat_max: Option<f64>,
+}
+
+impl BBox {
+    fn from_platform_tsv(t: &Tsv) -> BBox {
+        BBox {
+            lon_min: t.min_f64("longitude_min"),
+            lon_max: t.max_f64("longitude_max"),
+            lat_min: t.min_f64("latitude_min"),
+            lat_max: t.max_f64("latitude_max"),
+        }
+    }
+
+    /// True when at least one extreme is known; an all-empty box is not worth a table.
+    fn any(&self) -> bool {
+        self.lon_min.is_some()
+            || self.lon_max.is_some()
+            || self.lat_min.is_some()
+            || self.lat_max.is_some()
     }
 }
 
@@ -215,6 +261,11 @@ const DESC_DROPNA: &str = "Drops whole profiles that carry no valid measurement 
 
 const DESC_FILTER: &str = "Keeps only the profiles whose position falls inside the region's \
     bounding box. A profile with a missing position counts as outside and is dropped.";
+
+const DESC_BBOX: &str = "Geographic extent of the profiles that survived the filter, in decimal \
+    degrees. The \"Original\" column, when present, is the extent of the converted data before any \
+    cleaning stage ran, so the two columns show how much the bounding box tightened. Profiles with \
+    a missing position are ignored.";
 
 const DESC_DEDUP: &str = "Stages that find and remove profiles measuring the same time and place. \
     Profiles match on date and rounded longitude/latitude. The platform is not part of the key, \
@@ -291,6 +342,14 @@ fn build_sections(p: &StemPaths) -> Result<Vec<Section>, Box<dyn Error>> {
         });
     }
 
+    // The pre-filter extent the "Filter by region" bounding box is compared against:
+    // the converted data, matching what "original" means everywhere else on the page.
+    let orig_bbox = if p.convert.exists() {
+        Some(BBox::from_platform_tsv(&Tsv::read(&p.convert)?))
+    } else {
+        None
+    };
+
     // 3. Cleaning (Drop bad QC → Drop all-NA → Filter by region).
     let mut cleaning = Vec::new();
     for (title, desc, path) in [
@@ -299,12 +358,21 @@ fn build_sections(p: &StemPaths) -> Result<Vec<Section>, Box<dyn Error>> {
         ("Filter by region", DESC_FILTER, &p.filter),
     ] {
         if let Some(c) = counts_of(path)? {
+            let mut tables = vec![stage_table(c, baseline, None)];
+            // Only the filter stage moves the bounding box on purpose, so only it
+            // gets the extent table.
+            if title == "Filter by region" {
+                let kept = BBox::from_platform_tsv(&Tsv::read(path)?);
+                if kept.any() {
+                    tables.push(bbox_table(kept, orig_bbox.filter(BBox::any)));
+                }
+            }
             cleaning.push(Section {
                 level: 2,
                 title: title.into(),
                 desc: desc.into(),
                 files: vec![path_str(path)],
-                tables: vec![stage_table(c, baseline, None)],
+                tables,
             });
         }
     }
@@ -584,6 +652,35 @@ fn counts_table(c: Counts) -> Table {
     }
 }
 
+/// Longitude / latitude extremes of the filtered data, next to the pre-filter
+/// extremes when those are available.
+fn bbox_table(kept: BBox, original: Option<BBox>) -> Table {
+    let mut headers = vec!["Metric".to_string(), "Filtered".to_string()];
+    if original.is_some() {
+        headers.push("Original".to_string());
+    }
+
+    let fields: [(&str, fn(&BBox) -> Option<f64>); 4] = [
+        ("Longitude min", |b| b.lon_min),
+        ("Longitude max", |b| b.lon_max),
+        ("Latitude min", |b| b.lat_min),
+        ("Latitude max", |b| b.lat_max),
+    ];
+
+    let rows = fields
+        .iter()
+    .map(|(label, get)| {
+        let mut r = vec![(*label).to_string(), fmt_deg(get(&kept))];
+        if let Some(o) = original {
+            r.push(fmt_deg(get(&o)));
+        }
+        r
+    })
+    .collect();
+
+    Table { title: Some("Bounding box".into()), desc: DESC_BBOX.into(), headers, rows }
+}
+
 /// A stage table with "% of original" / "Deleted" columns relative to `baseline`.
 ///
 /// When `cleaned` is given, three more columns compare the stage against the
@@ -645,6 +742,14 @@ fn fmt_pct(v: f64) -> String {
         String::new()
     } else {
         format!("{v:.1}%")
+    }
+}
+
+/// Decimal degrees to 3 places (about 100 m); an unknown extreme renders empty.
+fn fmt_deg(v: Option<f64>) -> String {
+    match v {
+        Some(v) if !v.is_nan() => format!("{v:.3}"),
+        _ => String::new(),
     }
 }
 

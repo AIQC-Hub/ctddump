@@ -332,3 +332,98 @@ fn no_files_produces_valid_empty_page() {
     assert!(md.contains("# Summary: ghost"), "missing title\n{md}");
     assert!(md.contains("No section source files were found"), "missing empty note\n{md}");
 }
+
+// ── Filter bounding box ───────────────────────────────────────────────────────
+
+/// Platform-level TSV carrying the geographic extent columns the bounding-box
+/// table aggregates. `rows` are (platform, lon_min, lon_max, lat_min, lat_max);
+/// an empty cell (the report writer's rendering of NaN) is written as `""`.
+fn write_bbox_tsv(path: &Path, rows: &[(&str, &str, &str, &str, &str)]) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut s = String::from(
+        "platform_code\tn_profiles\tn_obs\tlongitude_min\tlongitude_max\tlatitude_min\tlatitude_max\n",
+    );
+    for (p, lo_min, lo_max, la_min, la_max) in rows {
+        s.push_str(&format!("{p}\t10\t100\t{lo_min}\t{lo_max}\t{la_min}\t{la_max}\n"));
+    }
+    fs::write(path, s).unwrap();
+}
+
+#[test]
+fn filter_bbox_table_reports_extremes_across_platforms() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = (dir.path().join("report"), dir.path().join("output"));
+    // Extremes are the min of the mins and the max of the maxes over platforms.
+    write_bbox_tsv(
+        &rep.join("convert").join("bb.parquet.tsv"),
+        &[("A", "-40.5", "12.25", "50.1", "80.9"), ("B", "3.5", "44.75", "35.0", "60.0")],
+    );
+    write_bbox_tsv(
+        &rep.join("clean/filter").join("bb.parquet.tsv"),
+        &[("A", "-5.6", "12.25", "51.0", "60.0"), ("B", "3.5", "30.0", "36.0", "45.5")],
+    );
+
+    let md = run_summary(&rep, &out, "bb", "md", &dir.path().join("bb.md"));
+    assert!(md.contains("**Bounding box**"), "bbox table missing\n{md}");
+    assert!(md.contains("| Metric | Filtered | Original |"), "bbox headers wrong\n{md}");
+    for row in [
+        "| Longitude min | -5.600 | -40.500 |",
+        "| Longitude max | 30.000 | 44.750 |",
+        "| Latitude min | 36.000 | 35.000 |",
+        "| Latitude max | 60.000 | 80.900 |",
+    ] {
+        assert!(md.contains(row), "missing bbox row: {row}\n{md}");
+    }
+    // The table belongs to the filter stage only.
+    assert_eq!(md.matches("**Bounding box**").count(), 1, "bbox table duplicated\n{md}");
+    assert!(!md.contains('\u{2014}'), "page contains an em dash\n{md}");
+}
+
+#[test]
+fn filter_bbox_omits_original_column_without_convert_report() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = (dir.path().join("report"), dir.path().join("output"));
+    write_bbox_tsv(
+        &rep.join("clean/filter").join("bb.parquet.tsv"),
+        &[("A", "-5.6", "12.25", "51.0", "60.0")],
+    );
+
+    let md = run_summary(&rep, &out, "bb", "md", &dir.path().join("bb.md"));
+    assert!(md.contains("| Metric | Filtered |"), "bbox headers wrong\n{md}");
+    assert!(!md.contains("Original |"), "unexpected Original column\n{md}");
+    assert!(md.contains("| Longitude min | -5.600 |"), "bbox row wrong\n{md}");
+}
+
+#[test]
+fn filter_bbox_table_absent_when_no_valid_positions() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = (dir.path().join("report"), dir.path().join("output"));
+    // Every extent cell empty, as the report writer renders an all-NaN position.
+    write_bbox_tsv(&rep.join("clean/filter").join("bb.parquet.tsv"), &[("A", "", "", "", "")]);
+
+    let md = run_summary(&rep, &out, "bb", "md", &dir.path().join("bb.md"));
+    assert!(md.contains("### Filter by region"), "filter section missing\n{md}");
+    assert!(!md.contains("Bounding box"), "bbox table should be omitted\n{md}");
+}
+
+#[test]
+fn filter_bbox_renders_in_html() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = (dir.path().join("report"), dir.path().join("output"));
+    write_bbox_tsv(
+        &rep.join("convert").join("bb.parquet.tsv"),
+        &[("A", "-40.5", "12.25", "50.1", "80.9")],
+    );
+    write_bbox_tsv(
+        &rep.join("clean/filter").join("bb.parquet.tsv"),
+        &[("A", "-5.6", "12.25", "51.0", "60.0")],
+    );
+
+    let html = run_summary(&rep, &out, "bb", "html", &dir.path().join("bb.html"));
+    assert!(html.contains("Bounding box</p>"), "bbox title missing\n{html}");
+    assert!(html.contains("<th>Filtered</th><th>Original</th>"), "bbox headers wrong\n{html}");
+    assert!(
+        html.contains("<td>Longitude min</td><td>-5.600</td><td>-40.500</td>"),
+        "bbox row wrong\n{html}"
+    );
+}
