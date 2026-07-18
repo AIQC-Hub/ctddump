@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-07-18
+
+### Added
+- Package metadata for publication to crates.io: `description` (required by the registry), plus `repository`, `homepage`, `documentation`, `readme`, `keywords`, and `categories` for the crate page. An `exclude` list keeps development-only material (`CLAUDE.md`, `.claudeignore`, `.github/`, `docs/`, `scripts/`, `RELEASING.md`) out of the published tarball, taking it from 84 files to 51. The docs and helper scripts remain in the repository, and the hosted documentation is unaffected
+
 ## [0.24.0] - 2026-07-18
 
 ### Added
@@ -246,7 +251,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.1...HEAD
+[0.24.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.0...v0.22.1
