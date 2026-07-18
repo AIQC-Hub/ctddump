@@ -31,3 +31,14 @@ tempfile = "3"
 
 [features]
 trace = []
+# Build HDF5 and netCDF from source instead of linking the system libraries.
+# Only needed where those libraries cannot be installed; docs.rs is the case
+# this exists for. Normal builds and `cargo install ctddump` should leave it off
+# and install libhdf5-dev / libnetcdf-dev instead, which is far quicker.
+static-netcdf = ["netcdf/static"]
+
+# docs.rs has no libnetcdf and cannot install one, so an ordinary build there
+# fails in the netcdf-sys build script and the crate gets no rendered API docs.
+# Vendoring the C libraries is the only way around it.
+[package.metadata.docs.rs]
+features = ["static-netcdf"]
