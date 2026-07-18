@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-07-18
+
+### Added
+- Automated publishing to crates.io. Pushing a `vX.Y.Z` tag, already the last step of the release procedure, runs the test suite and uploads the crate. Authentication uses crates.io Trusted Publishing (OIDC), so no long-lived API token is stored in the repository. Because publishing cannot be undone, the job is gated: the tests run first rather than assuming CI covered the tagged commit, the job fails if the tag disagrees with the `Cargo.toml` version, and `cargo publish --dry-run --locked` builds the real tarball before the upload. Manual runs from the Actions tab default to a dry run
+- Installation from crates.io is now documented: `cargo install ctddump` leads both the README and the installation guide, with the system dependencies still called out first and an escape hatch (`NETCDF_DIR` / `HDF5_DIR`) for the "A system version of libnetcdf could not be found" failure. The README also gains a crates.io version badge and link
+
+### Changed
+- `RELEASING.md` documents what a tag push now triggers, the one-time Trusted Publishing setup that must stay in sync between crates.io and the GitHub environment, and the window between pushing `main` and pushing the tag where the publish workflow can be rehearsed as a dry run
+
 ## [0.24.2] - 2026-07-18
 
 ### Fixed
@@ -256,7 +265,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.2...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.2...v0.25.0
 [0.24.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.23.0...v0.24.0

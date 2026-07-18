@@ -2,8 +2,11 @@
 
 A Rust CLI tool for converting oceanographic CTD (Conductivity, Temperature, Depth) data from NetCDF to Parquet (data) or YAML (metadata).
 
+[![crates.io](https://img.shields.io/crates/v/ctddump.svg)](https://crates.io/crates/ctddump)
+
 **Links:**
 
+- 📦 [crates.io](https://crates.io/crates/ctddump)
 - 📖 [Documentation](https://aiqc-hub.github.io/ctddump/)
 - 🌊 [Live example report site](https://aiqc-hub.github.io/ctddump-report-example/): sample output of the `summary_site.sh` pipeline phase
 
@@ -28,7 +31,17 @@ sudo apt-get install libhdf5-dev libnetcdf-dev
 brew install hdf5
 ```
 
-### Build
+### Install from crates.io
+
+```bash
+cargo install ctddump
+```
+
+The binary lands in `~/.cargo/bin`. See the
+[installation guide](https://aiqc-hub.github.io/ctddump/installation.html) if the
+build cannot find libnetcdf.
+
+### Build from source
 
 ```bash
 git clone https://github.com/AIQC-Hub/ctddump.git
