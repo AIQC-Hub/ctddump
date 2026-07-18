@@ -20,12 +20,17 @@ jobs:
       RUSTFLAGS: "-C debuginfo=0"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
+      # The runner ships ~25 GB of toolchains this job never touches. Reclaiming
+      # them up front leaves headroom for the Polars build artifacts and, at the
+      # end of the job, for the cache tarball the post step writes.
       - name: Free up disk space
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
-                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/boost /usr/share/swift
+          sudo docker image prune --all --force || true
           df -h /
 
       - name: Install system dependencies
@@ -34,15 +39,14 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo registry and build artifacts
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+      # Purpose-built Rust cache rather than a raw actions/cache of `target`.
+      # It saves only the *dependency* artifacts: before writing the tarball it
+      # drops `incremental/` and every artifact belonging to this workspace's own
+      # crates. That matters here because each of the 20 integration-test binaries
+      # statically links its own copy of Polars, so a whole-`target` tarball ran
+      # the runner out of disk while compressing (zstd "No space left on device").
+      - name: Cache Cargo registry and dependency builds
+        uses: Swatinem/rust-cache@v2
 
       - name: Download test data
         env:
@@ -51,3 +55,14 @@ jobs:
 
       - name: Run tests
         run: cargo test
+
+      # Runs before the cache post step (post steps execute after every main
+      # step), so the tarball is written with the disk this frees. The fixtures
+      # are re-downloaded each run and the test binaries are never cached, so
+      # neither is worth keeping.
+      - name: Reclaim disk before the cache is saved
+        if: always()
+        run: |
+          rm -rf tests/test_data
+          rm -rf target/debug/incremental
+          df -h /
