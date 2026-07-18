@@ -95,10 +95,12 @@ On push to `main`:
 - **Docs** (`.github/workflows/pages.yml`) rebuilds the mdBook site and deploys
   it to GitHub Pages when the push touches `docs/**`.
 
-On push of a `vX.Y.Z` tag:
+On push of a `vX.Y.Z` tag, `.github/workflows/publish.yml` runs the test suite
+once and then, gated on it:
 
-- **Publish** (`.github/workflows/publish.yml`) runs the test suite, then uploads
-  the crate to [crates.io](https://crates.io/crates/ctddump).
+- uploads the crate to [crates.io](https://crates.io/crates/ctddump);
+- builds prebuilt binaries for four platforms and attaches them, with
+  `SHA256SUMS`, to the GitHub Release.
 
 Confirm they are green:
 
@@ -133,6 +135,40 @@ authentication with an error that does not obviously point at the cause.
 To rehearse without publishing, run the workflow manually from the Actions tab:
 a `workflow_dispatch` run defaults to a dry run, which packages and verifies but
 uploads nothing.
+
+### Prebuilt binaries
+
+The same tag builds an archive per platform and attaches it to the GitHub
+Release, so users without a Rust toolchain can just download and run:
+
+| Runner | Target |
+|--------|--------|
+| `ubuntu-22.04` | `x86_64-unknown-linux-gnu` |
+| `ubuntu-22.04-arm` | `aarch64-unknown-linux-gnu` |
+| `macos-13` | `x86_64-apple-darwin` |
+| `macos-14` | `aarch64-apple-darwin` |
+
+Each `ctddump-vX.Y.Z-<target>.tar.gz` holds the stripped binary, the helper
+scripts, `README.md`, `LICENSE`, and `CHANGELOG.md`. The build enables the
+`static-netcdf` feature, which vendors HDF5 and netCDF into the executable, so
+the archive needs no system libraries: on Linux the binary links only glibc and
+the loader. Roughly 13 MB compressed, 44 MB installed.
+
+Three things to know when reading a failed run:
+
+- `fail-fast` is off, so one platform failing still ships the others. A missing
+  architecture in a release usually means that one job failed, not that the
+  release is broken.
+- The Linux binaries are built on the oldest practical runner because a
+  glibc-linked binary runs on that release and newer, never older. Moving those
+  jobs to a newer runner silently raises the minimum glibc for users.
+- Bundling the scripts does not make the archive self-contained. The four
+  pipeline scripts need only `ctddump` on `PATH`, but `download_data.sh` needs
+  `copernicusmarine`, `summary_site.sh` needs `mdbook`, and
+  `fetch_test_data.sh` needs `gh` and `unzip`.
+
+A `workflow_dispatch` run builds the archives and keeps them as workflow
+artifacts, but never creates a release: that job is tag-only.
 
 ## Hotfixes
 
