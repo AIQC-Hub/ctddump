@@ -122,3 +122,86 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: cargo publish --locked
+
+  # Prebuilt binaries for users without a Rust toolchain. `static-netcdf` vendors
+  # HDF5 and netCDF into the executable, so the archive needs no system libraries
+  # at all: verified locally as glibc and the loader only, reading real NetCDF.
+  # The helper scripts ship alongside, since the pipeline is most of the product
+  # and would otherwise be reachable only by cloning.
+  binaries:
+    name: Build ${{ matrix.target }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not deny the others their archive.
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest practical runner, because a glibc-linked binary runs on that
+          # release and newer, never older.
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Native build per runner, so no cross toolchain is involved. Vendoring the
+      # C libraries needs cmake, which every runner image already provides.
+      - name: Build
+        run: cargo build --release --locked --features static-netcdf
+
+      - name: Stage the archive
+        shell: bash
+        run: |
+          name="ctddump-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp target/release/ctddump "dist/$name/"
+          strip "dist/$name/ctddump" || echo "strip unavailable, shipping unstripped"
+          cp -R scripts "dist/$name/"
+          cp README.md LICENSE CHANGELOG.md "dist/$name/"
+          tar -C dist -czf "$name.tar.gz" "$name"
+          ls -lh "$name.tar.gz"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ctddump-${{ matrix.target }}
+          path: ctddump-*.tar.gz
+          if-no-files-found: error
+
+  # Attaches the archives to the GitHub Release. Tag runs only: a manual dispatch
+  # builds and keeps the artifacts, but must not publish a release.
+  release:
+    name: GitHub Release
+    needs: binaries
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum ctddump-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/ctddump-*.tar.gz dist/SHA256SUMS
