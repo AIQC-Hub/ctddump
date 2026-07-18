@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-07-18
+
+### Added
+- Prebuilt binaries attached to each GitHub Release, so ctddump can be used without a Rust toolchain. A `vX.Y.Z` tag now builds an archive for `x86_64`/`aarch64` Linux and `x86_64`/`aarch64` macOS and attaches them with `SHA256SUMS`. Each archive holds the stripped binary, the helper scripts, `README.md`, `LICENSE`, and `CHANGELOG.md` (about 13 MB compressed). The build enables `static-netcdf`, so the binary needs no system libraries: on Linux it links only glibc and the loader. Note the bundled scripts are not self-contained: the four pipeline scripts need only `ctddump` on `PATH`, but `download_data.sh` needs `copernicusmarine`, `summary_site.sh` needs `mdbook`, and `fetch_test_data.sh` needs `gh` and `unzip`
+- `static-netcdf` feature, which builds HDF5 and netCDF from source instead of linking the system libraries, and `[package.metadata.docs.rs]` telling docs.rs to use it. docs.rs has no libnetcdf and cannot install one, so builds there failed in the `netcdf-sys` build script and the crate had no rendered API docs. The feature is off by default: ordinary builds and `cargo install ctddump` should keep installing `libhdf5-dev` / `libnetcdf-dev`, which is far quicker. Since docs.rs metadata is baked into each published version, this takes effect from this release onwards and cannot fix 0.24.2 or 0.25.0
+
 ## [0.25.0] - 2026-07-18
 
 ### Added
@@ -265,7 +271,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.2...v0.25.0
 [0.24.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.0...v0.24.1
