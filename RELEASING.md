@@ -72,6 +72,18 @@ Replace `X.Y.Z` with the new version and `PREV` with the previous tag.
    git push origin develop
    ```
 
+   The two pushes are separate commands on purpose. Pushing `main` starts CI but
+   **not** the publish, which only a `vX.Y.Z` tag triggers, so the gap between
+   them is a safe place to stop and check. Use it whenever anything about the
+   release setup has changed: while `main` is pushed and the tag is not, run
+   **Actions → Publish → Run workflow**, which defaults to a dry run and packages
+   and verifies without uploading. Push the tag once that is green.
+
+   A dry run is worth the wait mainly for setup mistakes, such as a missing
+   `crates-io` environment or a Trusted Publishing config that no longer matches.
+   Those fail at the authentication step, after the full test suite has already
+   run.
+
 > Tags are `v`-prefixed (`vX.Y.Z`) even though git-flow's version-tag prefix is
 > empty; apply the tag manually as shown.
 
