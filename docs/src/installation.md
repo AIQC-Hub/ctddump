@@ -13,7 +13,32 @@ sudo apt-get install libhdf5-dev libnetcdf-dev
 brew install hdf5
 ```
 
+## Install from crates.io
+
+With the system dependencies above in place, install the published crate:
+
+```bash
+cargo install ctddump
+```
+
+This builds the binary and puts it in `~/.cargo/bin`, which is normally already
+on your `PATH`. Check it works:
+
+```bash
+ctddump --help
+```
+
+If the build stops with "A system version of libnetcdf could not be found", the
+development headers are missing or are somewhere the build script does not look.
+Install them as shown above, or point at them explicitly:
+
+```bash
+NETCDF_DIR=/path/to/netcdf HDF5_DIR=/path/to/hdf5 cargo install ctddump
+```
+
 ## Build from source
+
+To work on ctddump itself, or to run a version that is not published yet:
 
 ```bash
 git clone https://github.com/AIQC-Hub/ctddump.git
