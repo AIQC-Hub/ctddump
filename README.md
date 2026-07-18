@@ -19,21 +19,34 @@ Two data sources are supported:
 
 ## Installation
 
-### System dependencies
+### Download a prebuilt binary (no Rust needed)
 
-The `netcdf` crate links against the HDF5 C library:
+Grab an archive for your platform from the
+[latest release](https://github.com/AIQC-Hub/ctddump/releases/latest). HDF5 and
+netCDF are built into the binary, so nothing else has to be installed:
+
+```bash
+VERSION=v0.26.0
+TARGET=x86_64-unknown-linux-gnu    # or aarch64-unknown-linux-gnu,
+                                   # aarch64-apple-darwin, x86_64-apple-darwin
+curl -LO "https://github.com/AIQC-Hub/ctddump/releases/download/$VERSION/ctddump-$VERSION-$TARGET.tar.gz"
+tar -xzf "ctddump-$VERSION-$TARGET.tar.gz"
+cd "ctddump-$VERSION-$TARGET" && ./ctddump --version
+```
+
+The archive also carries the helper scripts, so the pipeline works as soon as
+`ctddump` is on your `PATH`.
+
+### Install from crates.io
+
+Needs a Rust toolchain and the HDF5 development headers:
 
 ```bash
 # Ubuntu / Debian
 sudo apt-get install libhdf5-dev libnetcdf-dev
-
 # macOS (Homebrew)
 brew install hdf5
-```
 
-### Install from crates.io
-
-```bash
 cargo install ctddump
 ```
 
@@ -42,6 +55,8 @@ The binary lands in `~/.cargo/bin`. See the
 build cannot find libnetcdf.
 
 ### Build from source
+
+Needs the same system dependencies as above.
 
 ```bash
 git clone https://github.com/AIQC-Hub/ctddump.git
