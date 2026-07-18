@@ -104,6 +104,16 @@ their tables carry three further columns, `Cleaned`, `% of cleaned` and
 (Filter, else Drop all-NA, else Drop bad QC). When no cleaning stage ran there is
 nothing to compare against and the columns are omitted.
 
+The **Filter by region** section carries a second table, **Bounding box**, with the
+minimum and maximum longitude and latitude of the profiles that survived the
+filter, in decimal degrees to three places. The extremes are aggregated from the
+per-platform `longitude_min` / `longitude_max` / `latitude_min` / `latitude_max`
+columns of the stage TSV, so they span every platform in the file. When the
+Conversion report is present a second column, `Original`, gives the same extremes
+for the converted data before any cleaning ran, which shows how far the filter
+tightened the box. Profiles with a missing position are ignored, and if no profile
+has a valid position the table is omitted entirely.
+
 The Mark-duplicates section additionally lists the duplicate profiles that `dedup`
 would remove, split into:
 
