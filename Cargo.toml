@@ -3,6 +3,14 @@ name = "ctddump"
 version = "0.24.0"
 edition = "2021"
 license = "MIT"
+description = "Convert oceanographic CTD (Conductivity, Temperature, Depth) data from NetCDF to Parquet or YAML"
+repository = "https://github.com/AIQC-Hub/ctddump"
+homepage = "https://aiqc-hub.github.io/ctddump/"
+documentation = "https://aiqc-hub.github.io/ctddump/"
+readme = "README.md"
+keywords = ["oceanography", "netcdf", "parquet", "ctd", "cli"]
+categories = ["command-line-utilities", "science"]
+exclude = ["CLAUDE.md", ".claudeignore", ".github/", "docs/", "scripts/", "RELEASING.md"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
