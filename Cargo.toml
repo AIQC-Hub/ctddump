@@ -1,6 +1,6 @@
 [package]
 name = "ctddump"
-version = "0.24.1"
+version = "0.24.2"
 edition = "2021"
 license = "MIT"
 description = "Convert oceanographic CTD (Conductivity, Temperature, Depth) data from NetCDF to Parquet or YAML"

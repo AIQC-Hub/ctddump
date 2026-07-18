@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-07-18
+
+### Fixed
+- CI no longer runs the runner out of disk while saving its cache. The cache step tarred all of `target/`, which holds 20 integration-test binaries that each statically link their own copy of Polars, and zstd failed writing the tarball. The job now uses `Swatinem/rust-cache`, which caches only dependency artifacts (dropping `incremental/` and this workspace's own crates before saving), reclaims more runner disk up front, and deletes the test fixtures and `incremental/` after the tests so the cache save has room. `actions/checkout` moves to v7, so every pinned action runs on Node 24
+
 ## [0.24.1] - 2026-07-18
 
 ### Added
@@ -251,7 +256,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.1...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.2...HEAD
+[0.24.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.1...v0.24.2
 [0.24.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.22.1...v0.23.0
