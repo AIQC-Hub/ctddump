@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-07-19
+
+### Added
+- `compare` subcommand: compares two Parquet files and reports how far each covers the other's platforms and profiles. Profiles are matched on the same key as `markdup` (time reduced to a date, longitude/latitude rounded to 3 decimals) except that `platform_code` is part of the key by default, since two compared files are usually extracts of the same platforms; `--no-platform-key` matches on time and position alone. Coverage is reported in both directions, because it is not symmetric: a file contained in a larger one is fully covered while covering only part of it. The second file is the reference in the first output row. For the profiles found in both files the report also says whether they carry the same number of observations, which separates "the same profiles with different cleaning applied" from "different profiles". The key column names, the time format, the rounding decimals, and the rounding mode are all configurable, and the time column may be either a datetime (`profile_timestamp`) or a float of days since 1950 (`profile_time`). Output is TSV (default), aligned text, or JSON. Each file is streamed and reduced to one record per profile, so memory follows the profile count rather than the file size
+
 ## [0.26.1] - 2026-07-19
 
 ### Changed
@@ -279,7 +284,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.1...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.2...v0.25.0

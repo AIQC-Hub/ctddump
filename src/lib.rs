@@ -5,6 +5,7 @@ use clap::Parser;
 
 pub mod batch;
 pub mod cli;
+pub mod compare;
 pub mod concat;
 pub mod convert;
 pub mod dedup;
@@ -58,6 +59,31 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
             let opts = dupkey::KeyOpts { time_format, decimals, round_mode };
             dedup::run(&opts, &src, &dest)?;
             Ok(Config { module: "dedup".to_string(), target: "parquet".to_string(), args: vec![] })
+        }
+        Commands::Compare {
+            time_format,
+            decimals,
+            round_mode,
+            platform_col,
+            time_col,
+            lon_col,
+            lat_col,
+            no_platform_key,
+            format,
+            a,
+            b,
+            dest,
+        } => {
+            let opts = compare::CompareOpts {
+                key: dupkey::KeyOpts { time_format, decimals, round_mode },
+                platform_col,
+                time_col,
+                lon_col,
+                lat_col,
+                use_platform: !no_platform_key,
+            };
+            compare::run(&opts, format, &a, &b, dest.as_deref())?;
+            Ok(Config { module: "compare".to_string(), target: "parquet".to_string(), args: vec![] })
         }
     }
 }

@@ -119,6 +119,43 @@ pub enum Commands {
         /// Output Parquet file
         dest: PathBuf,
     },
+    /// Compare two Parquet files: how far each covers the other's platforms and profiles
+    #[command(name = "compare")]
+    Compare {
+        /// strftime format applied to the time column for the key (default: date only)
+        #[arg(long, default_value = "%Y-%m-%d")]
+        time_format: String,
+        /// Decimal places longitude/latitude are rounded to for the key
+        #[arg(long, default_value_t = 3)]
+        decimals: u32,
+        /// How coordinates are rounded for the key
+        #[arg(long, value_enum, default_value_t = RoundMode::Round)]
+        round_mode: RoundMode,
+        /// Column holding the platform code
+        #[arg(long, default_value = "platform_code")]
+        platform_col: String,
+        /// Column holding the profile time (a datetime, or a float of days since 1950)
+        #[arg(long, default_value = "profile_time")]
+        time_col: String,
+        /// Column holding the longitude
+        #[arg(long, default_value = "longitude")]
+        lon_col: String,
+        /// Column holding the latitude
+        #[arg(long, default_value = "latitude")]
+        lat_col: String,
+        /// Match on time and position only, ignoring the platform code
+        #[arg(long)]
+        no_platform_key: bool,
+        /// Output format
+        #[arg(long, value_enum, default_value_t = ReportFormat::Tsv)]
+        format: ReportFormat,
+        /// First Parquet file
+        a: PathBuf,
+        /// Second Parquet file (the reference in the first output row)
+        b: PathBuf,
+        /// Output file (default: stdout)
+        dest: Option<PathBuf>,
+    },
 }
 
 // ── Report subcommands ────────────────────────────────────────────────────────
