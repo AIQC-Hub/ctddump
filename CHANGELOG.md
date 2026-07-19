@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-07-19
+
+### Changed
+- The installation guide leads with the prebuilt binaries instead of `cargo install`, since they are the right route for most users and need neither a Rust toolchain nor HDF5 headers. It opens with a table of the three routes, then covers downloading and verifying an archive against `SHA256SUMS`, putting the binary on `PATH`, and what else the archive contains (the helper scripts and which external tools they still need). The system dependencies are now scoped to the two routes that compile ctddump
+
+### Fixed
+- The prebuilt-binary runner table in `RELEASING.md` still named `macos-13` and `macos-14`, which the workflow stopped using in 0.26.0. It now matches `publish.yml` (`macos-15-intel` and `macos-15`)
+
 ## [0.26.0] - 2026-07-18
 
 ### Added
@@ -271,7 +279,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.1...HEAD
+[0.26.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.0...v0.26.1
 [0.26.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.2...v0.25.0
 [0.24.2]: https://github.com/AIQC-Hub/ctddump/compare/v0.24.1...v0.24.2

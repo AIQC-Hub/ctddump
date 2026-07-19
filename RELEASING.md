@@ -41,6 +41,13 @@ Replace `X.Y.Z` with the new version and `PREV` with the previous tag.
    cargo update -p ctddump --precise X.Y.Z
    ```
 
+   The version is also written out in the download example in
+   `docs/src/installation.md` (`VERSION=vX.Y.Z`). It is a copy-paste command, so
+   a stale value hands users the previous release:
+   ```bash
+   grep -rn 'v[0-9]\+\.[0-9]\+\.[0-9]\+' docs/src/installation.md
+   ```
+
 2. **Update `CHANGELOG.md`:**
    - Move the `## [Unreleased]` entries into a new `## [X.Y.Z] - YYYY-MM-DD`
      section, leaving a fresh empty `## [Unreleased]` above it.
@@ -145,8 +152,8 @@ Release, so users without a Rust toolchain can just download and run:
 |--------|--------|
 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` |
 | `ubuntu-22.04-arm` | `aarch64-unknown-linux-gnu` |
-| `macos-13` | `x86_64-apple-darwin` |
-| `macos-14` | `aarch64-apple-darwin` |
+| `macos-15-intel` | `x86_64-apple-darwin` |
+| `macos-15` | `aarch64-apple-darwin` |
 
 Each `ctddump-vX.Y.Z-<target>.tar.gz` holds the stripped binary, the helper
 scripts, `README.md`, `LICENSE`, and `CHANGELOG.md`. The build enables the
