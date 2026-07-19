@@ -15,6 +15,7 @@
 - [dropqc](./commands/dropqc.md)
 - [markdup](./commands/markdup.md)
 - [dedup](./commands/dedup.md)
+- [compare](./commands/compare.md)
 
 # Reference
 
