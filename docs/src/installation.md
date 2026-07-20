@@ -24,7 +24,7 @@ platform. It contains the `ctddump` executable with HDF5 and netCDF built in, so
 Download, extract, and put the binary somewhere on your `PATH`:
 
 ```bash
-VERSION=v0.28.0
+VERSION=v0.29.0
 TARGET=x86_64-unknown-linux-gnu
 
 curl -LO "https://github.com/AIQC-Hub/ctddump/releases/download/$VERSION/ctddump-$VERSION-$TARGET.tar.gz"
@@ -56,9 +56,9 @@ sha256sum -c SHA256SUMS --ignore-missing
 
 Alongside the binary are the [helper scripts](scripts.md), plus `README.md`,
 `LICENSE`, and `CHANGELOG.md`. Five scripts (`convert_data.sh`, `clean_data.sh`,
-`dedup_data.sh`, `summary_data.sh`, and the optional `compare_data.sh`) need only
-`ctddump` on your `PATH`, so they work as soon as the step above is done. Three
-others call external tools that are not bundled and must be installed separately:
+`dedup_data.sh`, `compare_data.sh`, and `summary_data.sh`) need only `ctddump` on
+your `PATH`, so they work as soon as the step above is done. Three others call
+external tools that are not bundled and must be installed separately:
 `download_data.sh` needs `copernicusmarine`, `summary_site.sh` needs `mdbook`,
 and `fetch_test_data.sh` needs `gh` and `unzip`.
 

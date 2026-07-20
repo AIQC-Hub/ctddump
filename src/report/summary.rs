@@ -49,7 +49,7 @@ pub struct Opts<'a> {
 /// Assemble the summary page for `stem` and write it to `o.output` (or stdout).
 pub fn run(stem: &str, o: Opts) -> Result<(), Box<dyn Error>> {
     let paths = StemPaths::new(stem, o.report_dir, o.out_dir);
-    let sections = build_sections(&paths)?;
+    let sections = build_sections(&paths, stem)?;
     let title = o.title.map_or_else(|| format!("Summary: {stem}"), str::to_string);
 
     let page = match o.format {
@@ -70,16 +70,17 @@ pub fn run(stem: &str, o: Opts) -> Result<(), Box<dyn Error>> {
 
 // ── Auto-located source files ─────────────────────────────────────────────────
 
-/// The eight TSV files a summary can draw on, at their standard pipeline paths.
+/// The TSV files a summary can draw on, at their standard pipeline paths.
 struct StemPaths {
-    yaml: PathBuf,    // report/header/<stem>.yaml.tsv
-    convert: PathBuf, // report/convert/<stem>.parquet.tsv
-    dropqc: PathBuf,  // report/clean/dropqc/<stem>.parquet.tsv
-    dropna: PathBuf,  // report/clean/dropna/<stem>.parquet.tsv
-    filter: PathBuf,  // report/clean/filter/<stem>.parquet.tsv
-    markdup: PathBuf, // report/dedup/markdup/<stem>.parquet.tsv
-    dups: PathBuf,    // output/dedup/markdup/<stem>.dups.tsv
-    dedup: PathBuf,   // report/dedup/dedup/<stem>.parquet.tsv
+    yaml: PathBuf,        // report/header/<stem>.yaml.tsv
+    convert: PathBuf,     // report/convert/<stem>.parquet.tsv
+    dropqc: PathBuf,      // report/clean/dropqc/<stem>.parquet.tsv
+    dropna: PathBuf,      // report/clean/dropna/<stem>.parquet.tsv
+    filter: PathBuf,      // report/clean/filter/<stem>.parquet.tsv
+    markdup: PathBuf,     // report/dedup/markdup/<stem>.parquet.tsv
+    dups: PathBuf,        // output/dedup/markdup/<stem>.dups.tsv
+    dedup: PathBuf,       // report/dedup/dedup/<stem>.parquet.tsv
+    compare_dir: PathBuf, // report/compare/  (scanned for rows referencing this stem)
 }
 
 impl StemPaths {
@@ -94,6 +95,7 @@ impl StemPaths {
             markdup: pq("dedup/markdup"),
             dups: out_dir.join("dedup/markdup").join(format!("{stem}.dups.tsv")),
             dedup: pq("dedup/dedup"),
+            compare_dir: report_dir.join("compare"),
         }
     }
 }
@@ -292,9 +294,25 @@ const DESC_REMOVE_DUPS: &str = "Keeps one profile per duplicate key and drops th
     Profiles with no key (missing time or position) are never treated as duplicates and \
     always survive.";
 
+const DESC_COMPARE: &str = "How this product compares with the other products covering the same \
+    region. Each other product is measured with this one as the reference: how many of this product's \
+    platforms and profiles it also holds, with profiles matched on date and rounded \
+    longitude/latitude. Coverage is one-directional, so a product that contains this one covers it \
+    fully while this one covers only part of it.";
+
+const DESC_COMPARE_TOTALS: &str = "This product's own totals, the denominators the coverage below is \
+    measured against. \"Profiles without a key\" have a missing time or position, so they can never \
+    be matched and are counted against coverage.";
+
+const DESC_COMPARE_COVERAGE: &str = "One row per other product. \"Platform coverage\" is the share of \
+    this product's platforms the other also has; \"Profile coverage\" the share of its profiles. Among \
+    the profiles found in both, \"Same obs\" carry the same number of observations in each product and \
+    \"Diff obs\" differ, which separates the same profiles cleaned differently from genuinely different \
+    ones; \"Obs agreement\" is the share of matched profiles that are the same.";
+
 // ── Section assembly ──────────────────────────────────────────────────────────
 
-fn build_sections(p: &StemPaths) -> Result<Vec<Section>, Box<dyn Error>> {
+fn build_sections(p: &StemPaths, stem: &str) -> Result<Vec<Section>, Box<dyn Error>> {
     let counts_of = |path: &Path| -> Result<Option<Counts>, Box<dyn Error>> {
         if path.exists() {
             Ok(Some(Counts::from_platform_tsv(&Tsv::read(path)?)))
@@ -400,7 +418,140 @@ fn build_sections(p: &StemPaths) -> Result<Vec<Section>, Box<dyn Error>> {
         sections.extend(dedup);
     }
 
+    // 5. Comparison against the other products of the same region (compare TSVs
+    //    that name this stem as the reference). Last on the page because it
+    //    compares the final product against its siblings.
+    if let Some(cmp) = compare_section(&p.compare_dir, stem)? {
+        sections.push(cmp);
+    }
+
     Ok(sections)
+}
+
+/// One comparison row where this stem is the reference, reduced to the counts the
+/// summary shows. Percentages are recomputed from these, so the compare TSV's own
+/// percentage formatting is never relied on.
+struct CompareRow {
+    compared: String,
+    ref_platforms: u64,
+    common_platforms: u64,
+    ref_profiles: u64,
+    ref_unkeyed: u64,
+    matched_profiles: u64,
+    same_nobs: u64,
+    diff_nobs: u64,
+    ref_observations: u64,
+}
+
+/// Scan `dir` (`report/compare/`) for every `compare` TSV row whose `reference`
+/// column equals `stem`, and build a "Comparison" section from them. Returns `None`
+/// when the directory is absent or no row references this stem, so a pipeline that
+/// never ran `compare` still produces a valid page.
+fn compare_section(dir: &Path, stem: &str) -> Result<Option<Section>, Box<dyn Error>> {
+    if !dir.is_dir() {
+        return Ok(None);
+    }
+
+    // Deterministic order so the source-file list and rows are stable across runs.
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("tsv"))
+        .collect();
+    paths.sort();
+
+    let mut rows: Vec<CompareRow> = Vec::new();
+    let mut files: Vec<String> = Vec::new();
+    for path in &paths {
+        let t = Tsv::read(path)?;
+        let Some(ri) = t.col("reference") else { continue };
+        let ci = t.col("compared");
+        let cell = |r: &[String], name: &str| -> u64 {
+            t.col(name).map(|i| parse_u64(r.get(i))).unwrap_or(0)
+        };
+        let mut used = false;
+        for r in &t.rows {
+            if r.get(ri).map(String::as_str) != Some(stem) {
+                continue;
+            }
+            rows.push(CompareRow {
+                compared: ci.and_then(|i| r.get(i)).cloned().unwrap_or_default(),
+                ref_platforms: cell(r, "ref_platforms"),
+                common_platforms: cell(r, "common_platforms"),
+                ref_profiles: cell(r, "ref_profiles"),
+                ref_unkeyed: cell(r, "ref_unkeyed_profiles"),
+                matched_profiles: cell(r, "matched_profiles"),
+                same_nobs: cell(r, "same_nobs"),
+                diff_nobs: cell(r, "diff_nobs"),
+                ref_observations: cell(r, "ref_observations"),
+            });
+            used = true;
+        }
+        if used {
+            files.push(path_str(path));
+        }
+    }
+
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    rows.sort_by(|a, b| a.compared.cmp(&b.compared));
+
+    // The reference totals are a property of this stem, so they are identical on
+    // every row; take them from the first.
+    let first = &rows[0];
+    let totals = Table {
+        title: Some("This product".into()),
+        desc: DESC_COMPARE_TOTALS.into(),
+        headers: vec!["Metric".into(), "Count".into()],
+        rows: vec![
+            vec!["Platforms".into(), fmt_int(first.ref_platforms)],
+            vec!["Profiles".into(), fmt_int(first.ref_profiles)],
+            vec!["Profiles without a key".into(), fmt_int(first.ref_unkeyed)],
+            vec!["Observations".into(), fmt_int(first.ref_observations)],
+        ],
+    };
+
+    let coverage_rows = rows
+        .iter()
+        .map(|c| {
+            vec![
+                c.compared.clone(),
+                fmt_int(c.common_platforms),
+                fmt_pct(pct(c.common_platforms, c.ref_platforms)),
+                fmt_int(c.matched_profiles),
+                fmt_pct(pct(c.matched_profiles, c.ref_profiles)),
+                fmt_int(c.same_nobs),
+                fmt_int(c.diff_nobs),
+                fmt_pct(pct(c.same_nobs, c.matched_profiles)),
+            ]
+        })
+        .collect();
+    let coverage = Table {
+        title: Some("Coverage of other products".into()),
+        desc: DESC_COMPARE_COVERAGE.into(),
+        headers: [
+            "Compared with",
+            "Common platforms",
+            "Platform coverage",
+            "Matched profiles",
+            "Profile coverage",
+            "Same obs",
+            "Diff obs",
+            "Obs agreement",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect(),
+        rows: coverage_rows,
+    };
+
+    Ok(Some(Section {
+        level: 1,
+        title: "Comparison".into(),
+        desc: DESC_COMPARE.into(),
+        files,
+        tables: vec![totals, coverage],
+    }))
 }
 
 fn parent_section(title: &str, desc: &str) -> Section {
