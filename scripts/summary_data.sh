@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 #
 # summary_data.sh — build a per-unit summary page (Markdown or HTML) from the TSV
-# reports produced by convert_data.sh / clean_data.sh / dedup_data.sh, for the
-# Arctic, Baltic, and Mediterranean seas. One page per (region, product) unit —
-# the same stems the other scripts use (e.g. nrt_ar_ar, nrt_ar_gl, cora_ar).
+# reports produced by convert_data.sh / clean_data.sh / dedup_data.sh /
+# compare_data.sh, for the Arctic, Baltic, and Mediterranean seas. One page per
+# (region, product) unit, the same stems the other scripts use (e.g. nrt_ar_ar,
+# nrt_ar_gl, cora_ar).
 #
-# Each page collects up to seven sections (File summary, Conversion, the three
-# Cleaning stages, and the two Deduplication stages); `ctddump report summary`
-# includes only the sections whose report files exist.
+# Each page collects up to eight sections (File summary, Conversion, the three
+# Cleaning stages, the two Deduplication stages, and a Comparison against the
+# other products of the same region); `ctddump report summary` includes only the
+# sections whose report files exist. The Comparison section is drawn from the
+# compare_data.sh output under report/compare/, so run compare_data.sh first if
+# you want it.
 #
 # Usage:
 #   scripts/summary_data.sh [options] [region ...]

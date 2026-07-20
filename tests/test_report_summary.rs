@@ -427,3 +427,100 @@ fn filter_bbox_renders_in_html() {
         "bbox row wrong\n{html}"
     );
 }
+
+// ── Comparison section ─────────────────────────────────────────────────────────
+
+/// Write a `compare` TSV (the two-direction output of `ctddump compare`). Each row
+/// is (reference, compared, ref_platforms, common_platforms, ref_profiles,
+/// ref_unkeyed, matched_profiles, same_nobs, diff_nobs, ref_obs, matched_obs). The
+/// three percentage columns are filled with a wrong sentinel (`999`) to prove the
+/// summary recomputes them from the counts instead of trusting the file.
+#[allow(clippy::type_complexity)]
+fn write_compare_tsv(path: &Path, rows: &[(&str, &str, u64, u64, u64, u64, u64, u64, u64, u64, u64)]) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut s = String::from(
+        "reference\tcompared\tref_platforms\tcommon_platforms\tplatform_cov_pct\t\
+         ref_profiles\tref_unkeyed_profiles\tmatched_profiles\tprofile_cov_pct\t\
+         same_nobs\tdiff_nobs\tnobs_agree_pct\tref_observations\tmatched_observations\n",
+    );
+    for (rf, cmp, rp, cp, rprof, unk, mprof, same, diff, robs, mobs) in rows {
+        s.push_str(&format!(
+            "{rf}\t{cmp}\t{rp}\t{cp}\t999\t{rprof}\t{unk}\t{mprof}\t999\t{same}\t{diff}\t999\t{robs}\t{mobs}\n"
+        ));
+    }
+    fs::write(path, s).unwrap();
+}
+
+#[test]
+fn comparison_section_gathers_rows_referencing_the_stem() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = full_tree(dir.path(), "nrt_ar_ar");
+    // nrt_ar_ar is the reference in two compare files (vs CORA and vs GL). Each file
+    // holds both directions; only the row whose reference is nrt_ar_ar is picked up.
+    let cmp = rep.join("compare");
+    write_compare_tsv(
+        &cmp.join("ar_nrt_vs_cora.tsv"),
+        &[
+            ("nrt_ar_ar", "cora_ar", 2, 1, 200, 10, 150, 120, 30, 20000, 15000),
+            // reverse direction (reference cora_ar) must not appear on this page.
+            ("cora_ar", "nrt_ar_ar", 5, 1, 400, 0, 150, 120, 30, 40000, 15000),
+        ],
+    );
+    write_compare_tsv(
+        &cmp.join("ar_nrt_vs_gl.tsv"),
+        &[
+            ("nrt_ar_ar", "nrt_ar_gl", 2, 2, 200, 10, 200, 200, 0, 20000, 20000),
+            ("nrt_ar_gl", "nrt_ar_ar", 3, 2, 210, 0, 200, 200, 0, 21000, 20000),
+        ],
+    );
+
+    let md = run_summary(&rep, &out, "nrt_ar_ar", "md", &dir.path().join("c.md"));
+
+    assert!(md.contains("## Comparison"), "no comparison section\n{md}");
+    // Reference totals, taken from the first row (identical across rows). The
+    // unkeyed row is unique to this section, so it pins the totals table.
+    assert!(md.contains("| Profiles without a key | 10 |"), "unkeyed total wrong\n{md}");
+    // Coverage rows are sorted by the compared name: cora_ar before nrt_ar_gl.
+    // cora_ar: platform 1/2 = 50.0%, profile 150/200 = 75.0%, agreement 120/150 = 80.0%.
+    assert!(
+        md.contains("| cora_ar | 1 | 50.0% | 150 | 75.0% | 120 | 30 | 80.0% |"),
+        "cora coverage row wrong\n{md}"
+    );
+    // nrt_ar_gl: platform 2/2, profile 200/200, agreement 200/200, all 100.0%.
+    assert!(
+        md.contains("| nrt_ar_gl | 2 | 100.0% | 200 | 100.0% | 200 | 0 | 100.0% |"),
+        "gl coverage row wrong\n{md}"
+    );
+    // The reverse-direction rows (reference cora_ar / nrt_ar_gl) are not shown.
+    assert!(!md.contains("| nrt_ar_ar |"), "reverse direction leaked in\n{md}");
+    // Percentages are recomputed from the counts, not the bogus 999 in the TSV.
+    assert!(!md.contains("999"), "trusted the TSV percentage column\n{md}");
+    // Both compare files are listed as sources.
+    assert!(md.contains("ar_nrt_vs_cora.tsv") && md.contains("ar_nrt_vs_gl.tsv"), "source files missing\n{md}");
+    // House style.
+    assert!(!md.contains('\u{2014}'), "comparison prose has an em dash\n{md}");
+
+    // Same section renders in HTML.
+    let html = run_summary(&rep, &out, "nrt_ar_ar", "html", &dir.path().join("c.html"));
+    assert!(html.contains("<h2>Comparison</h2>"), "no html comparison heading\n{html}");
+    assert!(
+        html.contains("<td>cora_ar</td><td>1</td><td>50.0%</td><td>150</td><td>75.0%</td>"),
+        "html coverage row wrong\n{html}"
+    );
+}
+
+#[test]
+fn comparison_section_absent_without_matching_reports() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = full_tree(dir.path(), "nrt_ar_ar");
+    // A compare dir exists but only references other stems.
+    write_compare_tsv(
+        &rep.join("compare").join("bo_nrt_vs_cora.tsv"),
+        &[("nrt_bo_bo", "cora_bo", 2, 1, 100, 0, 50, 40, 10, 5000, 2500)],
+    );
+
+    let md = run_summary(&rep, &out, "nrt_ar_ar", "md", &dir.path().join("c.md"));
+    assert!(!md.contains("## Comparison"), "comparison should be absent\n{md}");
+    // The rest of the page is unaffected.
+    assert!(md.contains("## Conversion"), "conversion missing\n{md}");
+}

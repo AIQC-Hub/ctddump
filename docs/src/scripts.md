@@ -1,10 +1,10 @@
 # Helper scripts
 
 The [`scripts/`](https://github.com/AIQC-Hub/ctddump/tree/main/scripts)
-directory ships six Bash scripts that automate the full regional pipeline,
+directory ships seven Bash scripts that automate the full regional pipeline,
 the same steps documented one command at a time in the
-[Regional workflows](./examples/arctic.md). They run in six phases, each
-consuming the previous phase's output:
+[Regional workflows](./examples/arctic.md). They run in seven phases, each
+consuming the previous phases' output:
 
 | Phase | Script | What it does |
 |-------|--------|--------------|
@@ -12,8 +12,9 @@ consuming the previous phase's output:
 | 2. Convert | [`convert_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/convert_data.sh) | Convert + merge to Parquet, export + merge headers. |
 | 3. Clean | [`clean_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/clean_data.sh) | Drop bad-QC profiles, drop all-NA profiles, restrict to the region. |
 | 4. De-duplicate | [`dedup_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/dedup_data.sh) | Mark duplicate profiles, then remove them. |
-| 5. Summarise | [`summary_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/summary_data.sh) | Build a per-unit Markdown/HTML summary page from the reports. |
-| 6. Publish | [`summary_site.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/summary_site.sh) | Render the Markdown summary pages into a static mdBook site. |
+| 5. Compare | [`compare_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/compare_data.sh) | Cross-compare each region's products (NRT, GL, CORA) for coverage. |
+| 6. Summarise | [`summary_data.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/summary_data.sh) | Build a per-unit Markdown/HTML summary page from the reports. |
+| 7. Publish | [`summary_site.sh`](https://github.com/AIQC-Hub/ctddump/blob/main/scripts/summary_site.sh) | Render the Markdown summary pages into a static mdBook site. |
 
 Each phase handles the **Arctic**, **Baltic**, and **Mediterranean** regions.
 The scripts only orchestrate the `ctddump` binary, so it must be on your `PATH`,
@@ -22,11 +23,11 @@ except `download_data.sh`, which instead needs the `copernicusmarine` toolbox
 `summary_site.sh`, which needs [mdBook](https://rust-lang.github.io/mdBook/)
 (`cargo install mdbook`).
 
-One further script,
-[`compare_data.sh`](#compare_datash), sits off this linear pipeline: it is an
-optional cross-product analysis that reads phase 4's de-duplicated output and
-compares each region's three products (regional NRT, NRT Global, and CORA)
-against each other. It is described [below](#compare_datash).
+The Compare phase feeds the Summarise phase: `compare_data.sh` writes a coverage
+summary for each pair of products, and `summary_data.sh` folds the rows that name
+a page's own product into that page's Comparison section. It is otherwise
+self-contained, so you can also run it on its own to inspect the coverage TSVs
+directly.
 
 ## Running a script
 
@@ -95,6 +96,11 @@ The granularity differs by script:
   its own convert → merge → header → merge-header chain in order. Pass
   `--by-region` for one worker per region instead (its three products in order),
   or `--sequential` for no parallelism.
+- **`compare_data.sh`** defaults to **per comparison**: one worker per
+  *(region, comparison)*, where each region has three comparisons (NRT vs CORA,
+  GL vs CORA, NRT vs GL: 9 across the three regions). Pass `--by-region` for one
+  worker per region instead (its comparisons in order), or `--sequential` for no
+  parallelism.
 - **`download_data.sh`** parallelises **per region**; `--sequential` disables it.
 
 If any unit fails, the others still finish and the script exits non-zero after
@@ -233,6 +239,38 @@ Removes duplicate profiles from the cleaned data. Commands: `markdup`, `report`,
 scripts/dedup_data.sh                        # markdup → report → dedup → report, all regions
 ```
 
+## `compare_data.sh`
+
+Cross-compares each region's de-duplicated products, so the summary pages (and
+you) can see how far the products of the same waters overlap. It reads phase 4's
+output from `output/dedup/dedup` (`--src` to point elsewhere) and writes a
+[`compare`](./commands/compare.md) two-way coverage summary per pair to
+`report/compare/`. Three comparisons run per region, selected by command:
+
+- `nrt-cora`: regional NRT (AR/BO/MO) vs CORA.
+- `gl-cora`: NRT Global (GL) subset vs CORA.
+- `nrt-gl`: regional NRT vs NRT Global.
+- `all` *(default)*: all three.
+
+Profiles are matched on `ctddump compare`'s default key (platform code, the time
+as a date, and longitude/latitude to 3 decimals); pass `--no-platform-key` to
+match on time and position alone. Choose the output with `--format tsv|text|json`
+(the report file extension follows). Like the other pipeline scripts it runs the
+comparisons in parallel (one worker each), skips a comparison whose input is
+missing (so a region's absent Global product does not fail the run), and honours
+`--by-region` / `--sequential` / `-y`.
+
+```bash
+scripts/compare_data.sh                        # all three comparisons, every region
+scripts/compare_data.sh nrt-cora arctic        # just NRT vs CORA for the Arctic
+scripts/compare_data.sh --format text -y all   # aligned tables, no prompt
+```
+
+The next phase, [`summary_data.sh`](#summary_datash), reads these TSVs: each
+page's Comparison section shows the rows whose reference is that page's own
+product. Keep the default `--format tsv` for that; `text` and `json` are for
+reading the coverage directly.
+
 ## `summary_data.sh`
 
 Builds one [`report summary`](./commands/report.md#report-summary) page per
@@ -241,6 +279,12 @@ Markdown by default, `--format html` for HTML. It reads reports from `report/`
 (`-r/--report`) and the markdup `.dups.tsv` from `output/` (`-o/--out`), and
 writes one page per stem to `summary/` (`-d/--dest`). A stem with no report files
 (e.g. the not-yet-published Baltic GL product) is skipped, not an error.
+
+Each page includes a **Comparison** section built from the `compare_data.sh`
+output under `report/compare/`: the rows whose reference is this page's own
+product, showing how far each other product of the same region covers it. Run
+`compare_data.sh` before this phase to populate it; without those files the
+section is simply omitted.
 
 ```bash
 scripts/summary_data.sh                       # summary/<stem>.md for every unit
@@ -297,37 +341,9 @@ it. With `--config`, `--title` is ignored (your file sets the title).
 scripts/summary_site.sh -c my-book.toml -y all
 ```
 
-## `compare_data.sh`
-
-Compares each region's de-duplicated products against each other, so you can see
-how far two products of the same waters overlap. It is optional and off the main
-pipeline: it reads phase 4's output from `output/dedup/dedup` (`--src` to point
-elsewhere) and writes a [`compare`](./commands/compare.md) two-way coverage
-summary per comparison to `report/compare/`. Three comparisons run per region,
-selected by command:
-
-- `nrt-cora`: regional NRT (AR/BO/MO) vs CORA.
-- `gl-cora`: NRT Global (GL) subset vs CORA.
-- `nrt-gl`: regional NRT vs NRT Global.
-- `all` *(default)*: all three.
-
-Profiles are matched on `ctddump compare`'s default key (platform code, the time
-as a date, and longitude/latitude to 3 decimals); pass `--no-platform-key` to
-match on time and position alone. Choose the output with `--format tsv|text|json`
-(the report file extension follows). Like the pipeline scripts it runs the
-comparisons in parallel (one worker each), skips a comparison whose input is
-missing (so a region's absent Global product does not fail the run), and honours
-`--by-region` / `--sequential` / `-y`.
-
-```bash
-scripts/compare_data.sh                        # all three comparisons, every region
-scripts/compare_data.sh nrt-cora arctic        # just NRT vs CORA for the Arctic
-scripts/compare_data.sh --format text -y all   # aligned tables, no prompt
-```
-
 ## Full pipeline
 
-Run the six phases in order (skipping prompts) for every region. Log in once
+Run the seven phases in order (skipping prompts) for every region. Log in once
 first if you have not already (`scripts/download_data.sh login`):
 
 ```bash
@@ -335,15 +351,9 @@ scripts/download_data.sh -y            # download every region into source/
 scripts/convert_data.sh  -y all
 scripts/clean_data.sh    -y all
 scripts/dedup_data.sh    -y all
-scripts/summary_data.sh  -y all
-scripts/summary_site.sh  -y all        # site/index.html
-```
-
-To cross-compare the de-duplicated products afterwards (optional, off the main
-pipeline):
-
-```bash
 scripts/compare_data.sh  -y all        # report/compare/<code>_<a>_vs_<b>.tsv
+scripts/summary_data.sh  -y all        # folds the comparison into each page
+scripts/summary_site.sh  -y all        # site/index.html
 ```
 
 For the equivalent commands spelled out step by step, see the

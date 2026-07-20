@@ -87,6 +87,7 @@ paths under `--report-dir` (default `report`) and `--out-dir` (default `output`)
 | Cleaning → Filter by region | `report/clean/filter/<stem>.parquet.tsv` |
 | Deduplication → Mark duplicates | `report/dedup/markdup/<stem>.parquet.tsv` **and** `output/dedup/markdup/<stem>.dups.tsv` |
 | Deduplication → Remove duplicates | `report/dedup/dedup/<stem>.parquet.tsv` |
+| Comparison | `report/compare/*.tsv` (rows whose `reference` is `<stem>`) |
 
 Any section whose file is absent is **skipped**, so a partially-run pipeline still
 produces a valid page (a parent heading appears only when it has at least one
@@ -126,6 +127,20 @@ platform.)
 
 A third table, **Duplicate group sizes**, shows how many profiles the groups hold:
 one row per distinct size up to 10, then a single `11+` row for the tail.
+
+The **Comparison** section appears when `report/compare/` holds any
+[`compare`](./compare.md) TSV whose `reference` column names this stem, i.e. a
+comparison run with this product as the reference (the pipeline writes these with
+[`compare_data.sh`](../scripts.md)). It gathers every such row across all TSVs in
+that directory. A first table, **This product**, gives the reference's own totals
+(platforms, profiles, profiles without a matchable key, observations), the
+denominators the coverage is measured against; a second, **Coverage of other
+products**, has one row per compared product: the common platforms and platform
+coverage, the matched profiles and profile coverage, and, among the matched
+profiles, how many carry the same versus a different observation count
+(`Same obs` / `Diff obs` / `Obs agreement`). All percentages are recomputed from
+the counts, so they do not depend on how the compare TSV formatted its own
+percentage columns.
 
 ### Title and notes
 

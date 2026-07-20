@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- `report summary` now includes a **Comparison** section for a stem when `report/compare/` holds any `compare` TSV that names it as the `reference`. The section shows the product's own totals (the coverage denominators, including profiles with no matchable key) and then one row per other product: common platforms and platform coverage, matched profiles and profile coverage, and, among the matched profiles, how many carry the same versus a different observation count. Percentages are recomputed from the counts, so they are independent of the compare TSV's own formatting. Absent the directory or a matching row the section is simply omitted, so a pipeline that never ran `compare` still produces a valid page
+
+### Changed
+- `compare_data.sh` is now phase 5 of the pipeline, ahead of `summary_data.sh`, since the summary pages fold in its coverage rows. It reads the de-duplicated products under `output/dedup/dedup` and writes `report/compare/`, which `summary_data.sh` then reads for each page's Comparison section. The Helper scripts documentation moves it into the phase table and full-pipeline sequence accordingly; running it standalone still works
+
 ## [0.28.0] - 2026-07-20
 
 ### Added
