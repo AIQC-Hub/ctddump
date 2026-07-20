@@ -29,8 +29,8 @@ A profile's key is built from its platform code, its time reduced to a **date**,
 and its longitude and latitude rounded to **3 decimals**. This is the same key
 [`markdup`](./markdup.md) uses for duplicates, with one difference: `markdup`
 deliberately leaves the platform code out, while `compare` includes it by
-default. Two files being compared are usually different extracts of the same
-platforms, so the platform code is normally a wanted part of the identity. Pass
+default. Two products covering the same waters usually share platform codes, so
+the platform code is normally a wanted part of the identity. Pass
 `--no-platform-key` to match on time and position alone, which finds the same
 cast recorded under two different platform codes.
 
@@ -87,26 +87,29 @@ the profiles carrying that key in the other file has the same count.
 
 ## Examples
 
+Compares are usually between two products covering the same waters, for example
+the CORA reanalysis against a regional NRT extract.
+
 ```bash
-# Default key, report to stdout as an aligned table
-ctddump compare --format text old.parquet new.parquet
+# How much of the Arctic NRT product does CORA cover, and vice versa
+ctddump compare --format text cora.parquet nrt_ar.parquet
 
 # Save the summary
-ctddump compare old.parquet new.parquet compare.tsv
+ctddump compare cora.parquet nrt_ar.parquet compare.tsv
 
 # Ignore platform codes, so the same cast filed under two codes still matches
-ctddump compare --no-platform-key old.parquet new.parquet
+ctddump compare --no-platform-key cora.parquet nrt_ar.parquet
 
 # Match to the hour and to 4 decimals instead of the date and 3
-ctddump compare --time-format '%Y-%m-%dT%H' --decimals 4 old.parquet new.parquet
+ctddump compare --time-format '%Y-%m-%dT%H' --decimals 4 cora.parquet nrt_ar.parquet
 ```
 
-Reading the result: if the smaller file shows `profile_cov_pct` near 100 while
-the larger shows much less, the smaller is close to a subset. If both are low,
-the files overlap only partly. A high `profile_cov_pct` with a low
-`nobs_agree_pct` means the same profiles are present in both but carry different
-numbers of observations, which usually points at different QC or cleaning having
-been applied.
+Reading the result: if the smaller product shows `profile_cov_pct` near 100
+while the larger shows much less, the smaller is close to a subset of the larger.
+If both are low, the two products overlap only partly. A high `profile_cov_pct`
+with a low `nobs_agree_pct` means the same profiles are present in both but carry
+different numbers of observations, which usually points at different QC or
+cleaning in the two products.
 
 Memory is bounded: each file is streamed and reduced to one record per profile,
 so peak use follows the profile count rather than the file size.
