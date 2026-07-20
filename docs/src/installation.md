@@ -24,7 +24,7 @@ platform. It contains the `ctddump` executable with HDF5 and netCDF built in, so
 Download, extract, and put the binary somewhere on your `PATH`:
 
 ```bash
-VERSION=v0.28.0
+VERSION=v0.29.0
 TARGET=x86_64-unknown-linux-gnu
 
 curl -LO "https://github.com/AIQC-Hub/ctddump/releases/download/$VERSION/ctddump-$VERSION-$TARGET.tar.gz"

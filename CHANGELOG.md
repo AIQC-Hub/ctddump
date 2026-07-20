@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-07-21
+
 ### Added
 - `report summary` now includes a **Comparison** section for a stem when `report/compare/` holds any `compare` TSV that names it as the `reference`. The section shows the product's own totals (the coverage denominators, including profiles with no matchable key) and then one row per other product: common platforms and platform coverage, matched profiles and profile coverage, and, among the matched profiles, how many carry the same versus a different observation count. Percentages are recomputed from the counts, so they are independent of the compare TSV's own formatting. Absent the directory or a matching row the section is simply omitted, so a pipeline that never ran `compare` still produces a valid page
 
@@ -295,7 +297,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.1...v0.27.0
 [0.26.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.26.0...v0.26.1
