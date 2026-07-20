@@ -22,6 +22,12 @@ except `download_data.sh`, which instead needs the `copernicusmarine` toolbox
 `summary_site.sh`, which needs [mdBook](https://rust-lang.github.io/mdBook/)
 (`cargo install mdbook`).
 
+One further script,
+[`compare_data.sh`](#compare_datash), sits off this linear pipeline: it is an
+optional cross-product analysis that reads phase 4's de-duplicated output and
+compares each region's three products (regional NRT, NRT Global, and CORA)
+against each other. It is described [below](#compare_datash).
+
 ## Running a script
 
 Run the scripts from a working directory (e.g. `ctddump`). Source NetCDF is read
@@ -113,17 +119,20 @@ full list of tuning variables.
 | `-t, --threads N` | convert | `2` | Worker threads for each `ctddump` call (kept low because up to 9 units run in parallel by default). |
 | `-s, --src DIR` | download, convert | `source` | Root of the source NetCDF tree (downloaded into / read from). |
 | `-s, --src DIR` | site | `summary` | Directory holding the `<stem>.md` summary pages to render. |
-| `-o, --out DIR` | convert, clean, dedup, summary | `output` | Root for the generated / consumed data outputs (summary reads the markdup `.dups.tsv` from here). |
-| `-r, --report DIR` | convert, clean, dedup, summary | `report` | Root for the summary TSV reports (a sibling of `output/`). |
+| `--src DIR` | compare | `output/dedup/dedup` | Directory holding the input Parquet files to compare. |
+| `-o, --out DIR` | convert, clean, dedup, summary, compare | `output` | Root for the generated / consumed data outputs (summary reads the markdup `.dups.tsv` from here; compare derives its `--src` default from it). |
+| `-r, --report DIR` | convert, clean, dedup, summary, compare | `report` | Root for the summary TSV reports (a sibling of `output/`). |
 | `-d, --dest DIR` | summary | `summary` | Directory the generated summary pages are written to. |
 | `-d, --dest DIR` | site | `site` | Directory the built static site is written to. |
 | `-c, --config FILE` | site | built-in | Custom `book.toml` to use instead of the built-in template. |
 | `-t, --title TEXT` | site | `ctddump: CTD data summary reports` | Book title (built-in template only; ignored with `--config`). |
 | `-l, --license FILE` | site | the `LICENSE` beside the script | LICENSE copied into the built site. Pass `--license ""` to skip it. |
 | `-f, --format FMT` | summary | `md` | Summary page format: `md` or `html`. |
-| `--chunk-rows N` | convert, clean, dedup | `ctddump` default | Streaming chunk size in rows: lower uses less memory but writes more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
-| `--by-region` | convert, clean, dedup | off | Parallelise per region instead of per unit/file. |
-| `--sequential` | convert, clean, dedup | off | Process one unit at a time (no parallelism). |
+| `--format FMT` | compare | `tsv` | `ctddump compare` output format: `tsv`, `text`, or `json` (sets the report file extension). |
+| `--no-platform-key` | compare | off | Match profiles on time and position only, ignoring `platform_code`. |
+| `--chunk-rows N` | convert, clean, dedup, compare | `ctddump` default | Streaming chunk size in rows: lower uses less memory but writes/reads more row groups. Exported as [`CTDDUMP_CHUNK_ROWS`](./configuration.md#environment-variables) for every `ctddump` process the script launches. |
+| `--by-region` | convert, clean, dedup, compare | off | Parallelise per region instead of per unit/file/comparison. |
+| `--sequential` | convert, clean, dedup, compare | off | Process one unit at a time (no parallelism). |
 | `--time` | convert, clean, dedup | off | Measure each `ctddump` step with GNU time and log its wall clock and peak memory (see [Timing steps](#timing-steps)). |
 | `--time-log FILE` | convert, clean, dedup | off | Write the `--time` measurements to FILE (implies `--time`), so the screen keeps only the normal progress output. |
 | `-y, --yes` | all | off | Skip the confirmation prompt. |
@@ -288,6 +297,34 @@ it. With `--config`, `--title` is ignored (your file sets the title).
 scripts/summary_site.sh -c my-book.toml -y all
 ```
 
+## `compare_data.sh`
+
+Compares each region's de-duplicated products against each other, so you can see
+how far two products of the same waters overlap. It is optional and off the main
+pipeline: it reads phase 4's output from `output/dedup/dedup` (`--src` to point
+elsewhere) and writes a [`compare`](./commands/compare.md) two-way coverage
+summary per comparison to `report/compare/`. Three comparisons run per region,
+selected by command:
+
+- `nrt-cora`: regional NRT (AR/BO/MO) vs CORA.
+- `gl-cora`: NRT Global (GL) subset vs CORA.
+- `nrt-gl`: regional NRT vs NRT Global.
+- `all` *(default)*: all three.
+
+Profiles are matched on `ctddump compare`'s default key (platform code, the time
+as a date, and longitude/latitude to 3 decimals); pass `--no-platform-key` to
+match on time and position alone. Choose the output with `--format tsv|text|json`
+(the report file extension follows). Like the pipeline scripts it runs the
+comparisons in parallel (one worker each), skips a comparison whose input is
+missing (so a region's absent Global product does not fail the run), and honours
+`--by-region` / `--sequential` / `-y`.
+
+```bash
+scripts/compare_data.sh                        # all three comparisons, every region
+scripts/compare_data.sh nrt-cora arctic        # just NRT vs CORA for the Arctic
+scripts/compare_data.sh --format text -y all   # aligned tables, no prompt
+```
+
 ## Full pipeline
 
 Run the six phases in order (skipping prompts) for every region. Log in once
@@ -300,6 +337,13 @@ scripts/clean_data.sh    -y all
 scripts/dedup_data.sh    -y all
 scripts/summary_data.sh  -y all
 scripts/summary_site.sh  -y all        # site/index.html
+```
+
+To cross-compare the de-duplicated products afterwards (optional, off the main
+pipeline):
+
+```bash
+scripts/compare_data.sh  -y all        # report/compare/<code>_<a>_vs_<b>.tsv
 ```
 
 For the equivalent commands spelled out step by step, see the

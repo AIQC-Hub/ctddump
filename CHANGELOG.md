@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- `compare_data.sh` helper script: an optional cross-product analysis that runs `ctddump compare` on the de-duplicated products of `dedup_data.sh` for the Arctic, Baltic, and Mediterranean. Three comparisons run per region (`nrt-cora`, `gl-cora`, `nrt-gl`, or `all`), reading `output/dedup/dedup` (`--src` to override) and writing a two-way coverage summary each to `report/compare/`. Profiles are matched on `compare`'s default key (platform code, date, position to 3 decimals); `--no-platform-key` ignores the platform code and `--format` selects `tsv`/`text`/`json`. Like the pipeline scripts it runs the comparisons in parallel by default (`--by-region`/`--sequential` to change), skips a comparison whose input is missing so an absent regional Global product does not fail the run, and prints a confirmation block honoring `-y`. It ships in the release archive and needs only `ctddump` on `PATH`
+
 ## [0.27.0] - 2026-07-19
 
 ### Added

@@ -55,10 +55,10 @@ sha256sum -c SHA256SUMS --ignore-missing
 ### What else is in the archive
 
 Alongside the binary are the [helper scripts](scripts.md), plus `README.md`,
-`LICENSE`, and `CHANGELOG.md`. The four pipeline scripts (`convert_data.sh`,
-`clean_data.sh`, `dedup_data.sh`, `summary_data.sh`) need only `ctddump` on your
-`PATH`, so they work as soon as the step above is done. Three others call
-external tools that are not bundled and must be installed separately:
+`LICENSE`, and `CHANGELOG.md`. Five scripts (`convert_data.sh`, `clean_data.sh`,
+`dedup_data.sh`, `summary_data.sh`, and the optional `compare_data.sh`) need only
+`ctddump` on your `PATH`, so they work as soon as the step above is done. Three
+others call external tools that are not bundled and must be installed separately:
 `download_data.sh` needs `copernicusmarine`, `summary_site.sh` needs `mdbook`,
 and `fetch_test_data.sh` needs `gh` and `unzip`.
 
