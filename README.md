@@ -269,10 +269,10 @@ ctddump dedup marked.parquet deduped.parquet
 ctddump compare [OPTIONS] <a.parquet> <b.parquet> [dest]
 ```
 
-`compare` reports how far each of two files covers the other's platforms and profiles, writing one row per direction (the second file is the reference first) to `dest` or stdout. Profiles are matched on the same key as `markdup`, except that `platform_code` is part of the key by default; pass `--no-platform-key` to match on time and position alone. Coverage is reported both ways because it is not symmetric: a file contained in a larger one is fully covered while covering only part of it. For the profiles found in both files the report also says whether they carry the same number of observations (`same_nobs` / `diff_nobs`), which separates the same profiles cleaned differently from genuinely different profiles. The key column names (`--platform-col`, `--time-col`, `--lon-col`, `--lat-col`), the time format, the decimals, and the rounding mode are configurable, and the time column may be a datetime or a float of days since 1950. Output is `--format tsv` (default), `text`, or `json`.
+`compare` reports how far each of two files covers the other's platforms and profiles, writing one row per direction (the second file is the reference first) to `dest` or stdout. It is typically run on two products covering the same waters, for example the CORA reanalysis against a regional NRT extract. Profiles are matched on the same key as `markdup`, except that `platform_code` is part of the key by default; pass `--no-platform-key` to match on time and position alone. Coverage is reported both ways because it is not symmetric: a file contained in a larger one is fully covered while covering only part of it. For the profiles found in both files the report also says whether they carry the same number of observations (`same_nobs` / `diff_nobs`), which separates the same profiles cleaned differently from genuinely different profiles. The key column names (`--platform-col`, `--time-col`, `--lon-col`, `--lat-col`), the time format, the decimals, and the rounding mode are configurable, and the time column may be a datetime or a float of days since 1950. Output is `--format tsv` (default), `text`, or `json`.
 
 ```bash
-ctddump compare --format text old.parquet new.parquet
+ctddump compare --format text cora.parquet nrt_ar.parquet
 ```
 
 ## Configuration
