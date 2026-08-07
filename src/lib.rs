@@ -85,7 +85,18 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
             compare::run(&opts, format, &a, &b, dest.as_deref())?;
             Ok(Config { module: "compare".to_string(), target: "parquet".to_string(), args: vec![] })
         }
+        Commands::Completions { shell } => {
+            generate_completions(shell);
+            Ok(Config { module: "completions".to_string(), target: shell.to_string(), args: vec![] })
+        }
     }
+}
+
+/// Writes a `clap`-generated completion script for `shell` to stdout.
+fn generate_completions(shell: clap_complete::Shell) {
+    let mut cmd = <Cli as clap::CommandFactory>::command();
+    let name = cmd.get_name().to_string();
+    clap_complete::generate(shell, &mut cmd, name, &mut std::io::stdout());
 }
 
 /// Parses `args` with clap and dispatches to the appropriate module.

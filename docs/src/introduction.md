@@ -33,6 +33,8 @@ Two families of source files are supported:
 | [`dropqc`](./commands/dropqc.md) | Drop profiles flagged bad in `time_qc` or `position_qc`. |
 | [`markdup`](./commands/markdup.md) | Mark duplicate profiles (by date + position) with an `is_dup` column. |
 | [`dedup`](./commands/dedup.md) | Remove duplicate profiles, keeping the one with the most observations. |
+| [`compare`](./commands/compare.md) | Report how far each of two Parquet files covers the other's platforms and profiles. |
+| [`completions`](./completions.md) | Print a shell tab-completion script for bash, zsh, fish, elvish, or powershell. |
 
 ## Quick example
 

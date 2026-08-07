@@ -275,6 +275,21 @@ ctddump compare [OPTIONS] <a.parquet> <b.parquet> [dest]
 ctddump compare --format text cora.parquet nrt_ar.parquet
 ```
 
+### `completions`: shell tab-completion
+
+```
+ctddump completions <bash|zsh|fish|elvish|powershell>
+```
+
+Prints a completion script to stdout; once your shell loads it, `ctddump ` plus Tab suggests subcommands and completes a partial word when one candidate remains. For example, in bash:
+
+```bash
+source <(ctddump completions bash)                 # current shell only
+ctddump completions bash > ~/.local/share/bash-completion/completions/ctddump
+```
+
+See the [shell completion docs](https://aiqc-hub.github.io/ctddump/completions.html) for the other shells and permanent install steps.
+
 ## Configuration
 
 All `convert` and `batch convert` subcommands support a `--config` TOML file plus individual flag overrides. Priority order:
