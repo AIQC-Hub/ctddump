@@ -156,6 +156,13 @@ pub enum Commands {
         /// Output file (default: stdout)
         dest: Option<PathBuf>,
     },
+    /// Print a shell completion script to stdout (see the docs for install steps)
+    #[command(name = "completions")]
+    Completions {
+        /// Shell to generate the script for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
 }
 
 // ── Report subcommands ────────────────────────────────────────────────────────
