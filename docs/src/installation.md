@@ -21,10 +21,14 @@ platform. It contains the `ctddump` executable with HDF5 and netCDF built in, so
 | macOS, Apple Silicon | `ctddump-vX.Y.Z-aarch64-apple-darwin.tar.gz` |
 | macOS, Intel | `ctddump-vX.Y.Z-x86_64-apple-darwin.tar.gz` |
 
+The Linux binaries are linked against glibc 2.17, so they run on any distribution
+with glibc 2.17 or newer: RHEL/CentOS 7, Rocky Linux 8, Ubuntu 18.04, Debian 9,
+and everything more recent.
+
 Download, extract, and put the binary somewhere on your `PATH`:
 
 ```bash
-VERSION=v0.30.0
+VERSION=v0.30.1
 TARGET=x86_64-unknown-linux-gnu
 
 curl -LO "https://github.com/AIQC-Hub/ctddump/releases/download/$VERSION/ctddump-$VERSION-$TARGET.tar.gz"

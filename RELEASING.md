@@ -159,16 +159,18 @@ Each `ctddump-vX.Y.Z-<target>.tar.gz` holds the stripped binary, the helper
 scripts, `README.md`, `LICENSE`, and `CHANGELOG.md`. The build enables the
 `static-netcdf` feature, which vendors HDF5 and netCDF into the executable, so
 the archive needs no system libraries: on Linux the binary links only glibc and
-the loader. Roughly 13 MB compressed, 44 MB installed.
+the loader, pinned to glibc 2.17. Roughly 13 MB compressed, 44 MB installed.
 
 Three things to know when reading a failed run:
 
 - `fail-fast` is off, so one platform failing still ships the others. A missing
   architecture in a release usually means that one job failed, not that the
   release is broken.
-- The Linux binaries are built on the oldest practical runner because a
-  glibc-linked binary runs on that release and newer, never older. Moving those
-  jobs to a newer runner silently raises the minimum glibc for users.
+- The Linux binaries are built with `cargo-zigbuild` targeting glibc 2.17, so
+  the runner's own glibc no longer sets the floor: they run on RHEL7/CentOS7 and
+  every newer distribution, Rocky Linux 8 included. A "Check the glibc floor"
+  step fails the build if a symbol above 2.17 sneaks back in, so a run that fails
+  there is that guard, not a flake.
 - Bundling the scripts does not make the archive self-contained. The four
   pipeline scripts need only `ctddump` on `PATH`, but `download_data.sh` needs
   `copernicusmarine`, `summary_site.sh` needs `mdbook`, and
