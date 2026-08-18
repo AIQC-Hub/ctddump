@@ -156,6 +156,26 @@ pub enum Commands {
         /// Output file (default: stdout)
         dest: Option<PathBuf>,
     },
+    /// Export a Parquet file to a SQLite database (platform, profile, observation tables)
+    #[command(name = "sqlite")]
+    Sqlite {
+        /// Source Parquet file
+        src: PathBuf,
+        /// Output SQLite file (default: the source with a .sqlite extension)
+        dest: Option<PathBuf>,
+        /// Overwrite the output file if it already exists
+        #[arg(long)]
+        force: bool,
+        /// Add a constant column to a table: TABLE.COLUMN=VALUE (repeatable).
+        /// TABLE is platform, profile, or observation; the value type is
+        /// inferred as integer, real, or text.
+        #[arg(long = "add", value_name = "TABLE.COL=VALUE")]
+        add: Vec<String>,
+        /// Copy an existing Parquet column into a table: TABLE.COLUMN (repeatable).
+        /// For platform/profile the value must be constant within each group.
+        #[arg(long = "add-col", value_name = "TABLE.COL")]
+        add_col: Vec<String>,
+    },
     /// Print a shell completion script to stdout (see the docs for install steps)
     #[command(name = "completions")]
     Completions {

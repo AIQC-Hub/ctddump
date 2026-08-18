@@ -8,7 +8,7 @@ Guidance for Claude Code when working in this repository.
 - **NRT** (Near Real Time): regional data, Arctic (AR), Baltic (BO), Mediterranean (MO), Global (GL).
 - **CORA** (Copernicus Ocean Reanalysis): historical re-processed profiles (`cora` current format, `cora_legacy` older files).
 
-Commands: `convert`, `batch`, `header`, `concat`, `report`, `filter`, `dropna`, `dropqc`, `markdup`, `dedup`, `compare`. The full interface is defined with `clap` in `src/cli.rs` and self-documents via `--help` at every level.
+Commands: `convert`, `batch`, `header`, `concat`, `report`, `filter`, `dropna`, `dropqc`, `markdup`, `dedup`, `compare`, `sqlite`. The full interface is defined with `clap` in `src/cli.rs` and self-documents via `--help` at every level.
 
 ## House rules (hard constraints)
 

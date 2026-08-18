@@ -16,6 +16,7 @@ pub mod filter;
 pub mod header;
 pub mod markdup;
 pub mod report;
+pub mod sqlite;
 
 use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat, ConcatSubcommand, ReportSubcommand, FilterMode};
 use concat::ConcatConfig;
@@ -84,6 +85,10 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
             };
             compare::run(&opts, format, &a, &b, dest.as_deref())?;
             Ok(Config { module: "compare".to_string(), target: "parquet".to_string(), args: vec![] })
+        }
+        Commands::Sqlite { src, dest, force, add, add_col } => {
+            sqlite::run(&src, dest.as_deref(), &sqlite::Options { force, add, add_col })?;
+            Ok(Config { module: "sqlite".to_string(), target: "sqlite".to_string(), args: vec![] })
         }
         Commands::Completions { shell } => {
             generate_completions(shell);
