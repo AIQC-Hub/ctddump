@@ -1,6 +1,6 @@
 [package]
 name = "ctddump"
-version = "0.30.1"
+version = "0.31.0"
 edition = "2021"
 license = "MIT"
 description = "Convert oceanographic CTD (Conductivity, Temperature, Depth) data from NetCDF to Parquet or YAML"
@@ -26,6 +26,7 @@ gsw = "0.2.2"
 walkdir = "2"
 rayon = "1"
 glob = "0.3"
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [dev-dependencies]
 tempfile = "3"

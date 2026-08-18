@@ -16,6 +16,7 @@
 - [markdup](./commands/markdup.md)
 - [dedup](./commands/dedup.md)
 - [compare](./commands/compare.md)
+- [sqlite](./commands/sqlite.md)
 
 # Reference
 

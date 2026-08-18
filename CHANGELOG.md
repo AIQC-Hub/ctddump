@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-08-18
+
+### Added
+- `sqlite` subcommand: export a produced Parquet data file to a SQLite database, normalised into three related tables (`platform`, `profile`, `observation`) with foreign keys and indexes on the join and time columns. The flat observation table is split by grain, so profile-level values (time, position, QC, filename) are stored once per profile rather than repeated on every row. `NaN` floats and empty QC strings become SQL `NULL`. The output path defaults to the source with a `.sqlite` extension and is not overwritten unless `--force` is given. Two options attach extra columns to a chosen table: `--add TABLE.COLUMN=VALUE` adds a constant column (type inferred as integer, real, or text), and `--add-col TABLE.COLUMN` copies an existing Parquet column through (for a `profile`/`platform` target the value must be constant within each group, else the export stops with a naming error). Like the other commands it streams in bounded memory: a first pass builds the platform and profile rows (memory follows profile count), a second streams the observations in fixed windows. SQLite is vendored into the binary, so the prebuilt archives need no system SQLite. A new command reference page documents the schema, the NULL handling, and the added-column options
+
 ## [0.30.1] - 2026-08-17
 
 ### Fixed
@@ -307,7 +312,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.30.1...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.31.0...HEAD
+[0.31.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.30.1...v0.31.0
 [0.30.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.30.0...v0.30.1
 [0.30.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.28.0...v0.29.0

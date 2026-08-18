@@ -34,6 +34,7 @@ Two families of source files are supported:
 | [`markdup`](./commands/markdup.md) | Mark duplicate profiles (by date + position) with an `is_dup` column. |
 | [`dedup`](./commands/dedup.md) | Remove duplicate profiles, keeping the one with the most observations. |
 | [`compare`](./commands/compare.md) | Report how far each of two Parquet files covers the other's platforms and profiles. |
+| [`sqlite`](./commands/sqlite.md) | Export a Parquet file to a SQLite database (platform, profile, observation tables). |
 | [`completions`](./completions.md) | Print a shell tab-completion script for bash, zsh, fish, elvish, or powershell. |
 
 ## Quick example
