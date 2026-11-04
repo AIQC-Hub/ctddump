@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.32.1] - 2026-11-04
+
+### Fixed
+- The helper scripts under `scripts/` (other than `fetch_test_data.sh`) were committed without the execute bit, so a fresh clone could not run them directly as `scripts/<name>.sh`. All of them are now executable
+
 ## [0.32.0] - 2026-11-04
 
 ### Added
@@ -324,7 +329,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.1...HEAD
+[0.32.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.30.1...v0.31.0
 [0.30.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.30.0...v0.30.1
