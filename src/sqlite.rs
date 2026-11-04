@@ -106,16 +106,18 @@ const PROFILE_STD: [&str; 9] = [
 ];
 
 /// Standard observation-grain columns, in the order they appear in the table.
-const OBS_STD: [&str; 10] = [
-    "temp", "temp_qc", "psal", "psal_qc", "pres", "pres_qc", "pres_conv", "deph", "deph_qc",
-    "deph_conv",
+const OBS_STD: [&str; 13] = [
+    "temp", "temp_qc", "temp_dm", "psal", "psal_qc", "psal_dm", "pres", "pres_qc", "pres_dm",
+    "pres_conv", "deph", "deph_qc", "deph_conv",
 ];
 
 /// SQLite storage class for a known standard column.
 fn std_sql_type(name: &str) -> SqlType {
     match name {
         "profile_timestamp" | "pres_conv" | "deph_conv" => SqlType::Integer,
-        "time_qc" | "position_qc" | "filename" => SqlType::Text,
+        "filename" => SqlType::Text,
+        // QC flags ("1", "A", ...) and data modes ("R"/"A"/"D") are text codes.
+        n if n.ends_with("_qc") || n.ends_with("_dm") => SqlType::Text,
         _ => SqlType::Real, // profile_time, positions, temp/psal/pres/deph
     }
 }

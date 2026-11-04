@@ -36,6 +36,14 @@ Every row also reports:
 - `{longitude,latitude}_{min,max}`: geographic bounding box over the valid
   positions (`global` and `platform` levels only; at `profile` level the single
   `longitude`/`latitude` is already shown).
+- `{temp,psal,pres}_dm_{r,a,d}`: number of observations whose
+  [data mode](../output-schema.md#data-mode) is real-time (`R`), adjusted in
+  real time (`A`), or delayed mode (`D`), placed after that parameter's
+  statistics. Observations with an unset data mode (`""`) are not counted. Each
+  parameter's counts appear only when the file has its `<param>_dm` column, so a
+  file converted before the data-mode columns existed reports as before.
+- `dup_profiles` (`global`/`platform`) or `is_dup` (`profile`): only when the
+  file has a [`markdup`](./markdup.md) `is_dup` column.
 
 ```bash
 # Per-platform summary
@@ -104,6 +112,14 @@ their tables carry three further columns, `Cleaned`, `% of cleaned` and
 `Deleted (cleaned)`, comparing them against the **last cleaning stage present**
 (Filter, else Drop all-NA, else Drop bad QC). When no cleaning stage ran there is
 nothing to compare against and the columns are omitted.
+
+When the Conversion report has the `{temp,psal,pres}_dm_{r,a,d}` columns, the
+**Conversion** section carries a second table, **Data mode**: one row per
+parameter with the number of observations in real-time (`R`), adjusted (`A`),
+and delayed mode (`D`), each with its share of all converted observations.
+Observations with an unset data mode are not counted, so a row can sum to less
+than 100%. Reports of files converted before the data-mode columns existed have
+no such columns, and the table is omitted.
 
 The **Filter by region** section carries a second table, **Bounding box**, with the
 minimum and maximum longitude and latitude of the profiles that survived the

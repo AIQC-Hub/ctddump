@@ -137,16 +137,19 @@ fn collect_nrt_chunk(
     let temp_fill = common::get_float_fill_value(file, "TEMP");
     let temp: Vec<f32> = common::get_var_float_value_chunk(file, "TEMP", temp_fill, time_offset, time_count, obs_len)?;
     let temp_qc: Vec<String> = common::get_qc_value_chunk(file, "TEMP_QC", time_offset, time_count, obs_len)?;
+    let temp_dm: Vec<String> = common::get_dm_value_chunk(file, "TEMP_DM", "TEMP", time_offset, time_count, obs_len)?;
 
     // PSAL
     let psal_fill = common::get_float_fill_value(file, "PSAL");
     let psal: Vec<f32> = common::get_var_float_value_chunk(file, "PSAL", psal_fill, time_offset, time_count, obs_len)?;
     let psal_qc: Vec<String> = common::get_qc_value_chunk(file, "PSAL_QC", time_offset, time_count, obs_len)?;
+    let psal_dm: Vec<String> = common::get_dm_value_chunk(file, "PSAL_DM", "PSAL", time_offset, time_count, obs_len)?;
 
     // PRES
     let pres_fill = common::get_float_fill_value(file, "PRES");
     let pres: Vec<f32> = common::get_var_float_value_chunk(file, "PRES", pres_fill, time_offset, time_count, obs_len)?;
     let pres_qc: Vec<String> = common::get_qc_value_chunk(file, "PRES_QC", time_offset, time_count, obs_len)?;
+    let pres_dm: Vec<String> = common::get_dm_value_chunk(file, "PRES_DM", "PRES", time_offset, time_count, obs_len)?;
 
     // PRES / DEPH conversion.
     // When profile coords are enabled, use profile_latitude (already cross-filled
@@ -158,20 +161,24 @@ fn collect_nrt_chunk(
         latitude.clone()
     };
 
-    let (converted_pres, converted_pres_qc, pres_conv, converted_deph, converted_deph_qc, deph_conv) =
+    let (converted_pres, converted_pres_qc, converted_pres_dm, pres_conv, converted_deph, converted_deph_qc, deph_conv) =
         if has_deph {
             let deph_fill = common::get_float_fill_value(file, "DEPH");
             let deph: Vec<f32> = common::get_var_float_value_chunk(file, "DEPH", deph_fill, time_offset, time_count, obs_len)?;
             let deph_qc: Vec<String> = common::get_qc_value_chunk(file, "DEPH_QC", time_offset, time_count, obs_len)?;
             let (cp, cpq, pc) = common::convert_depth_to_pressure(pres.clone(), pres_qc.clone(), deph.clone(), deph_qc.clone(), pres_fill, conversion_latitude.clone());
             let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), deph_fill, conversion_latitude.clone());
-            (cp, cpq, pc, cd, cdq, dc)
+            // Pressure derived from depth inherits the depth data mode, as pres_qc
+            // inherits deph_qc.
+            let deph_dm: Vec<String> = common::get_dm_value_chunk(file, "DEPH_DM", "DEPH", time_offset, time_count, obs_len)?;
+            let cpdm = common::merge_converted_dm(pres_dm, &deph_dm, &pc);
+            (cp, cpq, cpdm, pc, cd, cdq, dc)
         } else {
             let deph = vec![pres_fill; vec_size];
             let deph_qc: Vec<String> = vec!["".to_string(); vec_size];
             let pres_conv = vec![0_i8; vec_size];
             let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), pres_fill, conversion_latitude.clone());
-            (pres.clone(), pres_qc.clone(), pres_conv, cd, cdq, dc)
+            (pres.clone(), pres_qc.clone(), pres_dm, pres_conv, cd, cdq, dc)
         };
 
     // Drop rows where temp, psal and pres (plus deph, when sourced) are all missing
@@ -200,10 +207,13 @@ fn collect_nrt_chunk(
     let filename = common::retain_by_mask(filename, &keep);
     let temp = common::retain_by_mask(temp, &keep);
     let temp_qc = common::retain_by_mask(temp_qc, &keep);
+    let temp_dm = common::retain_by_mask(temp_dm, &keep);
     let psal = common::retain_by_mask(psal, &keep);
     let psal_qc = common::retain_by_mask(psal_qc, &keep);
+    let psal_dm = common::retain_by_mask(psal_dm, &keep);
     let converted_pres = common::retain_by_mask(converted_pres, &keep);
     let converted_pres_qc = common::retain_by_mask(converted_pres_qc, &keep);
+    let converted_pres_dm = common::retain_by_mask(converted_pres_dm, &keep);
     let pres_conv = common::retain_by_mask(pres_conv, &keep);
     let converted_deph = common::retain_by_mask(converted_deph, &keep);
     let converted_deph_qc = common::retain_by_mask(converted_deph_qc, &keep);
@@ -225,10 +235,13 @@ fn collect_nrt_chunk(
         Series::new("filename".into(), filename),
         Series::new("temp".into(), temp),
         Series::new("temp_qc".into(), temp_qc),
+        Series::new("temp_dm".into(), temp_dm),
         Series::new("psal".into(), psal),
         Series::new("psal_qc".into(), psal_qc),
+        Series::new("psal_dm".into(), psal_dm),
         Series::new("pres".into(), converted_pres),
         Series::new("pres_qc".into(), converted_pres_qc),
+        Series::new("pres_dm".into(), converted_pres_dm),
         Series::new("pres_conv".into(), pres_conv),
         Series::new("deph".into(), converted_deph),
         Series::new("deph_qc".into(), converted_deph_qc),

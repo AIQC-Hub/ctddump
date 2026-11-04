@@ -524,3 +524,53 @@ fn comparison_section_absent_without_matching_reports() {
     // The rest of the page is unaffected.
     assert!(md.contains("## Conversion"), "conversion missing\n{md}");
 }
+
+/// Conversion TSV with data-mode count columns for temp and psal only.
+fn write_dm_convert_tsv(path: &Path) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        "platform_code\tn_profiles\tn_obs\ttemp_dm_r\ttemp_dm_a\ttemp_dm_d\tpsal_dm_r\tpsal_dm_a\tpsal_dm_d\n\
+         P1\t10\t600\t100\t0\t500\t600\t0\t0\n\
+         P2\t10\t400\t400\t0\t0\t300\t50\t0\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn conversion_shows_data_mode_table() {
+    let dir = tempfile::tempdir().unwrap();
+    let rep = dir.path().join("report");
+    let out = dir.path().join("output");
+    write_dm_convert_tsv(&rep.join("convert").join("dm.parquet.tsv"));
+
+    let md = run_summary(&rep, &out, "dm", "md", &dir.path().join("dm.md"));
+    assert!(md.contains("**Data mode**"), "no data-mode table\n{md}");
+    assert!(
+        md.contains("| Parameter | Real-time (R) | % R | Adjusted (A) | % A | Delayed mode (D) | % D |"),
+        "data-mode header wrong\n{md}"
+    );
+    // temp: R 500 / A 0 / D 500 of 1000 obs.
+    assert!(
+        md.contains("| Temperature | 500 | 50.0% | 0 | 0.0% | 500 | 50.0% |"),
+        "temperature row wrong\n{md}"
+    );
+    // psal: R 900 / A 50 / D 0; the 50 unset observations leave the row at 95%.
+    assert!(
+        md.contains("| Salinity | 900 | 90.0% | 50 | 5.0% | 0 | 0.0% |"),
+        "salinity row wrong\n{md}"
+    );
+    assert!(!md.contains("| Pressure |"), "pressure has no columns, so no row\n{md}");
+    assert!(!md.contains('\u{2014}'), "em dash in page");
+
+    let html = run_summary(&rep, &out, "dm", "html", &dir.path().join("dm.html"));
+    assert!(html.contains("Delayed mode (D)"), "data-mode table missing from HTML");
+}
+
+#[test]
+fn conversion_without_data_mode_columns_has_no_data_mode_table() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = full_tree(dir.path(), "nrt_ar_ar");
+    let md = run_summary(&rep, &out, "nrt_ar_ar", "md", &dir.path().join("s.md"));
+    assert!(!md.contains("Data mode"), "unexpected data-mode table\n{md}");
+}

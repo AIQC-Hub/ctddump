@@ -220,3 +220,71 @@ fn test_report_yaml() {
     assert_eq!(b["has_position_qc"], "true");
     assert_eq!(b["extra_params"], "DOXY;TUR3", "sorted, QC/core excluded");
 }
+
+/// The base fixture plus `temp_dm` / `psal_dm` data-mode columns (no `pres_dm`,
+/// to check each parameter's counts are guarded on its own column):
+///   temp_dm: A/1 D,D,D; A/2 R,A; B/1 "" (fill, not counted)
+///   psal_dm: A R,R,R,R,R; B D
+fn write_parquet_fixture_with_dm(path: &Path) {
+    write_parquet_fixture(path);
+    let mut df = ParquetReader::new(fs::File::open(path).unwrap()).finish().unwrap();
+    df.with_column(Series::new("temp_dm".into(), vec!["D", "D", "D", "R", "A", ""])).unwrap();
+    df.with_column(Series::new("psal_dm".into(), vec!["R", "R", "R", "R", "R", "D"])).unwrap();
+    let f = fs::File::create(path).unwrap();
+    ParquetWriter::new(f).finish(&mut df).unwrap();
+}
+
+fn report_tsv(level: &str, fixture: fn(&Path)) -> (Vec<String>, Vec<Vec<String>>) {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("data.parquet");
+    let out = dir.path().join("report.tsv");
+    fixture(&src);
+    dispatch(&["report", "parquet", "--level", level, src.to_str().unwrap(), out.to_str().unwrap()]);
+    parse_tsv(&out)
+}
+
+#[test]
+fn test_report_parquet_data_mode_counts() {
+    // Global.
+    let (header, rows) = report_tsv("global", write_parquet_fixture_with_dm);
+    let g = as_map(&header, &rows[0]);
+    assert_eq!((g["temp_dm_r"], g["temp_dm_a"], g["temp_dm_d"]), ("1", "1", "3"));
+    assert_eq!((g["psal_dm_r"], g["psal_dm_a"], g["psal_dm_d"]), ("5", "0", "1"));
+    assert!(!header.iter().any(|h| h.starts_with("pres_dm")), "no pres_dm column → no counts");
+
+    // Each parameter's counts follow its mean.
+    let pos = |n: &str| header.iter().position(|h| h == n).unwrap();
+    assert_eq!(pos("temp_dm_r"), pos("temp_mean") + 1);
+    assert_eq!(pos("temp_dm_d"), pos("temp_mean") + 3);
+    assert_eq!(pos("na_psal"), pos("temp_dm_d") + 1);
+    assert_eq!(pos("na_pres"), pos("psal_dm_d") + 1);
+
+    // Platform.
+    let (header, rows) = report_tsv("platform", write_parquet_fixture_with_dm);
+    let by_platform: HashMap<&str, HashMap<&str, &str>> =
+        rows.iter().map(|r| (r[0].as_str(), as_map(&header, r))).collect();
+    let a = &by_platform["A"];
+    assert_eq!((a["temp_dm_r"], a["temp_dm_a"], a["temp_dm_d"]), ("1", "1", "3"));
+    assert_eq!((a["psal_dm_r"], a["psal_dm_d"]), ("5", "0"));
+    let b = &by_platform["B"];
+    assert_eq!((b["temp_dm_r"], b["temp_dm_a"], b["temp_dm_d"]), ("0", "0", "0"), "fill not counted");
+    assert_eq!(b["psal_dm_d"], "1");
+
+    // Profile.
+    let (header, rows) = report_tsv("profile", write_parquet_fixture_with_dm);
+    let a1 = as_map(&header, &rows[0]);
+    let a2 = as_map(&header, &rows[1]);
+    assert_eq!((a1["temp_dm_r"], a1["temp_dm_d"]), ("0", "3"));
+    assert_eq!((a2["temp_dm_r"], a2["temp_dm_a"], a2["temp_dm_d"]), ("1", "1", "0"));
+}
+
+#[test]
+fn test_report_parquet_without_dm_columns_has_no_dm_counts() {
+    for level in ["global", "platform", "profile"] {
+        let (header, _) = report_tsv(level, write_parquet_fixture);
+        assert!(
+            !header.iter().any(|h| h.contains("_dm_")),
+            "{level}: unexpected data-mode columns {header:?}"
+        );
+    }
+}

@@ -91,6 +91,20 @@ Replace `X.Y.Z` with the new version and `PREV` with the previous tag.
    Those fail at the authentication step, after the full test suite has already
    run.
 
+   **When to skip it.** The dry run is optional and never runs automatically, so
+   skip it for an ordinary release (code, docs, or features with no change to the
+   build setup or dependencies) and let the tag push do the work. Run it only
+   when one of these applies:
+   - the release setup changed: the `crates-io` environment, the Trusted
+     Publishing config, or the `publish.yml` workflow file (including a rename);
+   - a build input changed in a way a passing test suite would not catch: a new
+     native or vendored dependency (for example a crate pulled in with a
+     `bundled`/`static` feature that compiles C), or a change to the Rust
+     toolchain or a build target. These can break `cargo publish`'s tarball build
+     or the `cargo-zigbuild` cross-compile without any test failing, so the dry
+     run packages the crate and builds all four binaries to prove they still
+     compile.
+
 > Tags are `v`-prefixed (`vX.Y.Z`) even though git-flow's version-tag prefix is
 > empty; apply the tag manually as shown.
 

@@ -28,7 +28,7 @@ Two-stage `clap` dispatch:
 
 > **Threading (`--threads`/`-t`).** Because each platform range owns *complete* platforms, ranges are independent units of parallel work (this is why concat parallelizes by range, not by file — a platform can span files and a file can hold many platforms). The effective worker count is `--threads N` or, when omitted, all logical CPU cores. When it is `> 1` the renumber path builds a rayon pool (16 MiB worker stacks, as in `batch`) and renumbers ranges concurrently, each writing a temp Parquet file beside the output named `<output>.concat-tmp-NNNNN` (no `.parquet` suffix, so a stray temp from a crash is never re-globbed). The temp files are then concatenated in range order into the final output and removed, so the result is byte-identical to the sequential path (verified by `tests/test_concat_parallel.rs`). It sets `POLARS_MAX_THREADS=1` **before any Polars call** (Polars reads it once at pool init) so `--threads` is the real knob and each range worker doesn't spawn Polars' own N_cpus pool on top. Peak memory rises to ≈ `threads × CTDDUMP_CHUNK_ROWS` rows plus temp disk — so good range-level parallelism wants `#ranges ≥ threads` (lower `CTDDUMP_CHUNK_ROWS` for more, smaller ranges). `--threads 1` forces the sequential single-writer path (lowest memory; Polars still parallelizes that one stream); `--no-renumber` ignores `--threads`.
 
-**Report** (`src/report/{parquet,yaml,format}.rs`): summarise a produced Parquet data file (`report parquet --level global|platform|profile`) or a merged header YAML (`report yaml`) as TSV/text/JSON. Aggregates via Polars `LazyFrame`; `format.rs` hand-rolls the three output writers. When the scanned file has a `markdup` `is_dup` column, the parquet report adds duplicate counts (`dup_profiles` at global/platform, the `is_dup` flag at profile level); absent the column the report is unchanged.
+**Report** (`src/report/{parquet,yaml,format}.rs`): summarise a produced Parquet data file (`report parquet --level global|platform|profile`) or a merged header YAML (`report yaml`) as TSV/text/JSON. Aggregates via Polars `LazyFrame`; `format.rs` hand-rolls the three output writers. When the scanned file has a `markdup` `is_dup` column, the parquet report adds duplicate counts (`dup_profiles` at global/platform, the `is_dup` flag at profile level); absent the column the report is unchanged. Likewise, for each `<param>_dm` column present it adds `<param>_dm_{r,a,d}` observation counts after that parameter's statistics (`Opts::from_schema` decides both), and `report summary` turns the Conversion TSV's counts into a "Data mode" table.
 
 **Filter** (`src/filter.rs`): `run()` keeps (`--mode include`, default) or drops (`--mode exclude`) whole profiles by a geographic bounding box. Since `longitude`/`latitude` are constant within a profile, it is a plain per-row predicate (NaN positions are treated as outside via `is_not_nan` guards). Streamed in `common::chunk_rows()` row slices via `BatchedWriter` (`set_parallel(false)`), so peak memory is bounded regardless of file size.
 
@@ -52,6 +52,7 @@ Two-stage `clap` dispatch:
 - `get_var_float_value()` — float data with fill → NaN.
 - `get_qc_value()` / `get_qc_coordinate_value()` / `get_qc_value_from_char()` — QC flags (i8, tiled coordinate, or ASCII char) → `Vec<String>`.
 - `get_char_value()` / `get_char_value2()` / `get_char_vector3()` — NetCDF `char` arrays (i8) → `Vec<String>` at different dim layouts.
+- `get_dm_value_chunk()` / `get_dm_coordinate_value_chunk()` — data mode (`R`/`A`/`D`) from a 2-D `<PARAM>_DM` char variable (fallback: the parameter's `data_mode` attribute via `dm_from_attribute`, then `DM_DEFAULT = "R"`) or from CORA's 1-D `DATA_MODE`. Fill cells → `""` (`dm_from_char`).
 - `convert_depth_to_pressure()` / `convert_pressure_to_depth()` — bidirectional via `gsw` (TEOS-10).
 
 ## Output DataFrame schema
@@ -72,6 +73,7 @@ version of this table is `docs/src/output-schema.md`):
 | `filename` | `String` | source file stem |
 | `temp`, `psal`, `pres`, `deph` | `f32` | NaN where missing |
 | `temp_qc`, `psal_qc`, `pres_qc`, `deph_qc` | `String` | single-char flag; `""` if missing |
+| `temp_dm`, `psal_dm`, `pres_dm` | `String` | `R`/`A`/`D`; `""` for a fill cell. NRT: `<PARAM>_DM` if present, else the parameter's `data_mode` attribute (if R/A/D), else `R`; DEPH-derived `pres_dm` inherits `DEPH_DM` (`common::merge_converted_dm`). CORA: per-profile `DATA_MODE` tiled into all three, `R` if absent. |
 | `pres_conv`, `deph_conv` | `i8` | `1` = value derived by conversion |
 
 ## `trace` feature
