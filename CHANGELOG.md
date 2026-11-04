@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-04
+
 ### Added
 - Data-mode columns `temp_dm`, `psal_dm`, and `pres_dm` in the converted Parquet, each placed after its QC column. Values are `R` (real-time), `A` (adjusted in real time), or `D` (delayed mode). NRT files that ship `TEMP_DM` / `PSAL_DM` / `PRES_DM` (some Arctic files) have the per-observation codes copied through, with a fill cell stored as `""`; files without them use the parameter's `data_mode` attribute when it is `R`, `A`, or `D`, and `R` otherwise. Pressure derived from depth takes its data mode from DEPH, as its QC flag already does. CORA files have no per-parameter data mode, so all three columns hold the profile's `DATA_MODE`. The `sqlite` export carries the new columns as `TEXT` on the `observation` table, with `""` stored as `NULL`. The Output schema page has a new Data mode section
 - `report parquet` counts observations per data mode: `temp_dm_r` / `temp_dm_a` / `temp_dm_d` and the same for `psal` and `pres`, at every level, placed after each parameter's statistics. Fill cells are not counted. The counts appear only for the `<param>_dm` columns a file has, so files converted before the data-mode columns existed report as before. `report summary` adds a **Data mode** table to the Conversion section with each parameter's R/A/D observation counts and their share of all observations, omitted when the Conversion report has no data-mode counts
@@ -322,7 +324,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.31.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.0...HEAD
+[0.32.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.30.1...v0.31.0
 [0.30.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.30.0...v0.30.1
 [0.30.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.29.0...v0.30.0
