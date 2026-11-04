@@ -28,7 +28,7 @@ and everything more recent.
 Download, extract, and put the binary somewhere on your `PATH`:
 
 ```bash
-VERSION=v0.32.0
+VERSION=v0.32.1
 TARGET=x86_64-unknown-linux-gnu
 
 curl -LO "https://github.com/AIQC-Hub/ctddump/releases/download/$VERSION/ctddump-$VERSION-$TARGET.tar.gz"
