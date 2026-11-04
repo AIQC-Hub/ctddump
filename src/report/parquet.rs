@@ -20,25 +20,64 @@ pub fn run(
     let lf = LazyFrame::scan_parquet(src, ScanArgsParquet::default())
         .map_err(|e| format!("Cannot scan {}: {}", src.display(), e))?;
 
-    // When a `markdup` `is_dup` column is present, the report also summarises
-    // duplicate counts; otherwise the duplicate columns are omitted entirely.
-    let has_dup = lf.clone().slice(0, 0).collect()?.schema().index_of("is_dup").is_some();
+    let opts = Opts::from_schema(&lf.clone().slice(0, 0).collect()?.schema());
 
     let df = match level {
-        ReportLevel::Global => global_report(lf, has_dup)?,
-        ReportLevel::Platform => platform_report(lf, has_dup)?,
-        ReportLevel::Profile => profile_report(lf, has_dup)?,
+        ReportLevel::Global => global_report(lf, &opts)?,
+        ReportLevel::Platform => platform_report(lf, &opts)?,
+        ReportLevel::Profile => profile_report(lf, &opts)?,
     };
 
     format::write_report(&df, format, dest)?;
     Ok(())
 }
 
+/// The measured parameters the report summarises, in report order.
+const MEASURES: [&str; 3] = ["temp", "psal", "pres"];
+
+/// Data-mode codes counted per `<param>_dm` column: real-time, adjusted in real
+/// time, delayed mode. Fill cells ("") are not counted.
+const DM_CODES: [&str; 3] = ["R", "A", "D"];
+
+/// Optional report columns, decided by which columns the scanned file carries.
+struct Opts {
+    /// A `markdup` `is_dup` column is present: the report also summarises
+    /// duplicate counts; otherwise the duplicate columns are omitted entirely.
+    has_dup: bool,
+    /// The measures whose `<param>_dm` column is present: each gets per-code
+    /// observation counts. Files converted before the data-mode columns existed
+    /// have none, and their report is unchanged.
+    dm: Vec<&'static str>,
+}
+
+impl Opts {
+    fn from_schema(schema: &Schema) -> Opts {
+        Opts {
+            has_dup: schema.index_of("is_dup").is_some(),
+            dm: MEASURES
+                .into_iter()
+                .filter(|m| schema.index_of(&format!("{m}_dm")).is_some())
+                .collect(),
+        }
+    }
+
+    fn has_dm(&self, name: &str) -> bool {
+        self.dm.contains(&name)
+    }
+}
+
+/// Name of the count column for data-mode `code` of `name`, e.g. `temp_dm_r`.
+fn dm_count_name(name: &str, code: &str) -> String {
+    format!("{name}_dm_{}", code.to_lowercase())
+}
+
 /// Observation-level aggregates for `temp`/`psal`/`pres`: NA count (null or NaN)
-/// plus min/max/mean over the valid (non-NaN) values. Reused by every level.
-fn measure_aggs() -> Vec<Expr> {
+/// plus min/max/mean over the valid (non-NaN) values, and, where the file has a
+/// `<param>_dm` column, the number of observations per data-mode code. Reused by
+/// every level.
+fn measure_aggs(o: &Opts) -> Vec<Expr> {
     let mut v = Vec::new();
-    for name in ["temp", "psal", "pres"] {
+    for name in MEASURES {
         v.push(
             col(name)
                 .is_null()
@@ -50,20 +89,38 @@ fn measure_aggs() -> Vec<Expr> {
         v.push(valid.clone().min().alias(format!("{name}_min").as_str()));
         v.push(valid.clone().max().alias(format!("{name}_max").as_str()));
         v.push(valid.mean().alias(format!("{name}_mean").as_str()));
+        if o.has_dm(name) {
+            let dm = format!("{name}_dm");
+            for code in DM_CODES {
+                v.push(
+                    col(dm.as_str())
+                        .eq(lit(code))
+                        .sum()
+                        .alias(dm_count_name(name, code).as_str()),
+                );
+            }
+        }
     }
     v
 }
 
-/// Columns in report order, after the level-specific identifier columns.
-fn measure_cols() -> Vec<Expr> {
+/// Column names in report order, after the level-specific identifier columns.
+fn measure_names(o: &Opts) -> Vec<String> {
     let mut v = Vec::new();
-    for name in ["temp", "psal", "pres"] {
-        v.push(col(format!("na_{name}").as_str()));
-        v.push(col(format!("{name}_min").as_str()));
-        v.push(col(format!("{name}_max").as_str()));
-        v.push(col(format!("{name}_mean").as_str()));
+    for name in MEASURES {
+        v.push(format!("na_{name}"));
+        v.push(format!("{name}_min"));
+        v.push(format!("{name}_max"));
+        v.push(format!("{name}_mean"));
+        if o.has_dm(name) {
+            v.extend(DM_CODES.iter().map(|code| dm_count_name(name, code)));
+        }
     }
     v
+}
+
+fn measure_cols(o: &Opts) -> Vec<Expr> {
+    measure_names(o).iter().map(|n| col(n.as_str())).collect()
 }
 
 /// Geographic bounding-box aggregates: min/max of `longitude` and `latitude`
@@ -90,14 +147,14 @@ fn geo_cols() -> Vec<Expr> {
 /// Per-profile roll-up of the profile-level QC flags into per-platform "good"
 /// counts (flag `== "1"`), plus the profile count. With `has_dup`, also counts
 /// duplicated profiles per platform (`is_dup` is profile-level).
-fn platform_qc(lf: LazyFrame, has_dup: bool) -> LazyFrame {
+fn platform_qc(lf: LazyFrame, o: &Opts) -> LazyFrame {
     let mut prof_agg = vec![col("time_qc").first(), col("position_qc").first()];
     let mut plat_agg = vec![
         len().alias("n_profiles"),
         col("time_qc").eq(lit("1")).sum().alias("time_qc_good"),
         col("position_qc").eq(lit("1")).sum().alias("position_qc_good"),
     ];
-    if has_dup {
+    if o.has_dup {
         prof_agg.push(col("is_dup").first());
         plat_agg.push(col("is_dup").sum().alias("dup_profiles"));
     }
@@ -107,14 +164,14 @@ fn platform_qc(lf: LazyFrame, has_dup: bool) -> LazyFrame {
         .agg(plat_agg)
 }
 
-fn platform_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Error>> {
+fn platform_report(lf: LazyFrame, o: &Opts) -> Result<DataFrame, Box<dyn Error>> {
     let obs = lf.clone().group_by([col("platform_code")]).agg({
         let mut v = vec![len().alias("n_obs")];
-        v.extend(measure_aggs());
+        v.extend(measure_aggs(o));
         v.extend(geo_aggs());
         v
     });
-    let qc = platform_qc(lf, has_dup);
+    let qc = platform_qc(lf, o);
 
     let mut select_cols = vec![
         col("platform_code"),
@@ -123,11 +180,11 @@ fn platform_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Er
         col("time_qc_good"),
         col("position_qc_good"),
     ];
-    if has_dup {
+    if o.has_dup {
         select_cols.push(col("dup_profiles"));
     }
     select_cols.extend(geo_cols());
-    select_cols.extend(measure_cols());
+    select_cols.extend(measure_cols(o));
 
     let df = obs
         .join(
@@ -142,7 +199,7 @@ fn platform_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Er
     Ok(df)
 }
 
-fn profile_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Error>> {
+fn profile_report(lf: LazyFrame, o: &Opts) -> Result<DataFrame, Box<dyn Error>> {
     let agg = {
         let mut v = vec![
             col("profile_timestamp").first().alias("profile_timestamp"),
@@ -152,10 +209,10 @@ fn profile_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Err
             col("time_qc").first().alias("time_qc"),
             col("position_qc").first().alias("position_qc"),
         ];
-        if has_dup {
+        if o.has_dup {
             v.push(col("is_dup").first().alias("is_dup"));
         }
-        v.extend(measure_aggs());
+        v.extend(measure_aggs(o));
         v
     };
 
@@ -169,10 +226,10 @@ fn profile_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Err
         col("time_qc"),
         col("position_qc"),
     ];
-    if has_dup {
+    if o.has_dup {
         select_cols.push(col("is_dup"));
     }
-    select_cols.extend(measure_cols());
+    select_cols.extend(measure_cols(o));
 
     let df = lf
         .group_by([col("platform_code"), col("profile_no")])
@@ -186,13 +243,13 @@ fn profile_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Err
     Ok(df)
 }
 
-fn global_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Error>> {
+fn global_report(lf: LazyFrame, o: &Opts) -> Result<DataFrame, Box<dyn Error>> {
     // Whole-file observation aggregates (one row).
     let base = lf
         .clone()
         .select({
             let mut v = vec![len().alias("n_obs")];
-            v.extend(measure_aggs());
+            v.extend(measure_aggs(o));
             v.extend(geo_aggs());
             v
         })
@@ -203,7 +260,7 @@ fn global_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Erro
         .group_by([col("platform_code"), col("profile_no")])
         .agg({
             let mut v = vec![col("time_qc").first(), col("position_qc").first()];
-            if has_dup {
+            if o.has_dup {
                 v.push(col("is_dup").first());
             }
             v
@@ -227,7 +284,7 @@ fn global_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Erro
         Series::new("time_qc_good".into(), vec![time_qc_good]),
         Series::new("position_qc_good".into(), vec![position_qc_good]),
     ];
-    if has_dup {
+    if o.has_dup {
         let dup_profiles = profiles.column("is_dup")?.bool()?.sum().unwrap_or(0);
         cols.push(Series::new("dup_profiles".into(), vec![dup_profiles]));
     }
@@ -235,11 +292,8 @@ fn global_report(lf: LazyFrame, has_dup: bool) -> Result<DataFrame, Box<dyn Erro
         cols.push(base.column(format!("{name}_min").as_str())?.clone());
         cols.push(base.column(format!("{name}_max").as_str())?.clone());
     }
-    for name in ["temp", "psal", "pres"] {
-        cols.push(base.column(format!("na_{name}").as_str())?.clone());
-        cols.push(base.column(format!("{name}_min").as_str())?.clone());
-        cols.push(base.column(format!("{name}_max").as_str())?.clone());
-        cols.push(base.column(format!("{name}_mean").as_str())?.clone());
+    for name in measure_names(o) {
+        cols.push(base.column(name.as_str())?.clone());
     }
     Ok(DataFrame::new(cols)?)
 }

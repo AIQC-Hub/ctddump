@@ -249,6 +249,11 @@ const DESC_FILES: &str = "Coverage of the core measurement variables and the two
 const DESC_CONVERT: &str = "Counts after converting the source NetCDF files to Parquet, before \
     any profile is dropped. These are the \"original\" numbers every later stage is compared against.";
 
+const DESC_DATA_MODE: &str = "Observations per data mode for each parameter: real-time (R), \
+    adjusted in real time (A), or delayed mode (D). Percentages are shares of all observations. \
+    Observations whose data mode is unset (a fill value in the source file) are not counted, so a \
+    row can sum to less than 100%.";
+
 const DESC_CLEANING: &str = "Stages that drop whole profiles that are unusable or out of scope. \
     They run in the order below, each on the output of the previous one, so the counts fall \
     monotonically.";
@@ -349,14 +354,19 @@ fn build_sections(p: &StemPaths, stem: &str) -> Result<Vec<Section>, Box<dyn Err
         sections.push(file_summary_section(&Tsv::read(&p.yaml)?, path_str(&p.yaml)));
     }
 
-    // 2. Conversion (baseline counts, no deletion columns).
-    if let Some(c) = counts_of(&p.convert)? {
+    // 2. Conversion (baseline counts, no deletion columns), plus the data-mode
+    //    breakdown when the report carries the per-code counts.
+    if p.convert.exists() {
+        let t = Tsv::read(&p.convert)?;
+        let c = Counts::from_platform_tsv(&t);
+        let mut tables = vec![counts_table(c)];
+        tables.extend(data_mode_table(&t, c.obs));
         sections.push(Section {
             level: 1,
             title: "Conversion".into(),
             desc: DESC_CONVERT.into(),
             files: vec![path_str(&p.convert)],
-            tables: vec![counts_table(c)],
+            tables,
         });
     }
 
@@ -801,6 +811,37 @@ fn counts_table(c: Counts) -> Table {
             vec!["Observations".into(), fmt_int(c.obs)],
         ],
     }
+}
+
+/// Observations per data-mode code (R/A/D) for each parameter, summed over the
+/// per-platform `<param>_dm_<code>` columns. A parameter appears only when its
+/// columns are present; `None` when none are (a report of a file converted before
+/// the data-mode columns existed).
+fn data_mode_table(t: &Tsv, total_obs: u64) -> Option<Table> {
+    let rows: Vec<Vec<String>> = [("Temperature", "temp"), ("Salinity", "psal"), ("Pressure", "pres")]
+        .iter()
+        .filter(|(_, m)| t.col(&format!("{m}_dm_r")).is_some())
+        .map(|(label, m)| {
+            let mut r = vec![(*label).to_string()];
+            for code in ["r", "a", "d"] {
+                let n = t.sum_u64(&format!("{m}_dm_{code}"));
+                r.extend([fmt_int(n), fmt_pct(pct(n, total_obs))]);
+            }
+            r
+        })
+        .collect();
+    if rows.is_empty() {
+        return None;
+    }
+    Some(Table {
+        title: Some("Data mode".into()),
+        desc: DESC_DATA_MODE.into(),
+        headers: ["Parameter", "Real-time (R)", "% R", "Adjusted (A)", "% A", "Delayed mode (D)", "% D"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        rows,
+    })
 }
 
 /// Longitude / latitude extremes of the filtered data, next to the pre-filter
