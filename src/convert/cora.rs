@@ -83,6 +83,11 @@ fn collect_cora_chunk(
 
     let filename: Vec<String> = vec![basename.to_string(); vec_size];
 
+    // Data mode: CORA has no per-parameter `<PARAM>_DM` variables, only the
+    // per-profile `DATA_MODE[N_PROF]`, which applies to every parameter of the
+    // profile. Missing variable -> "R"; fill cells -> "".
+    let data_mode: Vec<String> = common::get_dm_coordinate_value_chunk(file, "DATA_MODE", prof_offset, prof_count, n_levels)?;
+
     // TEMP
     let temp_fill = common::get_float_fill_value(file, "TEMP");
     let temp: Vec<f32> = common::get_var_float_value_chunk(file, "TEMP", temp_fill, prof_offset, prof_count, n_levels)?;
@@ -141,6 +146,7 @@ fn collect_cora_chunk(
     let filename = common::retain_by_mask(filename, &keep);
     let temp = common::retain_by_mask(temp, &keep);
     let temp_qc = common::retain_by_mask(temp_qc, &keep);
+    let data_mode = common::retain_by_mask(data_mode, &keep);
     let psal = common::retain_by_mask(psal, &keep);
     let psal_qc = common::retain_by_mask(psal_qc, &keep);
     let converted_pres = common::retain_by_mask(converted_pres, &keep);
@@ -166,10 +172,13 @@ fn collect_cora_chunk(
         Series::new("filename".into(), filename),
         Series::new("temp".into(), temp),
         Series::new("temp_qc".into(), temp_qc),
+        Series::new("temp_dm".into(), data_mode.clone()),
         Series::new("psal".into(), psal),
         Series::new("psal_qc".into(), psal_qc),
+        Series::new("psal_dm".into(), data_mode.clone()),
         Series::new("pres".into(), converted_pres),
         Series::new("pres_qc".into(), converted_pres_qc),
+        Series::new("pres_dm".into(), data_mode),
         Series::new("pres_conv".into(), pres_conv),
         Series::new("deph".into(), converted_deph),
         Series::new("deph_qc".into(), converted_deph_qc),

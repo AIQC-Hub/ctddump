@@ -52,6 +52,7 @@ Two-stage `clap` dispatch:
 - `get_var_float_value()` — float data with fill → NaN.
 - `get_qc_value()` / `get_qc_coordinate_value()` / `get_qc_value_from_char()` — QC flags (i8, tiled coordinate, or ASCII char) → `Vec<String>`.
 - `get_char_value()` / `get_char_value2()` / `get_char_vector3()` — NetCDF `char` arrays (i8) → `Vec<String>` at different dim layouts.
+- `get_dm_value_chunk()` / `get_dm_coordinate_value_chunk()` — data mode (`R`/`A`/`D`) from a 2-D `<PARAM>_DM` char variable (fallback: the parameter's `data_mode` attribute via `dm_from_attribute`, then `DM_DEFAULT = "R"`) or from CORA's 1-D `DATA_MODE`. Fill cells → `""` (`dm_from_char`).
 - `convert_depth_to_pressure()` / `convert_pressure_to_depth()` — bidirectional via `gsw` (TEOS-10).
 
 ## Output DataFrame schema
@@ -72,6 +73,7 @@ version of this table is `docs/src/output-schema.md`):
 | `filename` | `String` | source file stem |
 | `temp`, `psal`, `pres`, `deph` | `f32` | NaN where missing |
 | `temp_qc`, `psal_qc`, `pres_qc`, `deph_qc` | `String` | single-char flag; `""` if missing |
+| `temp_dm`, `psal_dm`, `pres_dm` | `String` | `R`/`A`/`D`; `""` for a fill cell. NRT: `<PARAM>_DM` if present, else the parameter's `data_mode` attribute (if R/A/D), else `R`; DEPH-derived `pres_dm` inherits `DEPH_DM` (`common::merge_converted_dm`). CORA: per-profile `DATA_MODE` tiled into all three, `R` if absent. |
 | `pres_conv`, `deph_conv` | `i8` | `1` = value derived by conversion |
 
 ## `trace` feature

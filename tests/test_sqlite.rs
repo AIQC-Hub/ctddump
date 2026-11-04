@@ -36,10 +36,13 @@ fn write_fixture(path: &Path) {
         Series::new("filename".into(), vec!["fa", "fa", "fa", "fa", "fb", "fb"]),
         Series::new("temp".into(), vec![4.0f32, f32::NAN, 5.0, 5.1, 6.0, 6.1]),
         Series::new("temp_qc".into(), vec!["1", "1", "1", "1", "1", "1"]),
+        Series::new("temp_dm".into(), vec!["D", "D", "R", "R", "A", ""]),
         Series::new("psal".into(), vec![35.0f32, 35.1, 34.0, 34.1, 33.0, 33.1]),
         Series::new("psal_qc".into(), vec!["1", "1", "1", "1", "1", "1"]),
+        Series::new("psal_dm".into(), vec!["D", "D", "R", "R", "A", "A"]),
         Series::new("pres".into(), vec![0.0f32, 10.0, 0.0, 10.0, 0.0, 10.0]),
         Series::new("pres_qc".into(), vec!["1", "1", "1", "1", "1", "1"]),
+        Series::new("pres_dm".into(), vec!["D", "D", "R", "R", "A", "A"]),
         Series::new("pres_conv".into(), vec![0i8, 0, 0, 0, 1, 1]),
         Series::new("deph".into(), vec![0.0f32, 9.9, 0.0, 9.9, 0.0, 9.9]),
         Series::new("deph_qc".into(), vec!["1", "1", "1", "1", "1", "1"]),
@@ -126,6 +129,45 @@ fn test_sqlite_basic_normalisation() {
         .prepare("SELECT longitude FROM observation")
         .err()
         .is_some());
+}
+
+/// The data-mode columns are exported as TEXT observation columns, with an empty
+/// string (fill) mapped to NULL; QC flags are stored as text too.
+#[test]
+fn test_sqlite_data_mode_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let out = dir.path().join("out.sqlite");
+    write_fixture(&src);
+
+    dispatch(&["sqlite", src.to_str().unwrap(), out.to_str().unwrap()]).unwrap();
+
+    let conn = Connection::open(&out).unwrap();
+    assert_eq!(count(&conn, "SELECT COUNT(*) FROM observation WHERE temp_dm = 'D'"), 2);
+    assert_eq!(count(&conn, "SELECT COUNT(*) FROM observation WHERE temp_dm = 'R'"), 2);
+    assert_eq!(count(&conn, "SELECT COUNT(*) FROM observation WHERE temp_dm = 'A'"), 1);
+    assert_eq!(count(&conn, "SELECT COUNT(*) FROM observation WHERE temp_dm IS NULL"), 1);
+    assert_eq!(count(&conn, "SELECT COUNT(*) FROM observation WHERE pres_dm = 'A'"), 2);
+    assert_eq!(count(&conn, "SELECT COUNT(*) FROM observation WHERE psal_dm = 'D'"), 2);
+
+    // Declared and stored as text, not coerced to numbers.
+    for col in ["temp_dm", "psal_dm", "pres_dm", "temp_qc", "psal_qc", "pres_qc", "deph_qc"] {
+        let declared: String = conn
+            .query_row(
+                "SELECT type FROM pragma_table_info('observation') WHERE name = ?1",
+                [col],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(declared, "TEXT", "{col} should be declared TEXT");
+    }
+    assert_eq!(
+        count(&conn, "SELECT COUNT(*) FROM observation WHERE typeof(temp_qc) <> 'text'"),
+        0
+    );
+
+    // Data mode is observation-grain: not on the profile table.
+    assert!(conn.prepare("SELECT temp_dm FROM profile").err().is_some());
 }
 
 #[test]

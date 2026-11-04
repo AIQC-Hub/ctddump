@@ -394,6 +394,98 @@ pub fn get_qc_value_from_char_chunk(
     Ok(result)
 }
 
+/// Data-mode value used when a file carries no data-mode information at all.
+pub const DM_DEFAULT: &str = "R";
+
+/// Map one data-mode character to its output string. The valid codes are
+/// `R` (real-time), `A` (adjusted in real time) and `D` (delayed mode); anything
+/// else (the `' '` fill value, `'\0'`, junk) is missing and maps to `""`.
+pub fn dm_from_char(c: char) -> String {
+    match c {
+        'R' | 'A' | 'D' => c.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Resolve the single data-mode value that applies to a whole variable when its
+/// per-observation `<PARAM>_DM` variable is absent: the variable's `data_mode`
+/// attribute when it is one of `R`/`A`/`D`, else [`DM_DEFAULT`]. A mixed
+/// (`"M"`) or missing attribute, or a missing variable, also yields the default.
+pub fn dm_from_attribute(attr: Option<&str>) -> String {
+    match attr.map(str::trim) {
+        Some(s) if s.len() == 1 => {
+            let dm = dm_from_char(s.chars().next().unwrap());
+            if dm.is_empty() { DM_DEFAULT.to_string() } else { dm }
+        }
+        _ => DM_DEFAULT.to_string(),
+    }
+}
+
+/// Read the `data_mode` string attribute of `var_name`, if both exist.
+fn get_data_mode_attribute(file: &netcdf::File, var_name: &str) -> Option<String> {
+    let var = file.variable(var_name)?;
+    let value = var.attribute_value("data_mode")?.ok()?;
+    get_string_value(value)
+}
+
+/// Read the per-observation data mode of `parent_var` for the TIME slice
+/// `[time_offset, time_offset + time_count)`.
+///
+/// When the 2-D `[TIME, DEPTH]` char variable `dm_var` (e.g. `PRES_DM`) exists,
+/// each cell is mapped through [`dm_from_char`] (fill cells become `""`). When it
+/// is absent, every cell gets the value of `parent_var`'s `data_mode` attribute
+/// (see [`dm_from_attribute`]), which defaults to `"R"`.
+pub fn get_dm_value_chunk(
+    file: &netcdf::File,
+    dm_var: &str,
+    parent_var: &str,
+    time_offset: usize,
+    time_count: usize,
+    obs_len: usize,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let n = time_count * obs_len;
+    if file.variable(dm_var).is_none() {
+        let attr = get_data_mode_attribute(file, parent_var);
+        return Ok(vec![dm_from_attribute(attr.as_deref()); n]);
+    }
+    let chars = get_char_value_chunk(file, dm_var, time_offset, time_count, obs_len)?;
+    Ok(chars
+        .iter()
+        .map(|s| s.chars().next().map_or_else(String::new, dm_from_char))
+        .collect())
+}
+
+/// Read a 1-D per-profile char data-mode variable (CORA's `DATA_MODE[N_PROF]`)
+/// for the profile slice `[prof_offset, prof_offset + prof_count)` and tile each
+/// value `obs_len` times. Fill cells become `""`; a missing variable yields
+/// [`DM_DEFAULT`] everywhere.
+pub fn get_dm_coordinate_value_chunk(
+    file: &netcdf::File,
+    var_name: &str,
+    prof_offset: usize,
+    prof_count: usize,
+    obs_len: usize,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let n = prof_count * obs_len;
+    if file.variable(var_name).is_none() {
+        return Ok(vec![DM_DEFAULT.to_string(); n]);
+    }
+    let raw: Vec<NcChar> =
+        get_coordinate_value_chunk(file, var_name, prof_offset, prof_count, obs_len, NcChar(b' ' as i8))?;
+    Ok(raw.iter().map(|&NcChar(c)| dm_from_char(c as u8 as char)).collect())
+}
+
+/// Where `conv[i] == 1` (the pressure value was derived from depth), take the data
+/// mode from `deph_dm`; elsewhere keep `pres_dm`. Mirrors how `pres_qc` inherits
+/// `deph_qc` in [`convert_depth_to_pressure`].
+pub fn merge_converted_dm(pres_dm: Vec<String>, deph_dm: &[String], conv: &[i8]) -> Vec<String> {
+    pres_dm
+        .into_iter()
+        .zip(deph_dm.iter().zip(conv.iter()))
+        .map(|(p, (d, &c))| if c == 1 { d.clone() } else { p })
+        .collect()
+}
+
 pub fn convert_depth_to_pressure<T>(
     pres: Vec<f32>,
     pres_qc: Vec<String>,
@@ -580,6 +672,49 @@ pub fn expand_deploy_coords_chunk(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── data mode ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_dm_from_char_valid_codes() {
+        assert_eq!(dm_from_char('R'), "R");
+        assert_eq!(dm_from_char('A'), "A");
+        assert_eq!(dm_from_char('D'), "D");
+    }
+
+    #[test]
+    fn test_dm_from_char_fill_and_junk_are_empty() {
+        assert_eq!(dm_from_char(' '), "");
+        assert_eq!(dm_from_char('\0'), "");
+        assert_eq!(dm_from_char('M'), "");
+        assert_eq!(dm_from_char('r'), "");
+        assert_eq!(dm_from_char('1'), "");
+    }
+
+    #[test]
+    fn test_dm_from_attribute_single_code_is_used() {
+        assert_eq!(dm_from_attribute(Some("R")), "R");
+        assert_eq!(dm_from_attribute(Some("A")), "A");
+        assert_eq!(dm_from_attribute(Some("D")), "D");
+        assert_eq!(dm_from_attribute(Some(" D ")), "D");
+    }
+
+    #[test]
+    fn test_dm_from_attribute_falls_back_to_default() {
+        assert_eq!(dm_from_attribute(None), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(Some("M")), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(Some("")), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(Some(" ")), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(Some("RD")), DM_DEFAULT);
+    }
+
+    #[test]
+    fn test_merge_converted_dm_takes_deph_dm_where_converted() {
+        let pres_dm = vec!["R".to_string(), "R".to_string(), "".to_string()];
+        let deph_dm = vec!["D".to_string(), "D".to_string(), "A".to_string()];
+        let conv = vec![0_i8, 1, 1];
+        assert_eq!(merge_converted_dm(pres_dm, &deph_dm, &conv), vec!["R", "D", "A"]);
+    }
 
     // ── i8_to_qc_string ──────────────────────────────────────────────────────
 

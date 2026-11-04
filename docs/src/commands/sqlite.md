@@ -48,9 +48,9 @@ CREATE TABLE observation (
   observation_id INTEGER PRIMARY KEY,
   profile_id     INTEGER NOT NULL REFERENCES profile(profile_id),
   observation_no INTEGER NOT NULL,
-  temp REAL, temp_qc TEXT,
-  psal REAL, psal_qc TEXT,
-  pres REAL, pres_qc TEXT, pres_conv INTEGER,
+  temp REAL, temp_qc TEXT, temp_dm TEXT,
+  psal REAL, psal_qc TEXT, psal_dm TEXT,
+  pres REAL, pres_qc TEXT, pres_dm TEXT, pres_conv INTEGER,
   deph REAL, deph_qc TEXT, deph_conv INTEGER
 );
 ```
@@ -67,7 +67,7 @@ schema without the depth columns.
 ## NULL handling
 
 The Parquet uses sentinels for missing values: `NaN` for floats and an empty
-string for absent QC flags. Both are stored as SQL `NULL`, so queries like
+string for absent QC flags and data modes. Both are stored as SQL `NULL`, so queries like
 `WHERE temp IS NOT NULL` behave the way SQL expects.
 
 ## Adding your own columns

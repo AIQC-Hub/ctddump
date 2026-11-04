@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- Data-mode columns `temp_dm`, `psal_dm`, and `pres_dm` in the converted Parquet, each placed after its QC column. Values are `R` (real-time), `A` (adjusted in real time), or `D` (delayed mode). NRT files that ship `TEMP_DM` / `PSAL_DM` / `PRES_DM` (some Arctic files) have the per-observation codes copied through, with a fill cell stored as `""`; files without them use the parameter's `data_mode` attribute when it is `R`, `A`, or `D`, and `R` otherwise. Pressure derived from depth takes its data mode from DEPH, as its QC flag already does. CORA files have no per-parameter data mode, so all three columns hold the profile's `DATA_MODE`. The `sqlite` export carries the new columns as `TEXT` on the `observation` table, with `""` stored as `NULL`. The Output schema page has a new Data mode section
+
+### Changed
+- The output schema has three new columns, so Parquet files converted with an earlier version cannot be passed to `concat` together with newly converted ones. Re-convert older files before merging them
+
+### Fixed
+- The `sqlite` export declared the observation QC columns (`temp_qc`, `psal_qc`, `pres_qc`, `deph_qc`) as `REAL`, so SQLite stored a flag such as `1` as the number `1.0`. They are now `TEXT`, as the documentation already stated
+
 ## [0.31.0] - 2026-08-18
 
 ### Added
