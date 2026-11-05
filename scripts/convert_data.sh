@@ -9,9 +9,9 @@
 #   scripts/convert_data.sh [options] [command] [region ...]
 #
 # Commands:
-#   process     Convert + merge Parquet, export + merge headers.  (default)
+#   process     Convert + merge Parquet, export + merge headers.
 #   report      Summarise the merged Parquet/YAML outputs as TSV.
-#   all         process, then report.
+#   all         process, then report.  (default)
 #   help        Show this help.
 #
 # Regions:  arctic  baltic  mediterranean   (default: all three; "all" also works)
@@ -414,7 +414,7 @@ run_all() {  # <cmd> <region...>
 }
 
 main() {
-  local cmd="${1:-process}"
+  local cmd="${1:-all}"
   [[ $# -gt 0 ]] && shift
 
   case "$cmd" in

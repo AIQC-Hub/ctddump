@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-05
+
+### Changed
+- `scripts/convert_data.sh` now defaults to `all` (convert, then report) instead of `process`, matching `clean_data.sh` and `dedup_data.sh`. A plain run previously rebuilt the Parquet but left the reports under `report/convert/` and `report/header/` from an earlier run, so `summary_data.sh` could build pages from stale figures. `process` alone still converts without reporting
+
 ## [0.32.1] - 2026-11-04
 
 ### Fixed
@@ -329,7 +334,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.1...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.33.0...HEAD
+[0.33.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.1...v0.33.0
 [0.32.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.30.1...v0.31.0
