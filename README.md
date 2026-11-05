@@ -10,12 +10,13 @@ A Rust CLI tool for converting oceanographic CTD (Conductivity, Temperature, Dep
 - 📖 [Documentation](https://aiqc-hub.github.io/ctddump/)
 - 🌊 [Live example report site](https://aiqc-hub.github.io/ctddump-report-example/): sample output of the `summary_site.sh` pipeline phase
 
-Two data sources are supported:
+Two Copernicus data sources are supported, plus your own files:
 
 | Source | Description |
 |--------|-------------|
 | **NRT** | Near Real Time: Arctic Sea (`nrt_ar`), Baltic Sea (`nrt_bo`), Mediterranean Sea (`nrt_mo`), Global (`nrt_gl`) |
 | **CORA** | Copernicus Ocean Reanalysis: current format (`cora`), legacy format (`cora_legacy`) |
+| **Your own** | Any NetCDF laid out like the Copernicus files, described by a mapping file (`generic`); see [Your own NetCDF files](https://aiqc-hub.github.io/ctddump/your-own-netcdf.html) |
 
 ## Installation
 
@@ -84,6 +85,9 @@ ctddump convert nrt_gl   input.nc output.parquet
 ctddump convert cora     input.nc output.parquet
 ctddump convert cora_legacy input.nc output.parquet
 
+# Your own NetCDF, with a mapping file naming its dimensions and variables
+ctddump convert generic --config my_map.toml input.nc output.parquet
+
 # Use a saved config preset
 ctddump convert nrt_ar --config my_preset.toml input.nc output.parquet
 
@@ -122,8 +126,8 @@ Default filename patterns:
 | `nrt_bo` | `BO_PR_CT_*.nc` |
 | `nrt_mo` | `MO_PR_CT_*.nc` |
 | `nrt_gl` | `GL_PR_CT_*.nc` |
-| `cora`, `cora_legacy` | `*.nc` |
-| `batch header nrt`, `batch header cora` | `*.nc` |
+| `cora`, `cora_legacy`, `generic` | `*.nc` |
+| `batch header nrt`, `batch header cora`, `batch header generic` | `*.nc` |
 
 ### `header`: single NetCDF → YAML metadata
 
@@ -132,8 +136,9 @@ ctddump header <subcommand> <src_file> <target_file>
 ```
 
 ```bash
-ctddump header nrt  input.nc output.yaml
-ctddump header cora input.nc output.yaml
+ctddump header nrt     input.nc output.yaml
+ctddump header cora    input.nc output.yaml
+ctddump header generic input.nc output.yaml   # any NetCDF, all global attributes
 ```
 
 ### `concat`: merge files from a directory tree into a single file

@@ -21,6 +21,7 @@ pub mod sqlite;
 use cli::{Cli, Commands, ConvertFormat, BatchSubcommand, BatchConvertFormat, BatchHeaderFormat, HeaderFormat, ConcatSubcommand, ReportSubcommand, FilterMode};
 use concat::ConcatConfig;
 use convert::cora_config::CoraConfig;
+use convert::generic_config::GenericConfig;
 use convert::nrt_config::NrtConfig;
 
 // A struct to hold the configuration after parsing the arguments
@@ -147,6 +148,12 @@ fn dispatch_convert(format: ConvertFormat) -> Result<Config, Box<dyn Error>> {
             cora_args.apply_to(&mut cora_config);
             convert::cora::run(&path_args(src, dest), cora_config, "cora_legacy")
         }
+        ConvertFormat::Generic { config, generic_args, src, dest } => {
+            let mut generic_config = load_or_default(config, GenericConfig::default)?;
+            generic_args.apply_to(&mut generic_config);
+            let [src, dest] = <[String; 2]>::try_from(path_args(src, dest)).unwrap();
+            convert::generic::run(&src, &dest, &generic_config)
+        }
     }
 }
 
@@ -213,6 +220,15 @@ fn dispatch_batch_convert(format: BatchConvertFormat) -> Result<Config, Box<dyn 
             })?;
             Ok(Config { module: "batch".to_string(), target: "cora_legacy".to_string(), args: vec![] })
         }
+        BatchConvertFormat::Generic { config, generic_args, src_dir, output, threads } => {
+            let mut generic_config = load_or_default(config, GenericConfig::default)?;
+            generic_args.apply_to(&mut generic_config);
+            let pattern = generic_config.pattern.as_deref().unwrap_or("*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "parquet", pattern, |src, dest| {
+                convert::generic::convert_file(src, dest, &generic_config)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "generic".to_string(), args: vec![] })
+        }
     }
 }
 
@@ -232,6 +248,13 @@ fn dispatch_batch_header(format: BatchHeaderFormat) -> Result<Config, Box<dyn Er
             })?;
             Ok(Config { module: "batch".to_string(), target: "header_cora".to_string(), args: vec![] })
         }
+        BatchHeaderFormat::Generic { src_dir, output, threads, pattern } => {
+            let effective_pattern = pattern.as_deref().unwrap_or("*.nc");
+            batch::run_batch(&src_dir, output.as_deref(), threads, "yaml", effective_pattern, |src, dest| {
+                header::generic::extract_file(src, dest)
+            })?;
+            Ok(Config { module: "batch".to_string(), target: "header_generic".to_string(), args: vec![] })
+        }
     }
 }
 
@@ -239,6 +262,7 @@ fn dispatch_header(format: HeaderFormat) -> Result<Config, Box<dyn Error>> {
     match format {
         HeaderFormat::Nrt { src, dest } => header::nrt::run(&path_args(src, dest)),
         HeaderFormat::Cora { src, dest } => header::cora::run(&path_args(src, dest)),
+        HeaderFormat::Generic { src, dest } => header::generic::run(&path_args(src, dest)),
     }
 }
 

@@ -8,23 +8,43 @@ use crate::Config;
 use super::ConvertConfig;
 use super::common;
 use super::nrt_config::NrtConfig;
+use super::source::SourceSpec;
 
 fn netcdf_to_parquet(
     convert_config: &ConvertConfig,
     nrt_config: &NrtConfig,
 ) -> Result<(), Box<dyn Error>> {
     let file = netcdf::open(&convert_config.src_file)?;
-    let time_len = file.dimension("TIME").unwrap().len();
-    let obs_len = file.dimension("DEPTH").unwrap().len();
     let basename = common::get_base_file_name(&convert_config.src_file)?;
+    write_parquet(&file, &basename, &convert_config.target_file, nrt_config, &SourceSpec::nrt())
+}
+
+/// Length of dimension `name`, or an error naming it.
+pub(crate) fn dimension_len(file: &netcdf::File, name: &str) -> Result<usize, Box<dyn Error>> {
+    file.dimension(name)
+        .map(|d| d.len())
+        .ok_or_else(|| format!("dimension \"{name}\" not found").into())
+}
+
+/// Convert an open time-depth (`[profile, level]`) NetCDF file to Parquet, reading
+/// every name from `spec`. Shared by the NRT formats and the `generic` format.
+pub(crate) fn write_parquet(
+    file: &netcdf::File,
+    basename: &str,
+    target_file: &str,
+    nrt_config: &NrtConfig,
+    spec: &SourceSpec,
+) -> Result<(), Box<dyn Error>> {
+    let time_len = dimension_len(file, &spec.profile_dim)?;
+    let obs_len = dimension_len(file, &spec.level_dim)?;
 
     // Use DEPH whenever the file actually contains it, even if the region default
     // (`has_deph_source`) is `false`. Some AR/MO files ship DEPH instead of PRES;
     // ignoring it would leave both `pres` and `deph` empty. When DEPH is absent the
     // sourced/derived branches are equivalent, so this never changes PRES-only output.
-    let has_deph = nrt_config.has_deph_source || file.variable("DEPH").is_some();
+    let has_deph = nrt_config.has_deph_source || file.variable(&spec.deph.name).is_some();
 
-    let out_file = std::fs::File::create(&convert_config.target_file)?;
+    let out_file = std::fs::File::create(target_file)?;
 
     // Stream the file in TIME chunks, writing each chunk as a Parquet row group so
     // the full dense TIME × DEPTH grid is never materialized at once. An empty
@@ -33,7 +53,7 @@ fn netcdf_to_parquet(
     // Polars' leaky `filter`), and `set_parallel(false)` avoids the parquet writer's
     // parallel-encoding path, which leaks memory per call in this Polars version —
     // both leaks accumulate without bound across a large batch of files.
-    let empty = collect_nrt_chunk(&file, nrt_config, has_deph, &basename, 0, 0, obs_len)?;
+    let empty = collect_nrt_chunk(file, nrt_config, spec, has_deph, basename, 0, 0, obs_len)?;
     let schema = empty.schema();
     let mut writer = ParquetWriter::new(out_file).set_parallel(false).batched(&schema)?;
 
@@ -43,7 +63,7 @@ fn netcdf_to_parquet(
         writer.write_batch(&empty)?;
     }
     for (t0, tc) in chunks {
-        let df = collect_nrt_chunk(&file, nrt_config, has_deph, &basename, t0, tc, obs_len)?;
+        let df = collect_nrt_chunk(file, nrt_config, spec, has_deph, basename, t0, tc, obs_len)?;
         writer.write_batch(&df)?;
     }
     writer.finish()?;
@@ -90,9 +110,11 @@ fn fill_nan_from(primary: &[f32], fallback: &[f32]) -> Vec<f32> {
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_nrt_chunk(
     file: &netcdf::File,
     config: &NrtConfig,
+    spec: &SourceSpec,
     has_deph: bool,
     basename: &str,
     time_offset: usize,
@@ -102,17 +124,17 @@ fn collect_nrt_chunk(
     let vec_size = time_count * obs_len;
 
     // Keys
-    let platform_code: Vec<String> = common::create_platform_code(file, vec_size)?;
+    let platform_code: Vec<String> = common::platform_codes_chunk(file, spec, time_offset, time_count, obs_len)?;
     let profile_no: Vec<u32> = common::create_profile_no_sequence_chunk(time_offset, time_count, obs_len)?;
     let obs_no: Vec<u32> = common::create_observation_sequence(time_count, obs_len)?;
 
     // Time
-    let time: Vec<f64> = common::get_coordinate_value_chunk(file, "TIME", time_offset, time_count, obs_len, f64::NAN)?;
+    let time: Vec<f64> = common::get_time_chunk(file, spec, time_offset, time_count, obs_len)?;
     let timestamp: Vec<i64> = common::convert_time_value(&time)?;
 
     // Standard coordinates (always read)
-    let longitude_raw: Vec<f32> = common::get_coordinate_value_chunk(file, "LONGITUDE", time_offset, time_count, obs_len, f32::NAN)?;
-    let latitude_raw: Vec<f32> = common::get_coordinate_value_chunk(file, "LATITUDE", time_offset, time_count, obs_len, f32::NAN)?;
+    let longitude_raw: Vec<f32> = common::get_coord_chunk(file, &spec.longitude, spec.defaults.longitude, spec, time_offset, time_count, obs_len)?;
+    let latitude_raw: Vec<f32> = common::get_coord_chunk(file, &spec.latitude, spec.defaults.latitude, spec, time_offset, time_count, obs_len)?;
 
     // Profile-level coordinates (PRECISE_* preferred over DEPLOY_*).
     // Cross-fill is only applied when profile coords are enabled; otherwise
@@ -128,28 +150,27 @@ fn collect_nrt_chunk(
         (longitude_raw, latitude_raw, vec![f32::NAN; vec_size], vec![f32::NAN; vec_size])
     };
 
-    let time_qc: Vec<String> = common::get_qc_coordinate_value_chunk(file, "TIME_QC", time_offset, time_count, obs_len)?;
-    let position_qc: Vec<String> = common::get_qc_coordinate_value_chunk(file, "POSITION_QC", time_offset, time_count, obs_len)?;
+    let qc_type = spec.qc_type.as_ref();
+    let time_qc: Vec<String> = common::read_qc_coord_chunk(file, spec.time_qc.as_deref(), qc_type, time_offset, time_count, obs_len)?;
+    let position_qc: Vec<String> = common::read_qc_coord_chunk(file, spec.position_qc.as_deref(), qc_type, time_offset, time_count, obs_len)?;
+    let dm_fallback = spec.dm_fallback();
 
     let filename: Vec<String> = vec![basename.to_string(); vec_size];
 
     // TEMP
-    let temp_fill = common::get_float_fill_value(file, "TEMP");
-    let temp: Vec<f32> = common::get_var_float_value_chunk(file, "TEMP", temp_fill, time_offset, time_count, obs_len)?;
-    let temp_qc: Vec<String> = common::get_qc_value_chunk(file, "TEMP_QC", time_offset, time_count, obs_len)?;
-    let temp_dm: Vec<String> = common::get_dm_value_chunk(file, "TEMP_DM", "TEMP", time_offset, time_count, obs_len)?;
+    let (temp, _) = common::get_param_chunk(file, &spec.temp.name, spec, time_offset, time_count, obs_len)?;
+    let temp_qc: Vec<String> = common::read_qc_chunk(file, &spec.temp.qc, qc_type, time_offset, time_count, obs_len)?;
+    let temp_dm: Vec<String> = common::get_dm_value_chunk(file, &spec.temp.dm, &spec.temp.name, dm_fallback, time_offset, time_count, obs_len)?;
 
     // PSAL
-    let psal_fill = common::get_float_fill_value(file, "PSAL");
-    let psal: Vec<f32> = common::get_var_float_value_chunk(file, "PSAL", psal_fill, time_offset, time_count, obs_len)?;
-    let psal_qc: Vec<String> = common::get_qc_value_chunk(file, "PSAL_QC", time_offset, time_count, obs_len)?;
-    let psal_dm: Vec<String> = common::get_dm_value_chunk(file, "PSAL_DM", "PSAL", time_offset, time_count, obs_len)?;
+    let (psal, _) = common::get_param_chunk(file, &spec.psal.name, spec, time_offset, time_count, obs_len)?;
+    let psal_qc: Vec<String> = common::read_qc_chunk(file, &spec.psal.qc, qc_type, time_offset, time_count, obs_len)?;
+    let psal_dm: Vec<String> = common::get_dm_value_chunk(file, &spec.psal.dm, &spec.psal.name, dm_fallback, time_offset, time_count, obs_len)?;
 
     // PRES
-    let pres_fill = common::get_float_fill_value(file, "PRES");
-    let pres: Vec<f32> = common::get_var_float_value_chunk(file, "PRES", pres_fill, time_offset, time_count, obs_len)?;
-    let pres_qc: Vec<String> = common::get_qc_value_chunk(file, "PRES_QC", time_offset, time_count, obs_len)?;
-    let pres_dm: Vec<String> = common::get_dm_value_chunk(file, "PRES_DM", "PRES", time_offset, time_count, obs_len)?;
+    let (pres, pres_fill) = common::get_param_chunk(file, &spec.pres.name, spec, time_offset, time_count, obs_len)?;
+    let pres_qc: Vec<String> = common::read_qc_chunk(file, &spec.pres.qc, qc_type, time_offset, time_count, obs_len)?;
+    let pres_dm: Vec<String> = common::get_dm_value_chunk(file, &spec.pres.dm, &spec.pres.name, dm_fallback, time_offset, time_count, obs_len)?;
 
     // PRES / DEPH conversion.
     // When profile coords are enabled, use profile_latitude (already cross-filled
@@ -163,14 +184,13 @@ fn collect_nrt_chunk(
 
     let (converted_pres, converted_pres_qc, converted_pres_dm, pres_conv, converted_deph, converted_deph_qc, deph_conv) =
         if has_deph {
-            let deph_fill = common::get_float_fill_value(file, "DEPH");
-            let deph: Vec<f32> = common::get_var_float_value_chunk(file, "DEPH", deph_fill, time_offset, time_count, obs_len)?;
-            let deph_qc: Vec<String> = common::get_qc_value_chunk(file, "DEPH_QC", time_offset, time_count, obs_len)?;
+            let (deph, deph_fill) = common::get_param_chunk(file, &spec.deph.name, spec, time_offset, time_count, obs_len)?;
+            let deph_qc: Vec<String> = common::read_qc_chunk(file, &spec.deph.qc, qc_type, time_offset, time_count, obs_len)?;
             let (cp, cpq, pc) = common::convert_depth_to_pressure(pres.clone(), pres_qc.clone(), deph.clone(), deph_qc.clone(), pres_fill, conversion_latitude.clone());
             let (cd, cdq, dc) = common::convert_pressure_to_depth(deph.clone(), deph_qc.clone(), pres.clone(), pres_qc.clone(), deph_fill, conversion_latitude.clone());
             // Pressure derived from depth inherits the depth data mode, as pres_qc
             // inherits deph_qc.
-            let deph_dm: Vec<String> = common::get_dm_value_chunk(file, "DEPH_DM", "DEPH", time_offset, time_count, obs_len)?;
+            let deph_dm: Vec<String> = common::get_dm_value_chunk(file, &spec.deph.dm, &spec.deph.name, dm_fallback, time_offset, time_count, obs_len)?;
             let cpdm = common::merge_converted_dm(pres_dm, &deph_dm, &pc);
             (cp, cpq, cpdm, pc, cd, cdq, dc)
         } else {

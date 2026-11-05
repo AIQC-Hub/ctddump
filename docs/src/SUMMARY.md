@@ -25,6 +25,10 @@
 - [Output schema](./output-schema.md)
 - [Technical notes](./technical-notes.md)
 
+# Your own data
+
+- [Your own NetCDF files](./your-own-netcdf.md)
+
 # Pipeline scripts
 
 - [Helper scripts](./scripts.md)
