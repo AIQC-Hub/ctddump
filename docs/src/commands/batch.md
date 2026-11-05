@@ -29,6 +29,9 @@ ctddump batch convert nrt_ar --pattern "AR_PR_CT_ITP-*.nc" --output ./output ./d
 
 # Extract YAML metadata for all NRT files
 ctddump batch header nrt --output ./output ./data/arctic
+
+# Convert your own files with a mapping file
+ctddump batch convert generic --config my_map.toml --output ./output ./data/mine
 ```
 
 ## Default filename patterns
@@ -42,8 +45,8 @@ and `[…]`. When omitted, each subcommand uses a sensible default:
 | `nrt_bo` | `BO_PR_CT_*.nc` |
 | `nrt_mo` | `MO_PR_CT_*.nc` |
 | `nrt_gl` | `GL_PR_CT_*.nc` |
-| `cora`, `cora_legacy` | `*.nc` |
-| `batch header nrt`, `batch header cora` | `*.nc` |
+| `cora`, `cora_legacy`, `generic` | `*.nc` |
+| `batch header nrt`, `batch header cora`, `batch header generic` | `*.nc` |
 
 > **Threads.** `--threads N` caps the worker count; omit it to use all logical
 > cores. Memory scales with the thread count, so lower it if you are processing

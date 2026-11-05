@@ -18,6 +18,7 @@ Two families of source files are supported:
 |--------|-------------|
 | **NRT** | Near Real Time: Arctic Sea (`nrt_ar`), Baltic Sea (`nrt_bo`), Mediterranean Sea (`nrt_mo`), Global (`nrt_gl`) |
 | **CORA** | Copernicus Ocean Reanalysis: current format (`cora`), legacy format (`cora_legacy`) |
+| **Your own** | Any NetCDF laid out like the Copernicus files, described by a mapping file (`generic`); see [Your own NetCDF files](./your-own-netcdf.md) |
 
 ## What you can do
 

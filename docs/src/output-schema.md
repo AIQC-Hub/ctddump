@@ -10,8 +10,8 @@ from different sources can be merged directly.
 | `profile_time` | `f64` | days since 1950-01-01 |
 | `profile_timestamp` | `Datetime(ms)` | Unix milliseconds |
 | `observation_no` | `u32` | |
-| `longitude` / `latitude` | `f32` (NRT) / `f64` (CORA) | |
-| `profile_longitude` / `profile_latitude` | `f32` (NRT) / `f64` (CORA) | from `PRECISE_*` or expanded `DEPLOY_*`; NaN when unavailable |
+| `longitude` / `latitude` | `f32` (NRT) / `f64` (CORA) | `generic`: as NRT for `time-depth`, as CORA for `profile-level` |
+| `profile_longitude` / `profile_latitude` | `f32` (NRT) / `f64` (CORA) | from `PRECISE_*` or expanded `DEPLOY_*`; NaN when unavailable (always for `generic`) |
 | `time_qc` / `position_qc` | `String` | `""` if absent |
 | `filename` | `String` | source file stem |
 | `temp`, `psal`, `pres`, `deph` | `f32` | NaN where missing |
@@ -46,3 +46,6 @@ Where the value comes from depends on the source:
 - **CORA**: there are no per-parameter data-mode variables, so all three columns
   hold the profile's `DATA_MODE`, repeated on each of its observations (`R` if
   the file has no `DATA_MODE`).
+- **`generic`**: as NRT for the `time-depth` layout and as CORA for
+  `profile-level`, except that `[defaults] data_mode` replaces `R` as the
+  fallback (see [Your own NetCDF files](./your-own-netcdf.md#how-values-are-read)).

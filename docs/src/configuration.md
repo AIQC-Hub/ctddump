@@ -33,6 +33,19 @@ config for that field only.
 | `--deph-source` / `--no-deph-source` | `has_deph_source` | `true` | `false` |
 | `--pattern <GLOB>` | `pattern` | `*.nc` | `*.nc` |
 
+## Generic flags
+
+The `generic` format reads a mapping file that names your file's dimensions and
+variables; see [Your own NetCDF files](./your-own-netcdf.md#the-mapping-file)
+for its keys.
+
+| Flag | Field | Default |
+|------|-------|---------|
+| `--layout <time-depth\|profile-level>` | `layout` | `time-depth` |
+| `--time-units <UNITS>` | `time_units` | the time variable's `units` attribute |
+| `--platform-code <CODE>` | `[defaults] platform_code` | none |
+| `--pattern <GLOB>` | `pattern` | `*.nc` |
+
 ## TOML config format
 
 ```toml

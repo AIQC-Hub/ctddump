@@ -16,6 +16,7 @@ The subcommand selects the source format and its defaults:
 | `nrt_gl` | NRT: Global |
 | `cora` | CORA: current format |
 | `cora_legacy` | CORA: legacy format |
+| `generic` | Your own NetCDF, described by a mapping file ([details](../your-own-netcdf.md)) |
 
 ## Examples
 
@@ -24,6 +25,7 @@ ctddump convert nrt_ar      input.nc output.parquet
 ctddump convert nrt_bo      input.nc output.parquet
 ctddump convert cora        input.nc output.parquet
 ctddump convert cora_legacy input.nc output.parquet
+ctddump convert generic --config my_map.toml input.nc output.parquet
 ```
 
 Use a saved TOML preset, or override individual fields with flags:

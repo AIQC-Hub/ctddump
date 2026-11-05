@@ -6,7 +6,8 @@ use chrono::{Duration, TimeZone, Utc};
 use netcdf;
 use netcdf::{NcTypeDescriptor, types::NcVariableType};
 use gsw::conversions::{p_from_z, z_from_p};
-use crate::convert::common;
+use super::cora_config::QcType;
+use super::source::{PlatformSource, SourceSpec};
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -34,16 +35,105 @@ pub fn get_base_file_name(file_name: &str) -> Result<String, Box<dyn Error>> {
     Ok(base_name.to_string())
 }
 
-pub fn create_platform_code(
+/// Render a scalar attribute value as text: strings verbatim, numbers in their
+/// shortest form. Arrays and empty strings yield `None`.
+pub fn attribute_to_string(value: netcdf::AttributeValue) -> Option<String> {
+    use netcdf::AttributeValue as A;
+    let s = match value {
+        A::Str(s) => s,
+        A::Uchar(v) => v.to_string(),
+        A::Schar(v) => v.to_string(),
+        A::Ushort(v) => v.to_string(),
+        A::Short(v) => v.to_string(),
+        A::Uint(v) => v.to_string(),
+        A::Int(v) => v.to_string(),
+        A::Ulonglong(v) => v.to_string(),
+        A::Longlong(v) => v.to_string(),
+        A::Float(v) => v.to_string(),
+        A::Double(v) => v.to_string(),
+        _ => return None,
+    };
+    (!s.trim().is_empty()).then_some(s)
+}
+
+/// Platform codes for the profile slice `[prof_offset, prof_offset + prof_count)`,
+/// each repeated `obs_len` times, read from where `spec.platform` says.
+///
+/// - A global attribute applies to every row. If it is missing or empty,
+///   `defaults.platform_code` is used, else this is an error.
+/// - A variable may be `char [profile, strlen]` (whitespace and NULs removed),
+///   `string [profile]`, an integer `[profile]`, or a scalar of any of these
+///   (one code for the whole file). Empty entries take `defaults.platform_code`
+///   when set. A missing variable yields the default, or `" "` without one
+///   (the historical CORA behaviour).
+pub fn platform_codes_chunk(
     file: &netcdf::File,
-    vec_size: usize,
+    spec: &SourceSpec,
+    prof_offset: usize,
+    prof_count: usize,
+    obs_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>> {
-    let attr = file.attribute("platform_code").unwrap();
-    let attr_val= common::get_string_value(attr.value().unwrap()).unwrap();
+    let n = prof_count * obs_len;
+    let default = spec.defaults.platform_code.as_deref();
 
-    let profile_vec: Vec<String> = vec![attr_val.clone(); vec_size];
+    let name = match &spec.platform {
+        PlatformSource::Attribute(name) => {
+            let value = file.attribute(name).and_then(|a| a.value().ok()).and_then(attribute_to_string);
+            return match value.as_deref().or(default) {
+                Some(v) => Ok(vec![v.to_string(); n]),
+                None => Err(format!(
+                    "global attribute \"{name}\" not found; set [defaults] platform_code in the mapping file"
+                ).into()),
+            };
+        }
+        PlatformSource::Variable(name) => name,
+    };
 
-    Ok(profile_vec)
+    let var = match file.variable(name) {
+        Some(v) => v,
+        None => return Ok(vec![default.unwrap_or(" ").to_string(); n]),
+    };
+    let dims: Vec<String> = var.dimensions().iter().map(|d| d.name()).collect();
+    let per_profile = dims.first().is_some_and(|d| *d == spec.profile_dim);
+
+    // One string per profile in the slice (or a single file-wide one).
+    let codes: Vec<String> = match var.vartype() {
+        NcVariableType::Char if per_profile && dims.len() == 2 => {
+            let strlen = var.dimensions()[1].len();
+            get_char_value2_chunk(file, name, prof_offset, prof_count, 1, strlen)?
+        }
+        NcVariableType::Char if !per_profile && dims.len() <= 1 => {
+            let chars: Vec<NcChar> = var.get_values::<NcChar, _>(..)?;
+            let s: String = chars.iter().map(|&NcChar(c)| c as u8 as char).collect();
+            vec![s.trim_matches(|c: char| c == '\0' || c.is_whitespace()).to_string()]
+        }
+        NcVariableType::String if per_profile && dims.len() == 1 => (prof_offset..prof_offset + prof_count)
+            .map(|i| var.get_string([i]).map(|s| s.trim().to_string()))
+            .collect::<Result<_, _>>()?,
+        NcVariableType::String if dims.is_empty() => vec![var.get_string(..)?.trim().to_string()],
+        NcVariableType::Int(_) if per_profile && dims.len() == 1 => var
+            .get_values::<i64, _>([prof_offset..prof_offset + prof_count])?
+            .iter()
+            .map(i64::to_string)
+            .collect(),
+        NcVariableType::Int(_) if dims.is_empty() => vec![var.get_values::<i64, _>(..)?[0].to_string()],
+        _ => {
+            return Err(format!(
+                "platform variable \"{name}\" must be char [{p}, <strlen>], string [{p}] or integer [{p}] (or a scalar); found {:?} {dims:?}",
+                var.vartype(),
+                p = spec.profile_dim,
+            ).into())
+        }
+    };
+
+    let fill = |s: String| match default {
+        Some(d) if s.is_empty() => d.to_string(),
+        _ => s,
+    };
+    if !per_profile {
+        return Ok(vec![fill(codes.into_iter().next().unwrap_or_default()); n]);
+    }
+    Ok(codes.into_iter().map(fill).flat_map(|s| std::iter::repeat_n(s, obs_len)).collect())
 }
 
 pub fn create_profile_no_sequence(time_len: usize, obs_len: usize) -> Result<Vec<u32>, Box<dyn Error>> {
@@ -187,25 +277,148 @@ where
     Ok(slice.iter().flat_map(|&v| std::iter::repeat(v).take(obs_len)).collect())
 }
 
-pub fn get_float_fill_value (
-    file: &netcdf::File,
-    var_name: &str
-) -> f32 {
+/// A scalar numeric attribute as `f64`; strings, arrays and absent attributes
+/// yield `None`.
+fn numeric_attribute(var: &netcdf::Variable, name: &str) -> Option<f64> {
+    use netcdf::AttributeValue as A;
+    Some(match var.attribute_value(name)?.ok()? {
+        A::Uchar(v) => v as f64,
+        A::Schar(v) => v as f64,
+        A::Ushort(v) => v as f64,
+        A::Short(v) => v as f64,
+        A::Uint(v) => v as f64,
+        A::Int(v) => v as f64,
+        A::Ulonglong(v) => v as f64,
+        A::Longlong(v) => v as f64,
+        A::Float(v) => v as f64,
+        A::Double(v) => v,
+        _ => return None,
+    })
+}
 
-    let var = match file.variable(var_name) {
-        Some(v) => v,
-        None => return f32::NAN,
-    };
+/// The NetCDF library's default fill value for a numeric variable type: what
+/// unwritten cells read back as when no `_FillValue` attribute is set.
+fn default_nc_fill(vartype: &NcVariableType) -> Option<f64> {
+    use netcdf::types::{FloatType, IntType};
+    // NC_FILL_* from netcdf.h.
+    Some(match vartype {
+        NcVariableType::Float(FloatType::F32) => 9.969_21e36_f32 as f64,
+        NcVariableType::Float(FloatType::F64) => 9.969_209_968_386_869e36,
+        NcVariableType::Int(IntType::I8) => -127.0,
+        NcVariableType::Int(IntType::U8) => 255.0,
+        NcVariableType::Int(IntType::I16) => -32_767.0,
+        NcVariableType::Int(IntType::U16) => 65_535.0,
+        NcVariableType::Int(IntType::I32) => -2_147_483_647.0,
+        NcVariableType::Int(IntType::U32) => 4_294_967_295.0,
+        _ => return None,
+    })
+}
 
-    let fill_value = match var.attribute_value("_FillValue") {
-        Some(v) => v,
-        _ => return f32::NAN,
-    };
-
-    match fill_value.unwrap() {
-        netcdf::AttributeValue::Float(v) => v,
-        _ => panic!("Unsupported type: {}.", var_name),
+/// The value that marks a missing cell of `var_name`, as `f64`.
+///
+/// Always honours `_FillValue` of any numeric type. With `cf_decode` it falls
+/// back to `missing_value` and then to the NetCDF default fill for the type,
+/// as CF readers do. `None` when the variable is absent or nothing applies.
+pub fn fill_value_f64(file: &netcdf::File, var_name: &str, cf_decode: bool) -> Option<f64> {
+    let var = file.variable(var_name)?;
+    if let Some(v) = numeric_attribute(&var, "_FillValue") {
+        return Some(v);
     }
+    if !cf_decode {
+        return None;
+    }
+    numeric_attribute(&var, "missing_value").or_else(|| default_nc_fill(&var.vartype()))
+}
+
+/// [`fill_value_f64`] as `f32`, with NaN standing for "no fill value".
+pub fn get_float_fill_value(file: &netcdf::File, var_name: &str, cf_decode: bool) -> f32 {
+    fill_value_f64(file, var_name, cf_decode).map_or(f32::NAN, |v| v as f32)
+}
+
+/// `(scale_factor, add_offset)` of a CF-packed variable, or `None` when it has
+/// neither attribute.
+fn packing(file: &netcdf::File, var_name: &str) -> Option<(f64, f64)> {
+    let var = file.variable(var_name)?;
+    let scale = numeric_attribute(&var, "scale_factor");
+    let offset = numeric_attribute(&var, "add_offset");
+    if scale.is_none() && offset.is_none() {
+        return None;
+    }
+    Some((scale.unwrap_or(1.0), offset.unwrap_or(0.0)))
+}
+
+/// Read a 2-D `[profile, level]` measurement variable for the profile slice,
+/// returning the values (fill cells as NaN) and the fill value the conversion
+/// helpers compare against. With `spec.cf_decode`, packed values are unpacked.
+pub fn get_param_chunk(
+    file: &netcdf::File,
+    var_name: &str,
+    spec: &SourceSpec,
+    prof_offset: usize,
+    prof_count: usize,
+    obs_len: usize,
+) -> Result<(Vec<f32>, f32), Box<dyn Error>> {
+    let fill = get_float_fill_value(file, var_name, spec.cf_decode);
+    let mut values: Vec<f32> = get_var_float_value_chunk(file, var_name, fill, prof_offset, prof_count, obs_len)?;
+    if spec.cf_decode {
+        if let Some((scale, offset)) = packing(file, var_name) {
+            for v in values.iter_mut() {
+                *v = (*v as f64 * scale + offset) as f32;
+            }
+        }
+    }
+    Ok((values, fill))
+}
+
+/// Read a per-profile coordinate (time, longitude, latitude) for the profile
+/// slice, tiled `obs_len` times. A missing variable yields `default` (NaN if
+/// `None`). With `spec.cf_decode`, fill cells become NaN and packed values are
+/// unpacked; without it the raw values are returned, as the Copernicus
+/// converters always have.
+pub fn get_coord_chunk<T>(
+    file: &netcdf::File,
+    var_name: &str,
+    default: Option<f64>,
+    spec: &SourceSpec,
+    prof_offset: usize,
+    prof_count: usize,
+    obs_len: usize,
+) -> Result<Vec<T>, Box<dyn Error>>
+where
+    T: Float + FromPrimitive + netcdf::NcTypeDescriptor,
+{
+    let missing = default.and_then(T::from_f64).unwrap_or_else(T::nan);
+    let mut values: Vec<T> = get_coordinate_value_chunk(file, var_name, prof_offset, prof_count, obs_len, missing)?;
+    if spec.cf_decode && file.variable(var_name).is_some() {
+        let fill = fill_value_f64(file, var_name, true).and_then(T::from_f64);
+        let packed = packing(file, var_name);
+        for v in values.iter_mut() {
+            if Some(*v) == fill {
+                *v = T::nan();
+            } else if let Some((scale, offset)) = packed {
+                *v = T::from_f64(v.to_f64().unwrap_or(f64::NAN) * scale + offset).unwrap_or_else(T::nan);
+            }
+        }
+    }
+    Ok(values)
+}
+
+/// Profile time for the slice as days since 1950-01-01 (the `profile_time`
+/// column), rescaled through `spec.time_scale`.
+pub fn get_time_chunk(
+    file: &netcdf::File,
+    spec: &SourceSpec,
+    prof_offset: usize,
+    prof_count: usize,
+    obs_len: usize,
+) -> Result<Vec<f64>, Box<dyn Error>> {
+    let mut time: Vec<f64> = get_coord_chunk(file, &spec.time, None, spec, prof_offset, prof_count, obs_len)?;
+    if !spec.time_scale.is_identity() {
+        for t in time.iter_mut() {
+            *t = spec.time_scale.apply(*t);
+        }
+    }
+    Ok(time)
 }
 
 /// Read the TIME slice `[time_offset, time_offset + time_count)` of a 2-D
@@ -241,9 +454,9 @@ where
     Ok(slice.into_iter().map(|x| if x == fill_value { T::nan() } else { x }).collect())
 }
 
-/// Convert a raw i8 QC byte (0–9) to its single-digit string.
-/// Any value outside 0–9 (including `i8::MIN` used as "missing") maps to `""`.
-fn i8_to_qc_string(v: i8) -> String {
+/// Convert a raw integer QC flag (0–9) to its single-digit string.
+/// Any value outside 0–9 (including the fill values) maps to `""`.
+fn int_to_qc_string(v: i32) -> String {
     if (0..=9).contains(&v) {
         char::from(b'0' + v as u8).to_string()
     } else {
@@ -251,9 +464,71 @@ fn i8_to_qc_string(v: i8) -> String {
     }
 }
 
+/// The QC storage type of `var_name`: `qc_type` when given, else detected from
+/// the variable (char variables are [`QcType::Char`], anything else
+/// [`QcType::Int`]).
+fn resolve_qc_type(file: &netcdf::File, var_name: &str, qc_type: Option<&QcType>) -> QcType {
+    match qc_type {
+        Some(t) => t.clone(),
+        None => match file.variable(var_name).map(|v| v.vartype()) {
+            Some(NcVariableType::Char) => QcType::Char,
+            _ => QcType::Int,
+        },
+    }
+}
+
+/// Read a 2-D `[profile, level]` QC variable for the profile slice as one string
+/// per flag, in the storage type `qc_type` (or the detected one when `None`).
+pub fn read_qc_chunk(
+    file: &netcdf::File,
+    var_name: &str,
+    qc_type: Option<&QcType>,
+    prof_offset: usize,
+    prof_count: usize,
+    obs_len: usize,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    match resolve_qc_type(file, var_name, qc_type) {
+        QcType::Int => get_qc_value_chunk(file, var_name, prof_offset, prof_count, obs_len),
+        QcType::Char => get_qc_value_from_char_chunk(file, var_name, prof_offset, prof_count, obs_len),
+    }
+}
+
+/// Read a per-profile QC variable (`TIME_QC`, `POSITION_QC`) for the profile
+/// slice, tiled `obs_len` times. `None` or a missing variable yields `""`.
+pub fn read_qc_coord_chunk(
+    file: &netcdf::File,
+    var_name: Option<&str>,
+    qc_type: Option<&QcType>,
+    prof_offset: usize,
+    prof_count: usize,
+    obs_len: usize,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let n = prof_count * obs_len;
+    let var_name = match var_name {
+        Some(v) if file.variable(v).is_some() => v,
+        _ => return Ok(vec![String::new(); n]),
+    };
+    match resolve_qc_type(file, var_name, qc_type) {
+        QcType::Int => get_qc_coordinate_value_chunk(file, var_name, prof_offset, prof_count, obs_len),
+        QcType::Char => {
+            let raw: Vec<NcChar> =
+                get_coordinate_value_chunk(file, var_name, prof_offset, prof_count, obs_len, NcChar(b' ' as i8))?;
+            Ok(raw
+                .iter()
+                .map(|&NcChar(c)| match c as u8 as char {
+                    ' ' | '\0' => String::new(),
+                    ch => ch.to_string(),
+                })
+                .collect())
+        }
+    }
+}
+
 /// Read the slice `[time_offset, time_offset + time_count)` of a 2-D `[TIME, DEPTH]`
-/// integer QC variable (`i8`) and return each flag as a single-character string
-/// ("0"–"9"). Missing variable or out-of-range values → `""`.
+/// integer QC variable and return each flag as a single-character string
+/// ("0"–"9"). Read as `i32` so any integer storage type works (an `i8` read
+/// of an `i16` variable would fail on its `-32767` fill). Missing variable or
+/// out-of-range values → `""`.
 pub fn get_qc_value_chunk(
     file: &netcdf::File,
     var_name: &str,
@@ -268,12 +543,12 @@ pub fn get_qc_value_chunk(
         None => return Ok(vec![String::new(); n]),
     };
 
-    let raw: Vec<i8> = var_temp.get_values::<i8, _>([time_offset..time_offset + time_count, 0..obs_len])?;
-    Ok(raw.iter().map(|&v| i8_to_qc_string(v)).collect())
+    let raw: Vec<i32> = var_temp.get_values::<i32, _>([time_offset..time_offset + time_count, 0..obs_len])?;
+    Ok(raw.iter().map(|&v| int_to_qc_string(v)).collect())
 }
 
-/// Read a coordinate-tiled QC variable (e.g., `TIME_QC`, `POSITION_QC`) stored
-/// as `i8` for the TIME slice `[time_offset, time_offset + time_count)` and return
+/// Read a coordinate-tiled integer QC variable (e.g., `TIME_QC`, `POSITION_QC`)
+/// for the TIME slice `[time_offset, time_offset + time_count)` and return
 /// each flag as a single-character string. Tiled from TIME to `time_count × obs_len`
 /// like other coordinates. Missing variable → all `""`.
 pub fn get_qc_coordinate_value_chunk(
@@ -284,8 +559,8 @@ pub fn get_qc_coordinate_value_chunk(
     obs_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>>
 {
-    let raw: Vec<i8> = get_coordinate_value_chunk(file, var_name, time_offset, time_count, obs_len, i8::MIN)?;
-    Ok(raw.iter().map(|&v| i8_to_qc_string(v)).collect())
+    let raw: Vec<i32> = get_coordinate_value_chunk(file, var_name, time_offset, time_count, obs_len, i32::MIN)?;
+    Ok(raw.iter().map(|&v| int_to_qc_string(v)).collect())
 }
 
 /// Read the slice `[time_offset, time_offset + time_count)` of a 2-D `[TIME, DEPTH]`
@@ -409,15 +684,16 @@ pub fn dm_from_char(c: char) -> String {
 
 /// Resolve the single data-mode value that applies to a whole variable when its
 /// per-observation `<PARAM>_DM` variable is absent: the variable's `data_mode`
-/// attribute when it is one of `R`/`A`/`D`, else [`DM_DEFAULT`]. A mixed
-/// (`"M"`) or missing attribute, or a missing variable, also yields the default.
-pub fn dm_from_attribute(attr: Option<&str>) -> String {
+/// attribute when it is one of `R`/`A`/`D`, else `fallback` (normally
+/// [`DM_DEFAULT`]). A mixed (`"M"`) or missing attribute, or a missing
+/// variable, also yields the fallback.
+pub fn dm_from_attribute(attr: Option<&str>, fallback: &str) -> String {
     match attr.map(str::trim) {
         Some(s) if s.len() == 1 => {
             let dm = dm_from_char(s.chars().next().unwrap());
-            if dm.is_empty() { DM_DEFAULT.to_string() } else { dm }
+            if dm.is_empty() { fallback.to_string() } else { dm }
         }
-        _ => DM_DEFAULT.to_string(),
+        _ => fallback.to_string(),
     }
 }
 
@@ -434,11 +710,12 @@ fn get_data_mode_attribute(file: &netcdf::File, var_name: &str) -> Option<String
 /// When the 2-D `[TIME, DEPTH]` char variable `dm_var` (e.g. `PRES_DM`) exists,
 /// each cell is mapped through [`dm_from_char`] (fill cells become `""`). When it
 /// is absent, every cell gets the value of `parent_var`'s `data_mode` attribute
-/// (see [`dm_from_attribute`]), which defaults to `"R"`.
+/// (see [`dm_from_attribute`]), which defaults to `fallback`.
 pub fn get_dm_value_chunk(
     file: &netcdf::File,
     dm_var: &str,
     parent_var: &str,
+    fallback: &str,
     time_offset: usize,
     time_count: usize,
     obs_len: usize,
@@ -446,7 +723,7 @@ pub fn get_dm_value_chunk(
     let n = time_count * obs_len;
     if file.variable(dm_var).is_none() {
         let attr = get_data_mode_attribute(file, parent_var);
-        return Ok(vec![dm_from_attribute(attr.as_deref()); n]);
+        return Ok(vec![dm_from_attribute(attr.as_deref(), fallback); n]);
     }
     let chars = get_char_value_chunk(file, dm_var, time_offset, time_count, obs_len)?;
     Ok(chars
@@ -458,17 +735,18 @@ pub fn get_dm_value_chunk(
 /// Read a 1-D per-profile char data-mode variable (CORA's `DATA_MODE[N_PROF]`)
 /// for the profile slice `[prof_offset, prof_offset + prof_count)` and tile each
 /// value `obs_len` times. Fill cells become `""`; a missing variable yields
-/// [`DM_DEFAULT`] everywhere.
+/// `fallback` (normally [`DM_DEFAULT`]) everywhere.
 pub fn get_dm_coordinate_value_chunk(
     file: &netcdf::File,
     var_name: &str,
+    fallback: &str,
     prof_offset: usize,
     prof_count: usize,
     obs_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>> {
     let n = prof_count * obs_len;
     if file.variable(var_name).is_none() {
-        return Ok(vec![DM_DEFAULT.to_string(); n]);
+        return Ok(vec![fallback.to_string(); n]);
     }
     let raw: Vec<NcChar> =
         get_coordinate_value_chunk(file, var_name, prof_offset, prof_count, obs_len, NcChar(b' ' as i8))?;
@@ -693,19 +971,26 @@ mod tests {
 
     #[test]
     fn test_dm_from_attribute_single_code_is_used() {
-        assert_eq!(dm_from_attribute(Some("R")), "R");
-        assert_eq!(dm_from_attribute(Some("A")), "A");
-        assert_eq!(dm_from_attribute(Some("D")), "D");
-        assert_eq!(dm_from_attribute(Some(" D ")), "D");
+        assert_eq!(dm_from_attribute(Some("R"), DM_DEFAULT), "R");
+        assert_eq!(dm_from_attribute(Some("A"), DM_DEFAULT), "A");
+        assert_eq!(dm_from_attribute(Some("D"), DM_DEFAULT), "D");
+        assert_eq!(dm_from_attribute(Some(" D "), "R"), "D");
     }
 
     #[test]
     fn test_dm_from_attribute_falls_back_to_default() {
-        assert_eq!(dm_from_attribute(None), DM_DEFAULT);
-        assert_eq!(dm_from_attribute(Some("M")), DM_DEFAULT);
-        assert_eq!(dm_from_attribute(Some("")), DM_DEFAULT);
-        assert_eq!(dm_from_attribute(Some(" ")), DM_DEFAULT);
-        assert_eq!(dm_from_attribute(Some("RD")), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(None, DM_DEFAULT), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(Some("M"), DM_DEFAULT), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(Some(""), DM_DEFAULT), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(Some(" "), DM_DEFAULT), DM_DEFAULT);
+        assert_eq!(dm_from_attribute(Some("RD"), DM_DEFAULT), DM_DEFAULT);
+    }
+
+    #[test]
+    fn test_dm_from_attribute_custom_fallback() {
+        assert_eq!(dm_from_attribute(None, "D"), "D");
+        assert_eq!(dm_from_attribute(Some("M"), "D"), "D");
+        assert_eq!(dm_from_attribute(Some("A"), "D"), "A");
     }
 
     #[test]
@@ -716,29 +1001,32 @@ mod tests {
         assert_eq!(merge_converted_dm(pres_dm, &deph_dm, &conv), vec!["R", "D", "A"]);
     }
 
-    // ── i8_to_qc_string ──────────────────────────────────────────────────────
+    // ── int_to_qc_string ─────────────────────────────────────────────────────
 
     #[test]
-    fn test_i8_to_qc_string_all_digits() {
-        for d in 0i8..=9 {
-            assert_eq!(i8_to_qc_string(d), d.to_string(), "digit {d}");
+    fn test_int_to_qc_string_all_digits() {
+        for d in 0i32..=9 {
+            assert_eq!(int_to_qc_string(d), d.to_string(), "digit {d}");
         }
     }
 
     #[test]
-    fn test_i8_to_qc_string_min_is_empty() {
-        assert_eq!(i8_to_qc_string(i8::MIN), "");
+    fn test_int_to_qc_string_fill_values_are_empty() {
+        assert_eq!(int_to_qc_string(i8::MIN as i32), "");
+        assert_eq!(int_to_qc_string(-127), "");
+        assert_eq!(int_to_qc_string(-32_767), "");
+        assert_eq!(int_to_qc_string(i32::MIN), "");
     }
 
     #[test]
-    fn test_i8_to_qc_string_negative_is_empty() {
-        assert_eq!(i8_to_qc_string(-1), "");
+    fn test_int_to_qc_string_negative_is_empty() {
+        assert_eq!(int_to_qc_string(-1), "");
     }
 
     #[test]
-    fn test_i8_to_qc_string_above_9_is_empty() {
-        assert_eq!(i8_to_qc_string(10), "");
-        assert_eq!(i8_to_qc_string(100), "");
+    fn test_int_to_qc_string_above_9_is_empty() {
+        assert_eq!(int_to_qc_string(10), "");
+        assert_eq!(int_to_qc_string(100), "");
     }
 
     // ── convert_time_value ───────────────────────────────────────────────────

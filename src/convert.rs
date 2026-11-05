@@ -5,6 +5,10 @@ pub mod nrt_config;
 pub mod nrt;
 pub mod cora_config;
 pub mod cora;
+pub mod generic_config;
+pub mod generic;
+pub mod source;
+pub mod time_units;
 
 #[derive(Debug)]
 pub struct ConvertConfig {

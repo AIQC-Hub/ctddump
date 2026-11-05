@@ -3,6 +3,7 @@ use std::error::Error;
 pub mod common;
 pub mod nrt;
 pub mod cora;
+pub mod generic;
 
 #[derive(Debug)]
 pub struct HeaderConfig {

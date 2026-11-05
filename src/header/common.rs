@@ -51,3 +51,14 @@ pub fn collect_variables_and_metadata(file: &netcdf::File) -> HashMap<String, Va
     }
     variables
 }
+
+/// Collect every global attribute, rendered as text (numbers in their shortest
+/// form). Array-valued attributes are kept with an empty value.
+pub fn collect_all_global_attributes(file: &netcdf::File) -> HashMap<String, String> {
+    file.attributes()
+        .map(|attr| {
+            let value = attr.value().ok().and_then(common::attribute_to_string).unwrap_or_default();
+            (attr.name().to_string(), value)
+        })
+        .collect()
+}

@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use crate::convert::cora_config::{CoraConfig, QcType};
+use crate::convert::generic_config::{GenericConfig, Layout};
 use crate::convert::nrt_config::NrtConfig;
 use crate::dupkey::RoundMode;
 
@@ -409,6 +410,38 @@ impl CoraArgs {
     }
 }
 
+// ── generic config overrides ──────────────────────────────────────────────────
+
+/// Per-field overrides for the `generic` mapping file.
+/// Applied on top of `--config` (or the built-in default) in priority order:
+/// built-in default < `--config` file < individual flags.
+#[derive(clap::Args, Debug, Clone)]
+pub struct GenericArgs {
+    /// Arrangement of profiles and levels in the source
+    #[arg(long = "layout")]
+    pub layout: Option<Layout>,
+    /// Time units, overriding the time variable's `units` attribute
+    /// (e.g. "seconds since 1970-01-01")
+    #[arg(long = "time-units", value_name = "UNITS")]
+    pub time_units: Option<String>,
+    /// Platform code used when the source has none
+    #[arg(long = "platform-code", value_name = "CODE")]
+    pub platform_code: Option<String>,
+    /// Glob pattern matched against filenames for batch file selection [default: "*.nc"]
+    #[arg(long = "pattern", value_name = "GLOB")]
+    pub pattern: Option<String>,
+}
+
+impl GenericArgs {
+    /// Overwrite the fields of `config` for each flag that was explicitly set.
+    pub fn apply_to(&self, config: &mut GenericConfig) {
+        if let Some(l) = self.layout { config.layout = l; }
+        if let Some(ref u) = self.time_units { config.time_units = Some(u.clone()); }
+        if let Some(ref c) = self.platform_code { config.defaults.platform_code = Some(c.clone()); }
+        if let Some(ref p) = self.pattern { config.pattern = Some(p.clone()); }
+    }
+}
+
 // ── convert ──────────────────────────────────────────────────────────────────
 
 #[derive(Subcommand, Debug)]
@@ -458,6 +491,15 @@ pub enum ConvertFormat {
     CoraLegacy {
         #[arg(short, long)] config: Option<PathBuf>,
         #[command(flatten)] cora_args: CoraArgs,
+        src: PathBuf,
+        dest: PathBuf,
+    },
+    /// Your own NetCDF, described by a mapping file (.nc -> .parquet)
+    #[command(name = "generic")]
+    Generic {
+        /// Mapping file (TOML) naming the dimensions and variables
+        #[arg(short, long)] config: Option<PathBuf>,
+        #[command(flatten)] generic_args: GenericArgs,
         src: PathBuf,
         dest: PathBuf,
     },
@@ -540,6 +582,16 @@ pub enum BatchConvertFormat {
         #[arg(short, long)] threads: Option<usize>,
         src_dir: PathBuf,
     },
+    /// Your own NetCDF, described by a mapping file: batch convert .nc → .parquet
+    #[command(name = "generic")]
+    Generic {
+        /// Mapping file (TOML) naming the dimensions and variables
+        #[arg(short, long)] config: Option<PathBuf>,
+        #[command(flatten)] generic_args: GenericArgs,
+        #[arg(short, long)] output: Option<PathBuf>,
+        #[arg(short, long)] threads: Option<usize>,
+        src_dir: PathBuf,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -565,6 +617,15 @@ pub enum BatchHeaderFormat {
         #[arg(long = "pattern", value_name = "GLOB")] pattern: Option<String>,
         src_dir: PathBuf,
     },
+    /// Any NetCDF (all global attributes): batch extract .nc → .yaml metadata
+    #[command(name = "generic")]
+    Generic {
+        #[arg(short, long)] output: Option<PathBuf>,
+        #[arg(short, long)] threads: Option<usize>,
+        /// Glob pattern matched against filenames [default: "*.nc"]
+        #[arg(long = "pattern", value_name = "GLOB")] pattern: Option<String>,
+        src_dir: PathBuf,
+    },
 }
 
 // ── header ────────────────────────────────────────────────────────────────────
@@ -580,6 +641,12 @@ pub enum HeaderFormat {
     /// CORA metadata (.nc -> .yaml)
     #[command(name = "cora")]
     Cora {
+        src: PathBuf,
+        dest: PathBuf,
+    },
+    /// Any NetCDF, with all global attributes (.nc -> .yaml)
+    #[command(name = "generic")]
+    Generic {
         src: PathBuf,
         dest: PathBuf,
     },

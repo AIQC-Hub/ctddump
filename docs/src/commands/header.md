@@ -11,12 +11,14 @@ ctddump header <subcommand> <src_file> <target_file>
 |------------|--------|
 | `nrt`  | NRT files |
 | `cora` | CORA files |
+| `generic` | Any NetCDF file; keeps **all** global attributes |
 
 ## Examples
 
 ```bash
 ctddump header nrt  input.nc output.yaml
 ctddump header cora input.nc output.yaml
+ctddump header generic input.nc output.yaml
 ```
 
 To extract metadata for a whole directory at once, use
