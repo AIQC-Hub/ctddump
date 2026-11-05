@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-05
+
 ### Added
 - `generic` format for your own NetCDF files: `convert generic`, `batch convert generic`, `header generic` and `batch header generic`. A TOML mapping file (`--config`) names the file's dimensions and variables, picks the `time-depth` (NRT-like) or `profile-level` (CORA-like) layout, says where the platform code lives (global attribute or per-profile char, string or integer variable), and sets defaults for values the file lacks (platform code, longitude, latitude, data mode). Every key is optional and defaults to the Copernicus name; misspelt keys are rejected. The file is checked against the mapping before converting, so a mismatch is reported by name. Time is converted from any CF `"<unit> since <date>"` units to days since 1950; fill values (`_FillValue`, `missing_value`, or the NetCDF default) become NaN, packed values are unpacked, and QC flags may be any integer type or char. `--layout`, `--time-units`, `--platform-code` and `--pattern` override the mapping. `header generic` keeps every global attribute. Output has the usual schema, so it works with the rest of the pipeline
 - "Your own NetCDF files" documentation page: requirements, worked mooring and cruise examples, the mapping-file reference, how values are decoded, limits with NCO workarounds, and a troubleshooting table
@@ -345,7 +347,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.1...v0.33.0
 [0.32.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.31.0...v0.32.0
