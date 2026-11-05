@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `scripts/convert_data.sh` now defaults to `all` (convert, then report) instead of `process`, matching `clean_data.sh` and `dedup_data.sh`. A plain run previously rebuilt the Parquet but left the reports under `report/convert/` and `report/header/` from an earlier run, so `summary_data.sh` could build pages from stale figures. `process` alone still converts without reporting
+
 ## [0.32.1] - 2026-11-04
 
 ### Fixed

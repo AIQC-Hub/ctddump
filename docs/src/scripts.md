@@ -203,12 +203,15 @@ Each product's directory is downloaded under `source/` (override with
 
 ## `convert_data.sh`
 
-Converts the downloaded NetCDF to Parquet and metadata. Commands: `process`
-*(default)*, `report`, `all`.
+Converts the downloaded NetCDF to Parquet and metadata. Commands: `process`,
+`report`, `all` *(default)*. The default runs `process` and then `report`, so
+the summaries in `report/` always match the data just converted; `process` alone
+leaves any earlier reports in place unchanged.
 
 ```bash
-scripts/convert_data.sh all                # process + report, all regions
+scripts/convert_data.sh                    # process + report, all regions
 scripts/convert_data.sh process arctic     # just convert + merge the Arctic
+scripts/convert_data.sh report             # rewrite the reports from the merged outputs
 ```
 
 Reads the source NetCDF from `source/` (`-s/--src`); writes merged Parquet to
@@ -225,7 +228,7 @@ each region's bounding box(es).
 
 ```bash
 scripts/clean_data.sh                       # dropqc → dropna → filter → report, all regions
-scripts/clean_data.sh -y baltic             # skip the prompt, Baltic only
+scripts/clean_data.sh -y all baltic         # skip the prompt, Baltic only
 ```
 
 ## `dedup_data.sh`
