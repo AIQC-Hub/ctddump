@@ -172,7 +172,7 @@
 ### Added
 - `report summary` gains `--title TEXT`, replacing the default `Summary: <stem>` page heading with a human-readable one, and `--note TEXT` (repeatable), rendering caller-supplied notes under the title. Both are plain text and escaped in HTML output, and are the place for region- or product-specific remarks
 - Every `report summary` section now carries a short explanation of what the stage did. The prose is generic across regions and datasets; anything specific belongs in a `--note`
-- The `report summary` Mark-duplicates section gains a **Duplicate group sizes** table — how many groups hold 2, 3, … profiles, with one row per distinct size up to 10 and an `11+` row for the tail
+- The `report summary` Mark-duplicates section gains a **Duplicate group sizes** table: how many groups hold 2, 3, … profiles, with one row per distinct size up to 10 and an `11+` row for the tail
 - `summary_data.sh` now gives each page a human-readable title and product-specific notes, defined per stem by `title_for` / `notes_for` near the top of the script
 
 ### Changed
@@ -182,13 +182,13 @@
 ## [0.17.0] - 2026-07-15
 
 ### Added
-- `report summary` subcommand: assembles a single Markdown (default) or HTML (`--format html`) page for one file stem from the per-stage TSV reports the pipeline already produced. Given a stem it auto-locates the section source files under `--report-dir` (default `report`) and `--out-dir` (default `output`) — File summary (header YAML report), Conversion, Cleaning (Drop bad QC / Drop all-NA / Filter by region), and Deduplication (Mark duplicates / Remove duplicates) — and skips any section whose file is absent. Stage tables show platforms/profiles/observations with `% of original` and `Deleted` columns relative to the Conversion baseline; the Mark-duplicates section additionally splits duplicates into within-platform (a `dup_group` confined to one platform) and across-platform (spanning two or more) from the markdup `.dups.tsv`. Output goes to `-o/--output` or stdout
+- `report summary` subcommand: assembles a single Markdown (default) or HTML (`--format html`) page for one file stem from the per-stage TSV reports the pipeline already produced. Given a stem it auto-locates the section source files under `--report-dir` (default `report`) and `--out-dir` (default `output`), namely File summary (header YAML report), Conversion, Cleaning (Drop bad QC / Drop all-NA / Filter by region), and Deduplication (Mark duplicates / Remove duplicates), and skips any section whose file is absent. Stage tables show platforms/profiles/observations with `% of original` and `Deleted` columns relative to the Conversion baseline; the Mark-duplicates section additionally splits duplicates into within-platform (a `dup_group` confined to one platform) and across-platform (spanning two or more) from the markdup `.dups.tsv`. Output goes to `-o/--output` or stdout
 - `summary_data.sh` helper script: builds one `report summary` page per *(region, product)* unit for the Arctic, Baltic, and Mediterranean, reading reports from `-r/--report` (default `report`) and the markdup `.dups.tsv` from `-o/--out` (default `output`), writing pages to `-d/--dest` (default `summary`) in `-f/--format` `md` or `html`. A stem with no reports is skipped
 
 ## [0.16.0] - 2026-07-14
 
 ### Changed
-- `convert_data.sh` now parallelises **per unit** — one worker per *(region, product)*, where each region's three products are its regional NRT, the Global (GL), and CORA (9 units across the three regions) — instead of per region. Each unit runs its own convert → merge → header → merge-header chain in order. Pass `--by-region` for the previous per-region grouping (its three products in order), or `--sequential` for no parallelism
+- `convert_data.sh` now parallelises **per unit**, one worker per *(region, product)*, instead of per region. Each region's three products are its regional NRT, the Global (GL), and CORA, so there are 9 units across the three regions. Each unit runs its own convert → merge → header → merge-header chain in order. Pass `--by-region` for the previous per-region grouping (its three products in order), or `--sequential` for no parallelism
 - `convert_data.sh`'s `-t/--threads` default drops from `10` to `2`, since up to 9 units may now run at once (each `ctddump` call within a unit still uses this many worker threads). The refactor from hard-coded per-region functions to a generic per-unit pipeline is verified command-identical to the previous script for both `process` and `report`
 
 ## [0.15.0] - 2026-07-14
@@ -200,13 +200,13 @@
 ## [0.14.0] - 2026-07-14
 
 ### Added
-- `convert_data.sh`, `clean_data.sh`, and `dedup_data.sh` accept `--chunk-rows N`, which exports `CTDDUMP_CHUNK_ROWS` for every `ctddump` process the script launches — a per-run knob to trade memory for Parquet row-group count without editing files. Omitting it keeps `ctddump`'s built-in default, and a value already in the environment is respected. The resolved value is shown in each script's configuration block and `--help`
-- "Environment variables" section in the Configuration docs documenting the three tuning variables `ctddump` respects (`CTDDUMP_CHUNK_ROWS`, `POLARS_MAX_THREADS`, `RUST_MIN_STACK`) — what each does and its default — with pointers from the Technical notes and Helper scripts pages
+- `convert_data.sh`, `clean_data.sh`, and `dedup_data.sh` accept `--chunk-rows N`, which exports `CTDDUMP_CHUNK_ROWS` for every `ctddump` process the script launches: a per-run knob to trade memory for Parquet row-group count without editing files. Omitting it keeps `ctddump`'s built-in default, and a value already in the environment is respected. The resolved value is shown in each script's configuration block and `--help`
+- "Environment variables" section in the Configuration docs documenting the three tuning variables `ctddump` respects (`CTDDUMP_CHUNK_ROWS`, `POLARS_MAX_THREADS`, `RUST_MIN_STACK`), what each does and its default, with pointers from the Technical notes and Helper scripts pages
 
 ## [0.13.0] - 2026-07-14
 
 ### Added
-- "Technical notes" documentation page: a plain-English, symptom/why/fix summary of the non-obvious problems encountered while building `ctddump` — streaming and memory use, the Polars parallel-op memory leak and multi-row-group slice-pushdown bug, the `markdup` chunk-alignment crash, batch threading (worker stack size, pinning Polars' internal threads, largest-first scheduling), `concat`'s per-platform streaming, empty-dataset tolerance, and the harmless HDF5 diagnostics
+- "Technical notes" documentation page: a plain-English, symptom/why/fix summary of the non-obvious problems encountered while building `ctddump`: streaming and memory use, the Polars parallel-op memory leak and multi-row-group slice-pushdown bug, the `markdup` chunk-alignment crash, batch threading (worker stack size, pinning Polars' internal threads, largest-first scheduling), `concat`'s per-platform streaming, empty-dataset tolerance, and the harmless HDF5 diagnostics
 
 ## [0.12.2] - 2026-07-13
 
@@ -216,19 +216,19 @@
 ## [0.12.1] - 2026-07-13
 
 ### Fixed
-- `markdup` no longer panics ("RecordBatch requires all its arrays to have an equal number of rows") and truncate its output on inputs with more than one Parquet row group (any file over `CTDDUMP_CHUNK_ROWS` rows — e.g. the merged regional files). A read slice spanning several input row groups collects into multi-chunk columns; the appended single-chunk `is_dup` column left the columns with mismatched chunk boundaries, which the batched Parquet writer rejects. The pass-2 DataFrame is now chunk-aligned before writing
+- `markdup` no longer panics ("RecordBatch requires all its arrays to have an equal number of rows") and truncate its output on inputs with more than one Parquet row group (any file over `CTDDUMP_CHUNK_ROWS` rows, e.g. the merged regional files). A read slice spanning several input row groups collects into multi-chunk columns; the appended single-chunk `is_dup` column left the columns with mismatched chunk boundaries, which the batched Parquet writer rejects. The pass-2 DataFrame is now chunk-aligned before writing
 
 ## [0.12.0] - 2026-07-13
 
 ### Changed
-- `clean_data.sh` and `dedup_data.sh` now parallelise **per file** by default (one worker per merged file — the finest granularity — each running its whole stage chain in order) instead of per region. Pass `--by-region` for the previous per-region grouping, or `--sequential` for no parallelism. `download_data.sh`/`convert_data.sh` are unchanged (per region)
-- `ctddump batch` (convert/header) and `ctddump concat` (convert/header) now treat an empty match — a `--pattern` (or default) matching no files, or an empty/absent input directory — as a no-op: they print an informational message and write no output instead of erroring, so a workflow can reference a not-yet-available dataset
+- `clean_data.sh` and `dedup_data.sh` now parallelise **per file** by default (one worker per merged file, the finest granularity, each running its whole stage chain in order) instead of per region. Pass `--by-region` for the previous per-region grouping, or `--sequential` for no parallelism. `download_data.sh`/`convert_data.sh` are unchanged (per region)
+- `ctddump batch` (convert/header) and `ctddump concat` (convert/header) now treat an empty match as a no-op. When a `--pattern` (or the default) matches no files, or the input directory is empty or absent, they print an informational message and write no output instead of erroring, so a workflow can reference a not-yet-available dataset
 - The `convert_data.sh`/`clean_data.sh`/`dedup_data.sh` Baltic workflow now includes the Global (GL) product (`nrt_bo_gl`), matching the Arctic and Mediterranean. Copernicus does not yet publish Baltic GL data, so those steps currently produce nothing; the scripts skip any file with a missing input (with a note), so the run succeeds and picks up GL automatically once it is available
 
 ## [0.11.0] - 2026-07-12
 
 ### Added
-- The helper scripts run the selected regions **in parallel** by default when more than one is chosen — one background worker per region, with log lines tagged `[region]`. Failures are collected and the script exits non-zero after reporting which region failed. Pass `--sequential` to process regions one at a time
+- The helper scripts run the selected regions **in parallel** by default when more than one is chosen: one background worker per region, with log lines tagged `[region]`. Failures are collected and the script exits non-zero after reporting which region failed. Pass `--sequential` to process regions one at a time
 
 ### Changed
 - Split `prepare_data.sh` into two scripts with clearer names and prerequisites: **`download_data.sh`** (`login`, `download`; needs only the `copernicusmarine` toolbox) and **`convert_data.sh`** (`process`, `report`; needs only `ctddump`). `download_data.sh` fetches into `-s/--src` (default `input`); `convert_data.sh` writes its summaries to `output/report/convert/` (was `output/report/prepare/`). The pipeline now reads download → convert → clean → dedup
@@ -239,7 +239,7 @@
 ## [0.10.0] - 2026-07-12
 
 ### Added
-- The helper scripts (`prepare_data.sh`, `clean_data.sh`, `dedup_data.sh`) take command-line options in place of environment variables — `-t`/`--threads`, `-s`/`--src`, `-o`/`--out`. Options may appear anywhere on the command line and accept both `--out DIR` and `--out=DIR` forms
+- The helper scripts (`prepare_data.sh`, `clean_data.sh`, `dedup_data.sh`) take command-line options in place of environment variables: `-t`/`--threads`, `-s`/`--src`, `-o`/`--out`. Options may appear anywhere on the command line and accept both `--out DIR` and `--out=DIR` forms
 - The helper scripts print the resolved configuration and ask for a `y/N` confirmation before running; `-y`/`--yes` skips the prompt (required in non-interactive shells, which otherwise abort with a hint). Each step is announced with a timestamp so the currently running process is visible
 - "Helper scripts" documentation page describing the three-phase pipeline (prepare → clean → dedup), the shared command/region/option interface, the confirmation prompt, and each script's commands and output layout
 
@@ -254,8 +254,8 @@
 ### Added
 - `markdup` subcommand: mark duplicate profiles with an `is_dup` column and write a TSV listing the duplicated profiles. Duplicates are decided by `profile_timestamp` (date only by default), `longitude`, and `latitude` (3-decimal rounding by default), across platforms. The timestamp format (`--time-format`), rounding precision (`--decimals`), and rounding mode (`--round-mode`) are configurable
 - `dedup` subcommand: remove duplicate profiles, keeping the one with the most observations (ties broken by first appearance). Re-derives the same key as `markdup` (same options); resets `is_dup` to `false` when the column is present
-- `report parquet`: when an `is_dup` column is present, the report adds duplicate counts — `dup_profiles` at the global/platform levels and the `is_dup` flag at the profile level
-- `scripts/dedup_data.sh`: helper that de-duplicates the cleaned Parquet outputs of `clean_data.sh` in four steps — `markdup`, `report`, `dedup`, `report` — writing reports to `$OUT/report/dedup/{markdup,dedup}/`
+- `report parquet`: when an `is_dup` column is present, the report adds duplicate counts: `dup_profiles` at the global/platform levels and the `is_dup` flag at the profile level
+- `scripts/dedup_data.sh`: helper that de-duplicates the cleaned Parquet outputs of `clean_data.sh` in four steps (`markdup`, `report`, `dedup`, `report`), writing reports to `$OUT/report/dedup/{markdup,dedup}/`
 - The regional workflow docs (Arctic, Baltic, Mediterranean) gain a "Data de-duplication" section
 
 ### Fixed
@@ -269,8 +269,8 @@
 ## [0.8.0] - 2026-07-11
 
 ### Added
-- `dropqc` subcommand: drop whole profiles flagged bad by their profile-level QC — a profile is kept only if both `time_qc` and `position_qc` are `"1"` (OK) or missing (an absent QC variable or the NA byte `-128`, both stored as `""`). Missing QC is kept on purpose so files that ship no profile-level QC are not discarded. Works on Parquet files and streams one row group at a time so peak memory stays bounded
-- `scripts/clean_data.sh`: helper that cleans the merged Parquet outputs of `prepare_data.sh` in four steps — `dropqc`, `dropna`, `filter` (region bounding box with excluded sub-areas for the Baltic and Mediterranean), and `report` — writing its reports to `$OUT/report/clean/`
+- `dropqc` subcommand: drop whole profiles flagged bad by their profile-level QC: a profile is kept only if both `time_qc` and `position_qc` are `"1"` (OK) or missing (an absent QC variable or the NA byte `-128`, both stored as `""`). Missing QC is kept on purpose so files that ship no profile-level QC are not discarded. Works on Parquet files and streams one row group at a time so peak memory stays bounded
+- `scripts/clean_data.sh`: helper that cleans the merged Parquet outputs of `prepare_data.sh` in four steps: `dropqc`, `dropna`, `filter` (region bounding box with excluded sub-areas for the Baltic and Mediterranean), and `report`. It writes its reports to `$OUT/report/clean/`
 - The regional workflow docs (Arctic, Baltic, Mediterranean) gain a "Data cleaning" section covering the `dropqc`/`dropna`/`filter`/`report` pipeline
 
 ### Changed
@@ -279,7 +279,7 @@
 ## [0.7.0] - 2026-07-11
 
 ### Added
-- `dropna` subcommand: drop whole profiles that are entirely NA (null/NaN) in any of `temp`/`psal`/`pres` — a profile is kept only if each parameter has at least one valid observation. Works on Parquet files in two streaming passes so peak memory stays bounded and the result is independent of chunking
+- `dropna` subcommand: drop whole profiles that are entirely NA (null/NaN) in any of `temp`/`psal`/`pres`: a profile is kept only if each parameter has at least one valid observation. Works on Parquet files in two streaming passes so peak memory stays bounded and the result is independent of chunking
 
 ## [0.6.0] - 2026-07-11
 
@@ -294,7 +294,7 @@
 ### Added
 - `report` subcommand: summarise a Parquet data file or a YAML header file as a text report (TSV, plain text, or JSON), to a file or stdout
   - `report parquet --level global|platform|profile`: profile/observation counts, per-profile "good" QC counts, missing-value counts, min/max/mean of `temp`/`psal`/`pres`, and the `longitude`/`latitude` bounding box (global/platform levels)
-  - `report yaml`: per source file, core-column presence flags and an `extra_params` list of auto-detected non-core measurement parameters — biogeochemical/biological and other (DOXY, FLU2, TUR3, CNDC, …)
+  - `report yaml`: per source file, core-column presence flags and an `extra_params` list of auto-detected non-core measurement parameters: biogeochemical/biological and other (DOXY, FLU2, TUR3, CNDC, …)
 - `scripts/prepare_data.sh`: a `report` stage summarising the merged outputs (and `all` now runs download → process → report); the regional workflow pages gain a matching report step
 
 ## [0.4.3] - 2026-07-09
@@ -323,7 +323,7 @@
 - `CTDDUMP_CHUNK_ROWS` environment variable to tune the streaming chunk / platform-range size
 
 ### Changed
-- `convert`, `batch convert`, and `concat convert` now stream data in bounded memory — chunked Parquet row groups for conversion and contiguous `platform_code` ranges for `concat` — instead of materializing the full dataset, greatly reducing peak memory on large inputs (output is data-identical; only the on-disk row-group layout changes)
+- `convert`, `batch convert`, and `concat convert` now stream data in bounded memory (chunked Parquet row groups for conversion and contiguous `platform_code` ranges for `concat`) instead of materializing the full dataset, greatly reducing peak memory on large inputs (output is data-identical; only the on-disk row-group layout changes)
 - `concat convert` now drops rows with missing (null/NaN) `pres` by default; pass `--keep-na-pres` to retain them
 
 ### Fixed
