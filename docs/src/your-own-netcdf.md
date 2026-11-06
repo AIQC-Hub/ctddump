@@ -26,7 +26,7 @@ Your file must be laid out like a Copernicus file: a **profile** dimension and a
 | Pressure **or** depth | a `[profile, level]` variable | at least one |
 | Temperature **or** salinity | a `[profile, level]` variable | at least one |
 | QC flags | `[profile, level]` variables (integer or char) | no: empty when absent |
-| Data mode | variables, a `data_mode` attribute, **or** a default value | no: `R` when absent |
+| Data mode | variables, a `data_mode` attribute, **or** a default value | no: empty when absent |
 
 Two layouts are supported. They differ in what a profile is and where the
 platform code usually lives:
@@ -237,8 +237,12 @@ The priority is: built-in default, then the `--config` file, then the flags.
   copied as they are, with blanks written as `""`.
 - **Data mode.** In the `time-depth` layout, a `[profile, level]` char variable
   per parameter (`TEMP_DM`); in the `profile-level` layout, one per-profile
-  variable (`DATA_MODE`). Without one, the parameter's `data_mode` attribute,
-  then `[defaults] data_mode`, then `R`.
+  variable (`DATA_MODE`). Without one, the parameter's `data_mode` attribute
+  (`R`, `A` or `D`), then `[defaults] data_mode`, then `""` (unknown). A
+  `data_mode` attribute of `"M"` (mixed) gives `""` whatever the default, since
+  only a per-level variable can say which levels are which. Each file whose
+  data mode is left empty this way gets a warning; set `[defaults] data_mode`
+  when you know the mode of your data.
 - **Pressure and depth.** Whichever is missing is derived from the other with
   TEOS-10 at the profile's latitude, and flagged in `pres_conv` / `deph_conv`.
 

@@ -272,8 +272,8 @@ fn profile_level_mapping_converts() {
     assert_eq!(strs(&df, "temp_qc"), ["1", "4", "1", "", "1", "1"]);
     // No salinity variable at all.
     assert!(f64s(&df, "psal").iter().all(|v| v.is_nan()));
-    // No DATA_MODE variable and no default: real-time.
-    assert!(strs(&df, "temp_dm").iter().all(|d| d == "R"));
+    // No DATA_MODE variable and no default: unknown, not assumed real-time.
+    assert!(strs(&df, "temp_dm").iter().all(|d| d.is_empty()));
 }
 
 #[test]

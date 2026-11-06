@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- `convert` and `batch convert` print a warning for each file whose data mode is left empty for a whole variable: a `data_mode = "M"` attribute without a `<PARAM>_DM` variable, no data-mode information at all, or a CORA file without `DATA_MODE`. The warning names the variables
+- `report parquet` counts observations with no data mode as `{temp,psal,pres}_dm_unknown`, after the R/A/D counts, and the `report summary` **Data mode** table gains **Unknown** columns when the report has them
+- The output schema documentation says what the `_dm` columns can and cannot tell you: values and flags are always read from `TEMP`/`TEMP_QC` (never `*_ADJUSTED`), `""` does not mean a missing measurement, and CORA's `DATA_MODE` is the original observation's mode, not that of CORA's QC
+
+### Changed
+- `temp_dm`, `psal_dm` and `pres_dm` hold `R` only when the file says so. They are now `""` (unknown) instead of `R` when a parameter's `data_mode` attribute is `"M"` (mixed) and it has no `<PARAM>_DM` variable, when a parameter has neither, when the parameter is absent from the file, and when a CORA file has no `DATA_MODE` variable. Previously these all read as real-time, which could label delayed-mode data `R`. For `generic`, `[defaults] data_mode` still applies when the file has no data mode, but no longer overrides a `"M"` attribute. Files whose data mode comes from a `<PARAM>_DM` variable, an `R`/`A`/`D` attribute or `DATA_MODE` convert as before
+
 ## [0.35.0] - 2026-11-06
 
 ### Added

@@ -39,9 +39,10 @@ Every row also reports:
 - `{temp,psal,pres}_dm_{r,a,d}`: number of observations whose
   [data mode](../output-schema.md#data-mode) is real-time (`R`), adjusted in
   real time (`A`), or delayed mode (`D`), placed after that parameter's
-  statistics. Observations with an unset data mode (`""`) are not counted. Each
-  parameter's counts appear only when the file has its `<param>_dm` column, so a
-  file converted before the data-mode columns existed reports as before.
+  statistics, followed by `{temp,psal,pres}_dm_unknown`, the observations with
+  no data mode (`""`). Each parameter's counts appear only when the file has its
+  `<param>_dm` column, so a file converted before the data-mode columns existed
+  reports as before.
 - `dup_profiles` (`global`/`platform`) or `is_dup` (`profile`): only when the
   file has a [`markdup`](./markdup.md) `is_dup` column.
 
@@ -116,10 +117,11 @@ nothing to compare against and the columns are omitted.
 When the Conversion report has the `{temp,psal,pres}_dm_{r,a,d}` columns, the
 **Conversion** section carries a second table, **Data mode**: one row per
 parameter with the number of observations in real-time (`R`), adjusted (`A`),
-and delayed mode (`D`), each with its share of all converted observations.
-Observations with an unset data mode are not counted, so a row can sum to less
-than 100%. Reports of files converted before the data-mode columns existed have
-no such columns, and the table is omitted.
+and delayed mode (`D`), each with its share of all converted observations,
+then **Unknown** for those with no data mode. Reports made before the
+`_dm_unknown` counts existed have no Unknown columns, so their rows can sum to
+less than 100%. Reports of files converted before the data-mode columns existed
+have no data-mode columns at all, and the table is omitted.
 
 The **Filter by region** section carries a second table, **Bounding box**, with the
 minimum and maximum longitude and latitude of the profiles that survived the
