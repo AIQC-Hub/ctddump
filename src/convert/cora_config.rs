@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::path::Path;
 
 /// How QC flags are stored in the NetCDF source file.
 /// All formats produce `String` in the output; both storage types are converted
@@ -54,11 +52,5 @@ impl CoraConfig {
             has_deph_source: false,
             pattern: None,
         }
-    }
-
-    /// Load config from a TOML file.
-    pub fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
-        let content = std::fs::read_to_string(path)?;
-        Ok(toml::from_str(&content)?)
     }
 }

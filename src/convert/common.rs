@@ -626,27 +626,6 @@ pub fn get_char_value2_chunk(
         .collect())
 }
 
-pub fn get_char_vector3(
-    file: &netcdf::File,
-    var_name: String,
-    nrow: usize,
-) -> Result<Vec<String>, Box<dyn Error>> {
-    let var_temp = match file.variable(&var_name) {
-        Some(var) => var,
-        None => {
-            return Ok(vec![]);
-        }
-    };
-
-    let char_data: Vec<NcChar> = var_temp.get_values::<NcChar, _>(..)?;
-    let char_vec: Vec<String> = char_data.iter().map(|nc| (nc.0 as u8 as char).to_string()).collect();
-
-    // Repeat each character as a String nrow times
-    let result: Vec<String> = char_vec.iter().flat_map(|s| std::iter::repeat(s.clone()).take(nrow)).collect();
-
-    Ok(result)
-}
-
 /// Reads a NetCDF char QC variable and returns each character as a `String`.
 /// Space (`' '`) and null (`'\0'`) are treated as missing and map to `""`.
 /// All other characters (digits `'0'`–`'9'`, letters `'A'`, `'B'`, …) are

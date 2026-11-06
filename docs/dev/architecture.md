@@ -55,7 +55,7 @@ Two-stage `clap` dispatch:
 - `get_coordinate_value()` — reads 1-D/scalar var, tiles to `time_len × obs_len`; fill values if absent.
 - `get_var_float_value()` — float data with fill → NaN.
 - `get_qc_value()` / `get_qc_coordinate_value()` / `get_qc_value_from_char()` — QC flags (i8, tiled coordinate, or ASCII char) → `Vec<String>`.
-- `get_char_value()` / `get_char_value2()` / `get_char_vector3()` — NetCDF `char` arrays (i8) → `Vec<String>` at different dim layouts.
+- `get_char_value2_chunk()` — a 2-D NetCDF `char` array (i8) → one `Vec<String>` entry per profile, tiled `obs_len` times.
 - `get_dm_value_chunk()` / `get_dm_coordinate_value_chunk()` — data mode (`R`/`A`/`D`) from a 2-D `<PARAM>_DM` char variable (fallback: the parameter's `data_mode` attribute via `dm_from_attribute`, then `DM_DEFAULT = "R"`) or from CORA's 1-D `DATA_MODE`. Fill cells → `""` (`dm_from_char`).
 - `convert_depth_to_pressure()` / `convert_pressure_to_depth()` — bidirectional via `gsw` (TEOS-10).
 
