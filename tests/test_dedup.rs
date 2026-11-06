@@ -204,3 +204,178 @@ fn test_dedup_after_markdup_resets_is_dup() {
     assert_eq!(profiles(&out).len(), 5);
 }
 
+
+/// Run `report parquet` at `level` on `src` and return one map per row.
+fn report_rows(src: &Path, level: &str) -> Vec<HashMap<String, String>> {
+    let rpt = src.with_extension(format!("{level}.tsv"));
+    dispatch(&["report", "parquet", "--level", level, src.to_str().unwrap(), rpt.to_str().unwrap()]);
+    let text = fs::read_to_string(&rpt).unwrap();
+    let mut lines = text.lines();
+    let header: Vec<String> = lines.next().unwrap().split('\t').map(str::to_string).collect();
+    lines
+        .map(|l| header.iter().cloned().zip(l.split('\t').map(str::to_string)).collect())
+        .collect()
+}
+
+#[test]
+fn test_report_platform_and_profile_levels_count_duplicates() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let marked = dir.path().join("marked.parquet");
+    let dups = dir.path().join("dups.tsv");
+    write_fixture(&src);
+    dispatch(&["markdup", src.to_str().unwrap(), marked.to_str().unwrap(), dups.to_str().unwrap()]);
+
+    // Platform level: duplicated profiles per platform (A/1, B/1, D/1, E/1).
+    let rows = report_rows(&marked, "platform");
+    let got: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|r| (r["platform_code"].as_str(), r["dup_profiles"].as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![("A", "1"), ("B", "1"), ("C", "0"), ("D", "1"), ("E", "1"), ("F", "0")]
+    );
+
+    // Profile level: the per-profile flag.
+    let rows = report_rows(&marked, "profile");
+    let got: Vec<(&str, &str, &str)> = rows
+        .iter()
+        .map(|r| (r["platform_code"].as_str(), r["profile_no"].as_str(), r["is_dup"].as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            ("A", "1", "true"),
+            ("A", "2", "false"),
+            ("B", "1", "true"),
+            ("C", "1", "false"),
+            ("D", "1", "true"),
+            ("E", "1", "true"),
+            ("F", "1", "false"),
+        ]
+    );
+
+    // Without `is_dup`, neither level has the duplicate columns.
+    for (level, col) in [("platform", "dup_profiles"), ("profile", "is_dup")] {
+        assert!(!report_rows(&src, level)[0].contains_key(col), "{level}: unexpected {col}");
+    }
+}
+
+/// Write the fixture's schema with no rows.
+fn write_empty_fixture(path: &Path) {
+    write_fixture(path);
+    let mut df = ParquetReader::new(fs::File::open(path).unwrap()).finish().unwrap().head(Some(0));
+    ParquetWriter::new(fs::File::create(path).unwrap()).finish(&mut df).unwrap();
+}
+
+#[test]
+fn test_markdup_and_dedup_empty_input_write_empty_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let marked = dir.path().join("marked.parquet");
+    let dups = dir.path().join("dups.tsv");
+    let out = dir.path().join("out.parquet");
+    write_empty_fixture(&src);
+    let in_cols = ParquetReader::new(fs::File::open(&src).unwrap()).finish().unwrap().get_column_names_owned();
+
+    dispatch(&["markdup", src.to_str().unwrap(), marked.to_str().unwrap(), dups.to_str().unwrap()]);
+    let df = ParquetReader::new(fs::File::open(&marked).unwrap()).finish().unwrap();
+    assert_eq!(df.height(), 0);
+    assert_eq!(df.schema().get("is_dup"), Some(&DataType::Boolean), "is_dup column still added");
+    assert_eq!(fs::read_to_string(&dups).unwrap().lines().count(), 1, "header only");
+
+    dispatch(&["dedup", src.to_str().unwrap(), out.to_str().unwrap()]);
+    let df = ParquetReader::new(fs::File::open(&out).unwrap()).finish().unwrap();
+    assert_eq!(df.height(), 0);
+    assert_eq!(df.get_column_names_owned(), in_cols, "schema kept");
+}
+
+// ── key options: --round-mode and --time-format ──────────────────────────────
+
+/// Three pairs of one-observation profiles, keyed with `--decimals 0`. Each
+/// pair has its own latitude, so only its two longitudes decide whether it is a
+/// duplicate under a given rounding mode:
+///   P (0.2, 0.8)   round 0≠1   floor 0=0   ceil 1=1   trunc 0=0
+///   Q (0.8, 1.0)   round 1=1   floor 0≠1   ceil 1=1   trunc 0≠1
+///   R (-0.2, 0.2)  round 0=0   floor -1≠0  ceil 0≠1   trunc 0=0
+fn write_rounding_fixture(path: &Path) {
+    let rows: &[(&str, f64, f64)] = &[
+        ("P1", 0.2, 10.0),
+        ("P2", 0.8, 10.0),
+        ("Q1", 0.8, 20.0),
+        ("Q2", 1.0, 20.0),
+        ("R1", -0.2, 30.0),
+        ("R2", 0.2, 30.0),
+    ];
+    let h = rows.len();
+    let ts = Series::new("profile_timestamp".into(), vec![D_2020_01_01; h])
+        .cast(&DataType::Datetime(TimeUnit::Milliseconds, None))
+        .unwrap();
+    let mut df = DataFrame::new(vec![
+        Series::new("platform_code".into(), rows.iter().map(|r| r.0).collect::<Vec<_>>()),
+        Series::new("profile_no".into(), vec![1u32; h]),
+        Series::new("observation_no".into(), vec![1u32; h]),
+        Series::new("profile_time".into(), vec![D_2020_01_01 as f64; h]),
+        ts,
+        Series::new("longitude".into(), rows.iter().map(|r| r.1).collect::<Vec<_>>()),
+        Series::new("latitude".into(), rows.iter().map(|r| r.2).collect::<Vec<_>>()),
+    ])
+    .unwrap();
+    ParquetWriter::new(fs::File::create(path).unwrap()).finish(&mut df).unwrap();
+}
+
+#[test]
+fn test_markdup_round_modes() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let marked = dir.path().join("marked.parquet");
+    let dups = dir.path().join("dups.tsv");
+    write_rounding_fixture(&src);
+
+    for (mode, expect_dup) in [
+        ("round", ["Q", "R"].as_slice()),
+        ("floor", ["P"].as_slice()),
+        ("ceil", ["P", "Q"].as_slice()),
+        ("trunc", ["P", "R"].as_slice()),
+    ] {
+        dispatch(&[
+            "markdup", "--decimals", "0", "--round-mode", mode,
+            src.to_str().unwrap(), marked.to_str().unwrap(), dups.to_str().unwrap(),
+        ]);
+        let mut got: Vec<String> = dup_flags(&marked)
+            .into_iter()
+            .filter(|(_, dup)| *dup)
+            .map(|((code, _), _)| code[..1].to_string())
+            .collect();
+        got.sort();
+        got.dedup();
+        assert_eq!(got, expect_dup, "--round-mode {mode}");
+    }
+}
+
+#[test]
+fn test_markdup_time_format() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let marked = dir.path().join("marked.parquet");
+    let dups = dir.path().join("dups.tsv");
+    write_fixture(&src);
+    let args = |fmt: &'static str| -> Vec<String> {
+        ["markdup", "--time-format", fmt, src.to_str().unwrap(), marked.to_str().unwrap(), dups.to_str().unwrap()]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    };
+
+    // Keyed to the hour, A/1 (00:00) and B/1 (06:00) are no longer duplicates;
+    // D/1 and E/1 (both 00:00) still are.
+    handle_dispatch(&args("%Y-%m-%dT%H")).unwrap();
+    let f = dup_flags(&marked);
+    assert!(!f[&("A".to_string(), 1)] && !f[&("B".to_string(), 1)]);
+    assert!(f[&("D".to_string(), 1)] && f[&("E".to_string(), 1)]);
+
+    // A malformed format is a clean error, not a panic.
+    let err = handle_dispatch(&args("%Y-%Q")).unwrap_err().to_string();
+    assert!(err.contains("invalid --time-format"), "unexpected error: {err}");
+}

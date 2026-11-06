@@ -225,12 +225,12 @@ fn test_convert_nrt_ar_deph_only_generates_pres() {
 
     // pres must be fully populated (derived from DEPH), not all-NaN.
     let pres = df.column("pres").unwrap().f32().unwrap();
-    let pres_nan = pres.into_iter().filter(|v| v.map_or(true, |x| x.is_nan())).count();
+    let pres_nan = pres.into_iter().filter(|v| v.is_none_or(|x| x.is_nan())).count();
     assert_eq!(pres_nan, 0, "pres should be generated from DEPH, not NaN");
 
     // deph (the real source) must also be present.
     let deph = df.column("deph").unwrap().f32().unwrap();
-    let deph_nan = deph.into_iter().filter(|v| v.map_or(true, |x| x.is_nan())).count();
+    let deph_nan = deph.into_iter().filter(|v| v.is_none_or(|x| x.is_nan())).count();
     assert_eq!(deph_nan, 0, "deph should be read from the source");
 
     // Every pres value here is conversion-derived, so pres_conv must be 1.
@@ -322,7 +322,7 @@ fn test_convert_nrt_dm_on_deph_derived_pressure() {
     let dm = df.column("pres_dm").unwrap().str().unwrap();
     let derived: Vec<Option<&str>> = conv
         .into_iter()
-        .zip(dm.into_iter())
+        .zip(dm)
         .filter(|(c, _)| *c == Some(1))
         .map(|(_, d)| d)
         .collect();

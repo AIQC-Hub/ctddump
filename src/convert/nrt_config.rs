@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::path::Path;
 
 /// Configuration that describes the structure of an NRT NetCDF source file.
 /// All NRT regions share the same conversion logic; only these flags differ.
@@ -44,11 +42,5 @@ impl NrtConfig {
     /// Global (GL): DEPH source present, standard coordinates.
     pub fn nrt_gl() -> Self {
         Self { has_deph_source: true, has_profile_coords: false, pattern: None }
-    }
-
-    /// Load config from a TOML file.
-    pub fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
-        let content = std::fs::read_to_string(path)?;
-        Ok(toml::from_str(&content)?)
     }
 }

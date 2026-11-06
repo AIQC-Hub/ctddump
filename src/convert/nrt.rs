@@ -1,4 +1,3 @@
-use std::process;
 use std::error::Error;
 
 use netcdf;
@@ -281,22 +280,13 @@ pub fn convert_file(src: &str, dest: &str, config: &NrtConfig) -> Result<(), Box
 }
 
 pub fn run(args: &[String], nrt_config: NrtConfig, target: &str) -> Result<Config, Box<dyn Error>> {
-    let config = ConvertConfig::build(args).unwrap_or_else(|err| {
-        eprintln!("Problem parsing arguments: {err}");
-        process::exit(1);
-    });
-
-    match netcdf_to_parquet(&config, &nrt_config) {
-        Ok(_) => Ok(Config {
-            module: "convert".to_string(),
-            target: target.to_string(),
-            args: args.to_vec(),
-        }),
-        Err(e) => {
-            eprintln!("Conversion failed: {}", e);
-            process::exit(1);
-        }
-    }
+    let config = ConvertConfig::build(args)?;
+    netcdf_to_parquet(&config, &nrt_config)?;
+    Ok(Config {
+        module: "convert".to_string(),
+        target: target.to_string(),
+        args: args.to_vec(),
+    })
 }
 
 #[cfg(test)]

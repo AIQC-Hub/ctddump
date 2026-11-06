@@ -66,6 +66,8 @@ pub fn attribute_to_string(value: netcdf::AttributeValue) -> Option<String> {
 ///   (one code for the whole file). Empty entries take `defaults.platform_code`
 ///   when set. A missing variable yields the default, or `" "` without one
 ///   (the historical CORA behaviour).
+// `[a..b]` below is a 1-D NetCDF extent, not a one-element Vec.
+#[allow(clippy::single_range_in_vec_init)]
 pub fn platform_codes_chunk(
     file: &netcdf::File,
     spec: &SourceSpec,
@@ -149,7 +151,7 @@ pub fn create_profile_no_sequence_chunk(
     obs_len: usize,
 ) -> Result<Vec<u32>, Box<dyn Error>> {
     let profile_no: Vec<u32> = ((time_offset as u32 + 1)..=(time_offset + time_count) as u32).collect();
-    Ok(profile_no.iter().flat_map(|&v| std::iter::repeat(v).take(obs_len)).collect())
+    Ok(profile_no.iter().flat_map(|&v| std::iter::repeat_n(v, obs_len)).collect())
 }
 
 /// Target number of observation rows to assemble per streamed chunk. Bounds peak
@@ -221,7 +223,7 @@ pub fn retain_by_mask<T>(v: Vec<T>, keep: &[bool]) -> Vec<T> {
         .collect()
 }
 
-pub fn convert_time_value(time_values: &Vec<f64>) -> Result<Vec<i64>, Box<dyn Error>> {
+pub fn convert_time_value(time_values: &[f64]) -> Result<Vec<i64>, Box<dyn Error>> {
     let reference_date = Utc.with_ymd_and_hms(1950, 1, 1, 0, 0, 0)
         .single() // Get the single result
         .ok_or("Failed to create reference date")?;
@@ -247,6 +249,8 @@ pub fn convert_time_value(time_values: &Vec<f64>) -> Result<Vec<i64>, Box<dyn Er
 /// Read the TIME slice `[time_offset, time_offset + time_count)` of a 1-D coordinate
 /// variable and tile each value `obs_len` times. A scalar variable (length 1) is
 /// broadcast across the whole chunk; a missing variable yields `fill_value`.
+// `[a..b]` below is a 1-D NetCDF extent, not a one-element Vec.
+#[allow(clippy::single_range_in_vec_init)]
 pub fn get_coordinate_value_chunk<T>(
     file: &netcdf::File,
     var_name: &str,
@@ -274,7 +278,7 @@ where
 
     // 1-D TIME-indexed coordinate: read only this chunk's slice, tile each `obs_len`.
     let slice: Vec<T> = var.get_values::<T, _>([time_offset..time_offset + time_count])?;
-    Ok(slice.iter().flat_map(|&v| std::iter::repeat(v).take(obs_len)).collect())
+    Ok(slice.iter().flat_map(|&v| std::iter::repeat_n(v, obs_len)).collect())
 }
 
 /// A scalar numeric attribute as `f64`; strings, arrays and absent attributes
@@ -622,29 +626,8 @@ pub fn get_char_value2_chunk(
 
     Ok(result
         .iter()
-        .flat_map(|v| std::iter::repeat(v.clone()).take(obs_len))
+        .flat_map(|v| std::iter::repeat_n(v.clone(), obs_len))
         .collect())
-}
-
-pub fn get_char_vector3(
-    file: &netcdf::File,
-    var_name: String,
-    nrow: usize,
-) -> Result<Vec<String>, Box<dyn Error>> {
-    let var_temp = match file.variable(&var_name) {
-        Some(var) => var,
-        None => {
-            return Ok(vec![]);
-        }
-    };
-
-    let char_data: Vec<NcChar> = var_temp.get_values::<NcChar, _>(..)?;
-    let char_vec: Vec<String> = char_data.iter().map(|nc| (nc.0 as u8 as char).to_string()).collect();
-
-    // Repeat each character as a String nrow times
-    let result: Vec<String> = char_vec.iter().flat_map(|s| std::iter::repeat(s.clone()).take(nrow)).collect();
-
-    Ok(result)
 }
 
 /// Reads a NetCDF char QC variable and returns each character as a `String`.
@@ -826,7 +809,7 @@ where
                 0.0_f64,  // sea_surface_geopotential (typically 0 if unknown)
             );
 
-            converted_deph[i] = z_value as f32 * -1.0_f32;
+            converted_deph[i] = -(z_value as f32);
             converted_deph_qc[i] = pres_qc[i].clone();
             deph_conv[i] = 1;
         }
@@ -1034,7 +1017,7 @@ mod tests {
     #[test]
     fn test_convert_time_value_epoch() {
         // days = 0 → the reference date 1950-01-01 00:00:00 UTC
-        let result = convert_time_value(&vec![0.0]).unwrap();
+        let result = convert_time_value(&[0.0]).unwrap();
         let expected = Utc.with_ymd_and_hms(1950, 1, 1, 0, 0, 0).unwrap().timestamp_millis();
         assert_eq!(result, vec![expected]);
     }
@@ -1042,7 +1025,7 @@ mod tests {
     #[test]
     fn test_convert_time_value_half_day() {
         // 0.5 days → noon on 1950-01-01
-        let result = convert_time_value(&vec![0.5]).unwrap();
+        let result = convert_time_value(&[0.5]).unwrap();
         let expected = Utc.with_ymd_and_hms(1950, 1, 1, 12, 0, 0).unwrap().timestamp_millis();
         assert_eq!(result, vec![expected]);
     }
@@ -1054,21 +1037,21 @@ mod tests {
         let target = Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap();
         let days = (target - epoch).num_days() as f64;
 
-        let result = convert_time_value(&vec![days]).unwrap();
+        let result = convert_time_value(&[days]).unwrap();
         assert_eq!(result, vec![target.timestamp_millis()]);
     }
 
     #[test]
     fn test_convert_time_value_consecutive_days() {
         let epoch_ms = Utc.with_ymd_and_hms(1950, 1, 1, 0, 0, 0).unwrap().timestamp_millis();
-        let result = convert_time_value(&vec![0.0, 1.0]).unwrap();
+        let result = convert_time_value(&[0.0, 1.0]).unwrap();
         assert_eq!(result[0], epoch_ms);
         assert_eq!(result[1], epoch_ms + 86_400_000); // +1 day in ms
     }
 
     #[test]
     fn test_convert_time_value_empty() {
-        assert!(convert_time_value(&vec![]).unwrap().is_empty());
+        assert!(convert_time_value(&[]).unwrap().is_empty());
     }
 
     // ── get_base_file_name ───────────────────────────────────────────────────

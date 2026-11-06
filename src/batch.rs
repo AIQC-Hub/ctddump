@@ -22,7 +22,7 @@ pub fn collect_nc_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, B
             e.path()
                 .file_name()
                 .and_then(|n| n.to_str())
-                .map_or(false, |name| glob_pat.matches(name))
+                .is_some_and(|name| glob_pat.matches(name))
         })
         .map(|e| e.path().to_path_buf())
         .collect();
@@ -232,7 +232,7 @@ mod tests {
     fn test_output_pairs_src_preserved() {
         // The src path in the pair must equal the original input
         let f = PathBuf::from("/data/file.nc");
-        let pairs = compute_output_pairs(&[f.clone()], None, "parquet").unwrap();
+        let pairs = compute_output_pairs(std::slice::from_ref(&f), None, "parquet").unwrap();
         assert_eq!(pairs[0].0, f);
     }
 

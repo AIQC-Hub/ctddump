@@ -144,3 +144,24 @@ fn test_filter_area_rejects_inverted_box() {
     );
     assert!(err.is_err(), "min-lon > max-lon must be rejected");
 }
+
+#[test]
+fn test_filter_no_match_writes_empty_file_with_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let out = dir.path().join("out.parquet");
+    write_fixture(&src);
+
+    // No profile lies in this box.
+    dispatch(&[
+        "filter",
+        "--min-lon", "100", "--max-lon", "110",
+        "--min-lat", "-5", "--max-lat", "5",
+        src.to_str().unwrap(), out.to_str().unwrap(),
+    ]);
+
+    let input = ParquetReader::new(fs::File::open(&src).unwrap()).finish().unwrap();
+    let df = ParquetReader::new(fs::File::open(&out).unwrap()).finish().unwrap();
+    assert_eq!(df.height(), 0);
+    assert_eq!(df.schema(), input.schema(), "an empty result keeps the input schema");
+}
