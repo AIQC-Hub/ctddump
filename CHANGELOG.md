@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-11-06
+
+### Added
+- Link the live example report site (<https://aiqc-hub.github.io/ctddump-report-example/>) from the Introduction page of the documentation, as the README already does
+
 ## [0.34.0] - 2026-11-05
 
 ### Added
@@ -347,7 +352,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.1...HEAD
+[0.34.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.0...v0.34.1
 [0.34.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.1...v0.33.0
 [0.32.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.0...v0.32.1
