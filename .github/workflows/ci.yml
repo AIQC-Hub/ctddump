@@ -39,7 +39,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: llvm-tools-preview
+          components: llvm-tools-preview, clippy
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -52,6 +52,11 @@ jobs:
       # the runner out of disk while compressing (zstd "No space left on device").
       - name: Cache Cargo registry and dependency builds
         uses: Swatinem/rust-cache@v2
+
+      # Lint before the long test build so a warning fails the run early. Only
+      # dependency metadata is built here, so it adds little to the cache.
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Download test data
         env:

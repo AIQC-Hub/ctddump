@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+- CI reports test coverage to Codecov, and fails on any `cargo clippy` warning
+- CI, Codecov and CodeFactor badges in the README, placed under the title
+- Tests for parts of the code that had none: platform columns in `sqlite --add-col`, `report` on `markdup` output, NRT and CORA `--config` files, empty results from `filter`, `markdup`, `dedup` and `concat`, failing files in `batch` and threaded `concat`, every `--round-mode` and `--time-format`, each region's default batch pattern, and more of the `generic` mapping (packed and filled coordinates, char time QC, platform variables and attributes, mapping errors)
+
+### Changed
+- `convert` (NRT and CORA) and `header` (`nrt`, `cora`) no longer exit the process when a file cannot be read: the error is returned to the caller, as `convert generic` already did. The command line still exits with status 1, and the message is now `Error: ...` instead of `Conversion failed: ...` or `Header extraction failed: ...`
+
+### Removed
+- The unused library functions `NrtConfig::from_file`, `CoraConfig::from_file` and `convert::common::get_char_vector3`. `--config` files are unaffected
+
 ## [0.34.1] - 2026-11-06
 
 ### Added
