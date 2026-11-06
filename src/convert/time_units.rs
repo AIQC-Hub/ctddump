@@ -76,12 +76,12 @@ fn parse_reference(s: &str) -> Option<i64> {
             offset_secs = off;
         } else if let Some(t) = parse_time(part) {
             time = t;
-        } else if let Some(i) = part.find(['+', '-']).filter(|&i| i > 0) {
-            // `00:00:00+01:00`: time and offset glued together.
+        } else {
+            // `00:00:00+01:00`: time and offset glued together. Anything else
+            // is not a recognised token.
+            let i = part.find(['+', '-']).filter(|&i| i > 0)?;
             time = parse_time(&part[..i])?;
             offset_secs = parse_offset(&part[i..])?;
-        } else {
-            return None;
         }
     }
 
