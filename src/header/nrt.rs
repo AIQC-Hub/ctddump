@@ -1,4 +1,3 @@
-use std::process;
 use std::error::Error;
 use std::collections::HashMap;
 use std::fs::File;
@@ -63,20 +62,11 @@ pub fn extract_file(src: &str, dest: &str) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn run(args: &[String]) -> Result<Config, Box<dyn Error>> {
-    let config = HeaderConfig::build(args).unwrap_or_else(|err| {
-        eprintln!("Problem parsing arguments: {err}");
-        process::exit(1);
-    });
-
-    match netcdf_to_yaml(&config) {
-        Ok(_) => Ok(Config {
-            module: "header".to_string(),
-            target: "nrt".to_string(),
-            args: args.to_vec(),
-        }),
-        Err(e) => {
-            eprintln!("Header extraction failed: {}", e);
-            process::exit(1);
-        }
-    }
+    let config = HeaderConfig::build(args)?;
+    netcdf_to_yaml(&config)?;
+    Ok(Config {
+        module: "header".to_string(),
+        target: "nrt".to_string(),
+        args: args.to_vec(),
+    })
 }

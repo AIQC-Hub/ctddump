@@ -22,7 +22,7 @@ pub fn collect_nc_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, B
             e.path()
                 .file_name()
                 .and_then(|n| n.to_str())
-                .map_or(false, |name| glob_pat.matches(name))
+                .is_some_and(|name| glob_pat.matches(name))
         })
         .map(|e| e.path().to_path_buf())
         .collect();
