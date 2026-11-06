@@ -44,3 +44,9 @@ static-netcdf = ["netcdf/static"]
 # Vendoring the C libraries is the only way around it.
 [package.metadata.docs.rs]
 features = ["static-netcdf"]
+
+# Keep only line tables in debug builds. Full debug info made every test
+# binary ~860 MB, and `target/` grew to hundreds of GB across rebuilds.
+# Panic backtraces still show file and line numbers.
+[profile.dev]
+debug = "line-tables-only"
