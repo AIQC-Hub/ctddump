@@ -36,9 +36,14 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y libhdf5-dev libnetcdf-dev
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      # Pinned rather than `stable`: each Rust release adds clippy lints, and with
+      # `-D warnings` below a new release would fail CI on unchanged code. Raise
+      # this deliberately, after `cargo +<new> clippy --all-targets -- -D warnings`
+      # passes locally.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.99.1
           components: llvm-tools-preview, clippy
 
       - name: Install cargo-llvm-cov
