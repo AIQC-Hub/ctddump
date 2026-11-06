@@ -200,6 +200,9 @@ struct BBox {
     lat_max: Option<f64>,
 }
 
+/// A labelled accessor for one edge of a [`BBox`].
+type BBoxField = (&'static str, fn(&BBox) -> Option<f64>);
+
 impl BBox {
     fn from_platform_tsv(t: &Tsv) -> BBox {
         BBox {
@@ -852,7 +855,7 @@ fn bbox_table(kept: BBox, original: Option<BBox>) -> Table {
         headers.push("Original".to_string());
     }
 
-    let fields: [(&str, fn(&BBox) -> Option<f64>); 4] = [
+    let fields: [BBoxField; 4] = [
         ("Longitude min", |b| b.lon_min),
         ("Longitude max", |b| b.lon_max),
         ("Latitude min", |b| b.lat_min),

@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
@@ -152,7 +153,7 @@ fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, 
             e.path()
                 .file_name()
                 .and_then(|n| n.to_str())
-                .map_or(false, |name| glob_pat.matches(name))
+                .is_some_and(|name| glob_pat.matches(name))
         })
         .map(|e| e.path().to_path_buf())
         .collect();
@@ -259,14 +260,14 @@ fn scan_platform_index(files: &[PathBuf]) -> Result<PlatformIndex, Box<dyn Error
 
         let mut file_min: Option<String> = None;
         let mut file_max: Option<String> = None;
-        for (name, cnt) in pc.into_iter().zip(n.into_iter()) {
+        for (name, cnt) in pc.into_iter().zip(n) {
             // platform_code is always non-null; len() is always non-null.
             let (name, cnt) = (name.unwrap(), cnt.unwrap());
             *counts.entry(name.to_string()).or_insert(0) += cnt;
-            if file_min.as_deref().map_or(true, |m| name < m) {
+            if file_min.as_deref().is_none_or(|m| name < m) {
                 file_min = Some(name.to_string());
             }
-            if file_max.as_deref().map_or(true, |m| name > m) {
+            if file_max.as_deref().is_none_or(|m| name > m) {
                 file_max = Some(name.to_string());
             }
         }
@@ -408,67 +409,65 @@ pub fn run_concat_parquet(
     let ranges = partition_platform_ranges(&index.counts, common::chunk_rows() as u64);
 
     // Parallel path: renumber ranges concurrently into temp files, then concatenate
-    // the temp files in range order.
-    if parallel {
-        if !ranges.is_empty() {
-            let temp_paths: Vec<PathBuf> =
-                (0..ranges.len()).map(|i| temp_path_for(output_file, i)).collect();
+    // the temp files in range order. With no ranges, fall through to the
+    // sequential empty-output handling below.
+    if parallel && !ranges.is_empty() {
+        let temp_paths: Vec<PathBuf> =
+            (0..ranges.len()).map(|i| temp_path_for(output_file, i)).collect();
 
-            let work = || -> Vec<String> {
-                ranges
-                    .par_iter()
-                    .zip(temp_paths.par_iter())
-                    .filter_map(|((lo, hi), tmp)| {
-                        build_and_write_range(&index.spans, lo, hi, config, tmp).err()
-                    })
-                    .collect()
-            };
+        let work = || -> Vec<String> {
+            ranges
+                .par_iter()
+                .zip(temp_paths.par_iter())
+                .filter_map(|((lo, hi), tmp)| {
+                    build_and_write_range(&index.spans, lo, hi, config, tmp).err()
+                })
+                .collect()
+        };
 
-            // rayon's default 2 MiB worker stack overflows inside Polars' parquet
-            // writer on large ranges; match the 16 MiB stack used by batch mode.
-            const WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
-            let errors = rayon::ThreadPoolBuilder::new()
-                .stack_size(WORKER_STACK_SIZE)
-                .num_threads(n_threads)
-                .build()
-                .map_err(|e| format!("Failed to build thread pool: {}", e))?
-                .install(work);
+        // rayon's default 2 MiB worker stack overflows inside Polars' parquet
+        // writer on large ranges; match the 16 MiB stack used by batch mode.
+        const WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
+        let errors = rayon::ThreadPoolBuilder::new()
+            .stack_size(WORKER_STACK_SIZE)
+            .num_threads(n_threads)
+            .build()
+            .map_err(|e| format!("Failed to build thread pool: {}", e))?
+            .install(work);
 
-            if !errors.is_empty() {
-                for tmp in &temp_paths {
-                    let _ = std::fs::remove_file(tmp);
-                }
-                return Err(format!("Concat processing errors:\n{}", errors.join("\n")).into());
-            }
-
-            // Concatenate the per-range temp files in ascending range order.
-            let out_file = std::fs::File::create(output_file)
-                .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
-            let mut writer = ParquetWriter::new(out_file).set_parallel(false).batched(&schema)?;
-            let mut wrote_any = false;
-            for tmp in &temp_paths {
-                if !tmp.exists() {
-                    continue; // range produced no rows
-                }
-                let df = LazyFrame::scan_parquet(tmp, ScanArgsParquet::default())?
-                    .collect()
-                    .map_err(|e| format!("Cannot read temp file {}: {}", tmp.display(), e))?;
-                if df.height() > 0 {
-                    writer.write_batch(&df)?;
-                    wrote_any = true;
-                }
-            }
-            if !wrote_any {
-                writer.write_batch(&empty)?;
-            }
-            writer.finish()?;
-
+        if !errors.is_empty() {
             for tmp in &temp_paths {
                 let _ = std::fs::remove_file(tmp);
             }
-            return Ok(n);
+            return Err(format!("Concat processing errors:\n{}", errors.join("\n")).into());
         }
-        // No ranges: fall through to the sequential empty-output handling below.
+
+        // Concatenate the per-range temp files in ascending range order.
+        let out_file = std::fs::File::create(output_file)
+            .map_err(|e| format!("Cannot create {}: {}", output_file.display(), e))?;
+        let mut writer = ParquetWriter::new(out_file).set_parallel(false).batched(&schema)?;
+        let mut wrote_any = false;
+        for tmp in &temp_paths {
+            if !tmp.exists() {
+                continue; // range produced no rows
+            }
+            let df = LazyFrame::scan_parquet(tmp, ScanArgsParquet::default())?
+                .collect()
+                .map_err(|e| format!("Cannot read temp file {}: {}", tmp.display(), e))?;
+            if df.height() > 0 {
+                writer.write_batch(&df)?;
+                wrote_any = true;
+            }
+        }
+        if !wrote_any {
+            writer.write_batch(&empty)?;
+        }
+        writer.finish()?;
+
+        for tmp in &temp_paths {
+            let _ = std::fs::remove_file(tmp);
+        }
+        return Ok(n);
     }
 
     // Sequential path: one writer, ranges assembled and written in ascending order.
@@ -529,10 +528,11 @@ pub fn run_concat_header(
         let map: HashMap<String, serde_yaml::Value> = serde_yaml::from_str(&content)
             .map_err(|e| format!("Cannot parse {}: {}", file.display(), e))?;
         for (key, value) in map {
-            if combined.contains_key(&key) {
-                duplicates.push(format!("  key '{}' in {}", key, file.display()));
-            } else {
-                combined.insert(key, value);
+            match combined.entry(key) {
+                Entry::Occupied(e) => duplicates.push(format!("  key '{}' in {}", e.key(), file.display())),
+                Entry::Vacant(e) => {
+                    e.insert(value);
+                }
             }
         }
     }

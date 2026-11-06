@@ -28,7 +28,7 @@ pub fn collect_global_attributes(file: &netcdf::File, attr_names: &[&str]) -> Ha
     for &attr_name in attr_names {
         let attr_val = match file.attribute(attr_name) {
             Some(attr) => {
-                common::get_string_value(attr.value().unwrap()).unwrap_or_else(|| "".to_string())
+                common::get_string_value(attr.value().unwrap()).unwrap_or_default()
             }
             None => "".to_string(),
         };

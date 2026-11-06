@@ -65,8 +65,8 @@ fn write_fixture(path: &Path) {
         .unwrap();
     for i in 0..N_PLAT {
         // one row group per platform (2 obs)
-        let mut df = row(i, 1).vstack(&row(i, 2)).unwrap();
-        w.write_batch(&mut df).unwrap();
+        let df = row(i, 1).vstack(&row(i, 2)).unwrap();
+        w.write_batch(&df).unwrap();
     }
     w.finish().unwrap();
 }

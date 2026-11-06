@@ -232,7 +232,7 @@ mod tests {
     fn test_output_pairs_src_preserved() {
         // The src path in the pair must equal the original input
         let f = PathBuf::from("/data/file.nc");
-        let pairs = compute_output_pairs(&[f.clone()], None, "parquet").unwrap();
+        let pairs = compute_output_pairs(std::slice::from_ref(&f), None, "parquet").unwrap();
         assert_eq!(pairs[0].0, f);
     }
 
