@@ -7,7 +7,7 @@ use netcdf;
 use netcdf::{NcTypeDescriptor, types::NcVariableType};
 use gsw::conversions::{p_from_z, z_from_p};
 use super::cora_config::QcType;
-use super::source::{PlatformSource, SourceSpec};
+use super::source::{Param, PlatformSource, SourceSpec};
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]
@@ -652,9 +652,6 @@ pub fn get_qc_value_from_char_chunk(
     Ok(result)
 }
 
-/// Data-mode value used when a file carries no data-mode information at all.
-pub const DM_DEFAULT: &str = "R";
-
 /// Map one data-mode character to its output string. The valid codes are
 /// `R` (real-time), `A` (adjusted in real time) and `D` (delayed mode); anything
 /// else (the `' '` fill value, `'\0'`, junk) is missing and maps to `""`.
@@ -666,17 +663,22 @@ pub fn dm_from_char(c: char) -> String {
 }
 
 /// Resolve the single data-mode value that applies to a whole variable when its
-/// per-observation `<PARAM>_DM` variable is absent: the variable's `data_mode`
-/// attribute when it is one of `R`/`A`/`D`, else `fallback` (normally
-/// [`DM_DEFAULT`]). A mixed (`"M"`) or missing attribute, or a missing
-/// variable, also yields the fallback.
+/// per-observation `<PARAM>_DM` variable is absent, from the variable's
+/// `data_mode` attribute:
+///
+/// - one of `R`/`A`/`D`: that code;
+/// - absent or blank: `fallback` (the source's [`SourceSpec::dm_fallback`],
+///   `""` unless the user supplied a default);
+/// - anything else, notably `"M"` (mixed): `""`. Mixed means the mode varies
+///   per observation and only a `<PARAM>_DM` variable says which is which, so no
+///   single code (and no default) may be applied.
+///
+/// [`SourceSpec::dm_fallback`]: super::source::SourceSpec::dm_fallback
 pub fn dm_from_attribute(attr: Option<&str>, fallback: &str) -> String {
     match attr.map(str::trim) {
-        Some(s) if s.len() == 1 => {
-            let dm = dm_from_char(s.chars().next().unwrap());
-            if dm.is_empty() { fallback.to_string() } else { dm }
-        }
-        _ => fallback.to_string(),
+        None | Some("") => fallback.to_string(),
+        Some(s) if s.len() == 1 => dm_from_char(s.chars().next().unwrap()),
+        Some(_) => String::new(),
     }
 }
 
@@ -693,7 +695,8 @@ fn get_data_mode_attribute(file: &netcdf::File, var_name: &str) -> Option<String
 /// When the 2-D `[TIME, DEPTH]` char variable `dm_var` (e.g. `PRES_DM`) exists,
 /// each cell is mapped through [`dm_from_char`] (fill cells become `""`). When it
 /// is absent, every cell gets the value of `parent_var`'s `data_mode` attribute
-/// (see [`dm_from_attribute`]), which defaults to `fallback`.
+/// (see [`dm_from_attribute`]), which defaults to `fallback`. When `parent_var`
+/// itself is absent there is nothing to describe and every cell is `""`.
 pub fn get_dm_value_chunk(
     file: &netcdf::File,
     dm_var: &str,
@@ -704,6 +707,9 @@ pub fn get_dm_value_chunk(
     obs_len: usize,
 ) -> Result<Vec<String>, Box<dyn Error>> {
     let n = time_count * obs_len;
+    if file.variable(parent_var).is_none() {
+        return Ok(vec![String::new(); n]);
+    }
     if file.variable(dm_var).is_none() {
         let attr = get_data_mode_attribute(file, parent_var);
         return Ok(vec![dm_from_attribute(attr.as_deref(), fallback); n]);
@@ -718,7 +724,7 @@ pub fn get_dm_value_chunk(
 /// Read a 1-D per-profile char data-mode variable (CORA's `DATA_MODE[N_PROF]`)
 /// for the profile slice `[prof_offset, prof_offset + prof_count)` and tile each
 /// value `obs_len` times. Fill cells become `""`; a missing variable yields
-/// `fallback` (normally [`DM_DEFAULT`]) everywhere.
+/// `fallback` (`""` unless the user supplied a default) everywhere.
 pub fn get_dm_coordinate_value_chunk(
     file: &netcdf::File,
     var_name: &str,
@@ -734,6 +740,56 @@ pub fn get_dm_coordinate_value_chunk(
     let raw: Vec<NcChar> =
         get_coordinate_value_chunk(file, var_name, prof_offset, prof_count, obs_len, NcChar(b' ' as i8))?;
     Ok(raw.iter().map(|&NcChar(c)| dm_from_char(c as u8 as char)).collect())
+}
+
+/// Why whole variables of a `[profile, level]` file get an unknown (`""`) data
+/// mode, one note per parameter of `params` that is present in the file but has
+/// no `<PARAM>_DM` variable and no usable `data_mode` attribute (a mixed `"M"`
+/// one, or none at all when `spec` has no default). Empty when every present
+/// parameter's data mode comes from the file. A fill cell inside a `<PARAM>_DM`
+/// variable is ordinary and is not reported.
+pub fn dm_notes_time_depth(file: &netcdf::File, spec: &SourceSpec, params: &[&Param]) -> Vec<String> {
+    let fallback = spec.dm_fallback();
+    params
+        .iter()
+        .filter(|p| !p.name.is_empty() && file.variable(&p.name).is_some())
+        .filter(|p| p.dm.is_empty() || file.variable(&p.dm).is_none())
+        .filter_map(|p| {
+            let no_dm_var = if p.dm.is_empty() { "no data-mode variable".to_string() } else { format!("no {} variable", p.dm) };
+            let attr = get_data_mode_attribute(file, &p.name);
+            match attr.as_deref().map(str::trim) {
+                None | Some("") if fallback.is_empty() => {
+                    Some(format!("{} has {no_dm_var} and no data_mode attribute", p.name))
+                }
+                Some(s) if !s.is_empty() && dm_from_attribute(Some(s), fallback).is_empty() => {
+                    Some(format!("{} has data_mode \"{s}\" but {no_dm_var}", p.name))
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// Why a profile-level file gets an unknown (`""`) data mode throughout: it has
+/// no per-profile data-mode variable and `spec` has no default. `None` when the
+/// data mode comes from the file (fill cells inside it are not reported).
+pub fn dm_note_profile_level(file: &netcdf::File, spec: &SourceSpec) -> Option<String> {
+    let found = !spec.data_mode.is_empty() && file.variable(&spec.data_mode).is_some();
+    if found || !spec.dm_fallback().is_empty() {
+        return None;
+    }
+    Some(if spec.data_mode.is_empty() {
+        "no data-mode variable".to_string()
+    } else {
+        format!("no {} variable", spec.data_mode)
+    })
+}
+
+/// Print the data-mode notes for one file as a single warning line.
+pub fn warn_dm_notes(basename: &str, notes: &[String]) {
+    if !notes.is_empty() {
+        eprintln!("warning: {basename}: data mode left empty: {}", notes.join("; "));
+    }
 }
 
 /// Where `conv[i] == 1` (the pressure value was derived from depth), take the data
@@ -954,26 +1010,32 @@ mod tests {
 
     #[test]
     fn test_dm_from_attribute_single_code_is_used() {
-        assert_eq!(dm_from_attribute(Some("R"), DM_DEFAULT), "R");
-        assert_eq!(dm_from_attribute(Some("A"), DM_DEFAULT), "A");
-        assert_eq!(dm_from_attribute(Some("D"), DM_DEFAULT), "D");
+        assert_eq!(dm_from_attribute(Some("R"), ""), "R");
+        assert_eq!(dm_from_attribute(Some("A"), ""), "A");
+        assert_eq!(dm_from_attribute(Some("D"), ""), "D");
         assert_eq!(dm_from_attribute(Some(" D "), "R"), "D");
     }
 
+    /// No attribute (or a blank one): nothing is known, so the fallback, which
+    /// is "" unless the user supplied a default.
     #[test]
-    fn test_dm_from_attribute_falls_back_to_default() {
-        assert_eq!(dm_from_attribute(None, DM_DEFAULT), DM_DEFAULT);
-        assert_eq!(dm_from_attribute(Some("M"), DM_DEFAULT), DM_DEFAULT);
-        assert_eq!(dm_from_attribute(Some(""), DM_DEFAULT), DM_DEFAULT);
-        assert_eq!(dm_from_attribute(Some(" "), DM_DEFAULT), DM_DEFAULT);
-        assert_eq!(dm_from_attribute(Some("RD"), DM_DEFAULT), DM_DEFAULT);
+    fn test_dm_from_attribute_absent_takes_fallback() {
+        assert_eq!(dm_from_attribute(None, ""), "");
+        assert_eq!(dm_from_attribute(Some(""), ""), "");
+        assert_eq!(dm_from_attribute(Some(" "), ""), "");
+        assert_eq!(dm_from_attribute(None, "D"), "D");
+        assert_eq!(dm_from_attribute(Some(" "), "D"), "D");
     }
 
+    /// Mixed ("M") or junk: the mode varies per observation, so it is unknown,
+    /// and a default must not paper over it (that would label D data as R).
     #[test]
-    fn test_dm_from_attribute_custom_fallback() {
-        assert_eq!(dm_from_attribute(None, "D"), "D");
-        assert_eq!(dm_from_attribute(Some("M"), "D"), "D");
-        assert_eq!(dm_from_attribute(Some("A"), "D"), "A");
+    fn test_dm_from_attribute_mixed_or_junk_is_unknown() {
+        for fallback in ["", "R", "D"] {
+            assert_eq!(dm_from_attribute(Some("M"), fallback), "", "fallback {fallback:?}");
+            assert_eq!(dm_from_attribute(Some("RD"), fallback), "", "fallback {fallback:?}");
+            assert_eq!(dm_from_attribute(Some("x"), fallback), "", "fallback {fallback:?}");
+        }
     }
 
     #[test]

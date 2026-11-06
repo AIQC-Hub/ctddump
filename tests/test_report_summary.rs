@@ -555,7 +555,8 @@ fn conversion_shows_data_mode_table() {
         md.contains("| Temperature | 500 | 50.0% | 0 | 0.0% | 500 | 50.0% |"),
         "temperature row wrong\n{md}"
     );
-    // psal: R 900 / A 50 / D 0; the 50 unset observations leave the row at 95%.
+    // psal: R 900 / A 50 / D 0; without unknown counts (a report made before
+    // they existed) there are no Unknown columns and the row sums to 95%.
     assert!(
         md.contains("| Salinity | 900 | 90.0% | 50 | 5.0% | 0 | 0.0% |"),
         "salinity row wrong\n{md}"
@@ -565,6 +566,34 @@ fn conversion_shows_data_mode_table() {
 
     let html = run_summary(&rep, &out, "dm", "html", &dir.path().join("dm.html"));
     assert!(html.contains("Delayed mode (D)"), "data-mode table missing from HTML");
+}
+
+/// A Conversion TSV with `<param>_dm_unknown` counts gets Unknown columns.
+#[test]
+fn conversion_data_mode_table_shows_unknown() {
+    let dir = tempfile::tempdir().unwrap();
+    let rep = dir.path().join("report");
+    let out = dir.path().join("output");
+    let tsv = rep.join("convert").join("dm.parquet.tsv");
+    fs::create_dir_all(tsv.parent().unwrap()).unwrap();
+    fs::write(
+        &tsv,
+        "platform_code\tn_profiles\tn_obs\ttemp_dm_r\ttemp_dm_a\ttemp_dm_d\ttemp_dm_unknown\n\
+         P1\t10\t600\t100\t0\t300\t200\n\
+         P2\t10\t400\t400\t0\t0\t0\n",
+    )
+    .unwrap();
+
+    let md = run_summary(&rep, &out, "dm", "md", &dir.path().join("dm.md"));
+    assert!(
+        md.contains("| Parameter | Real-time (R) | % R | Adjusted (A) | % A | Delayed mode (D) | % D | Unknown | % Unknown |"),
+        "data-mode header wrong\n{md}"
+    );
+    // temp: R 500 / A 0 / D 300 / unknown 200 of 1000 obs.
+    assert!(
+        md.contains("| Temperature | 500 | 50.0% | 0 | 0.0% | 300 | 30.0% | 200 | 20.0% |"),
+        "temperature row wrong\n{md}"
+    );
 }
 
 #[test]

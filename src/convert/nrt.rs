@@ -43,6 +43,14 @@ pub(crate) fn write_parquet(
     // sourced/derived branches are equivalent, so this never changes PRES-only output.
     let has_deph = nrt_config.has_deph_source || file.variable(&spec.deph.name).is_some();
 
+    // Once per file: say which parameters have no data mode in the file, so an
+    // empty `_dm` is not mistaken for a fill cell or read as real-time.
+    let mut dm_params = vec![&spec.temp, &spec.psal, &spec.pres];
+    if has_deph {
+        dm_params.push(&spec.deph);
+    }
+    common::warn_dm_notes(basename, &common::dm_notes_time_depth(file, spec, &dm_params));
+
     let out_file = std::fs::File::create(target_file)?;
 
     // Stream the file in TIME chunks, writing each chunk as a Parquet row group so

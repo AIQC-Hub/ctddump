@@ -36,8 +36,12 @@ pub fn run(
 const MEASURES: [&str; 3] = ["temp", "psal", "pres"];
 
 /// Data-mode codes counted per `<param>_dm` column: real-time, adjusted in real
-/// time, delayed mode. Fill cells ("") are not counted.
+/// time, delayed mode. Cells with no code ("": a fill cell, or no data mode in
+/// the source file) are counted separately as `<param>_dm_unknown`.
 const DM_CODES: [&str; 3] = ["R", "A", "D"];
+
+/// Suffix of the count of `<param>_dm` cells holding no code.
+const DM_UNKNOWN: &str = "unknown";
 
 /// Optional report columns, decided by which columns the scanned file carries.
 struct Opts {
@@ -99,6 +103,13 @@ fn measure_aggs(o: &Opts) -> Vec<Expr> {
                         .alias(dm_count_name(name, code).as_str()),
                 );
             }
+            v.push(
+                col(dm.as_str())
+                    .eq(lit(""))
+                    .or(col(dm.as_str()).is_null())
+                    .sum()
+                    .alias(dm_count_name(name, DM_UNKNOWN).as_str()),
+            );
         }
     }
     v
@@ -114,6 +125,7 @@ fn measure_names(o: &Opts) -> Vec<String> {
         v.push(format!("{name}_mean"));
         if o.has_dm(name) {
             v.extend(DM_CODES.iter().map(|code| dm_count_name(name, code)));
+            v.push(dm_count_name(name, DM_UNKNOWN));
         }
     }
     v

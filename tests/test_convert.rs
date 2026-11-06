@@ -301,10 +301,11 @@ fn test_convert_nrt_ar_dm_from_variables() {
     }
 }
 
-/// `AR_PR_CT_ITP-71` has no `*_DM` variables (and `data_mode = "R"` on each
-/// parameter), so every observation is real-time.
+/// `AR_PR_CT_ITP-71` has no `*_DM` variables but `data_mode = "R"` on each
+/// parameter (and a global `data_mode = "M"`, which is not consulted), so
+/// every observation is real-time.
 #[test]
-fn test_convert_nrt_ar_dm_absent_defaults_to_r() {
+fn test_convert_nrt_ar_dm_from_attribute() {
     let df = convert_to_df("nrt_ar", "./tests/test_data/AR_PR_CT_ITP-71.nc");
     assert!(df.height() > 0);
     for col in DM_COLS {
@@ -312,6 +313,18 @@ fn test_convert_nrt_ar_dm_absent_defaults_to_r() {
         assert_eq!(counts.len(), 1, "{col}: {counts:?}");
         assert_eq!(counts.get("R"), Some(&df.height()), "{col}: {counts:?}");
     }
+}
+
+/// `MO_PR_CT_SicilyChannel_1990` has no TEMP variable: `temp` is all NaN and
+/// `temp_dm` is unknown rather than a default `R`; PSAL and PRES keep the `R`
+/// of their `data_mode` attributes.
+#[test]
+fn test_convert_nrt_dm_of_absent_parameter_is_unknown() {
+    let df = convert_to_df("nrt_mo", "./tests/test_data/MO_PR_CT_SicilyChannel_1990.nc");
+    assert!(df.height() > 0);
+    assert_eq!(value_counts(&df, "temp_dm").get(""), Some(&df.height()));
+    assert_eq!(value_counts(&df, "psal_dm").get("R"), Some(&df.height()));
+    assert_eq!(value_counts(&df, "pres_dm").get("R"), Some(&df.height()));
 }
 
 /// Pressure derived from DEPH carries a data mode too (inherited from DEPH).

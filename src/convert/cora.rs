@@ -33,6 +33,10 @@ pub(crate) fn write_parquet(
     let n_profs = dimension_len(file, &spec.profile_dim)?;
     let n_levels = dimension_len(file, &spec.level_dim)?;
 
+    // Once per file: a missing per-profile data-mode variable leaves every `_dm`
+    // cell empty; say so rather than let it pass for real-time.
+    common::warn_dm_notes(basename, &common::dm_note_profile_level(file, spec).into_iter().collect::<Vec<_>>());
+
     let out_file = std::fs::File::create(target_file)?;
 
     // Stream the file in N_PROF chunks, writing each as a Parquet row group so the
@@ -92,7 +96,8 @@ fn collect_cora_chunk(
 
     // Data mode: CORA has no per-parameter `<PARAM>_DM` variables, only the
     // per-profile `DATA_MODE[N_PROF]`, which applies to every parameter of the
-    // profile. Missing variable -> "R"; fill cells -> "".
+    // profile. Fill cells -> ""; a missing variable -> "" (or the generic
+    // `[defaults] data_mode`).
     let data_mode: Vec<String> = common::get_dm_coordinate_value_chunk(file, &spec.data_mode, spec.dm_fallback(), prof_offset, prof_count, n_levels)?;
 
     // TEMP

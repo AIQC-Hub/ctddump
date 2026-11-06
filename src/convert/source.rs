@@ -40,7 +40,8 @@ pub struct Defaults {
     pub longitude: Option<f64>,
     pub latitude: Option<f64>,
     /// Data mode used when a file has no data-mode variable or attribute.
-    /// `None` means [`super::common::DM_DEFAULT`] (`"R"`).
+    /// `None` leaves the data mode unknown (`""`): nothing in the file says
+    /// which mode applies, so none is assumed.
     pub data_mode: Option<String>,
 }
 
@@ -116,8 +117,9 @@ impl SourceSpec {
         }
     }
 
-    /// The data mode to use when a file carries none.
+    /// The data mode to use when a file carries none: the user's default, else
+    /// `""` (unknown).
     pub fn dm_fallback(&self) -> &str {
-        self.defaults.data_mode.as_deref().unwrap_or(super::common::DM_DEFAULT)
+        self.defaults.data_mode.as_deref().unwrap_or("")
     }
 }

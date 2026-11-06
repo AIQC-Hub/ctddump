@@ -357,7 +357,7 @@ All converters produce a uniform, observation-level flat table:
 | `filename` | `String` | source file stem |
 | `temp`, `psal`, `pres`, `deph` | `f32` | NaN where missing |
 | `temp_qc`, `psal_qc`, `pres_qc`, `deph_qc` | `String` | single-char flag; `""` if missing |
-| `temp_dm`, `psal_dm`, `pres_dm` | `String` | data mode `R` / `A` / `D` (real-time / adjusted / delayed); `""` for a fill cell |
+| `temp_dm`, `psal_dm`, `pres_dm` | `String` | data mode `R` / `A` / `D` (real-time / adjusted / delayed); `""` when unknown (fill cell, or no data mode in the file) |
 | `pres_conv`, `deph_conv` | `i8` | `1` = derived by conversion |
 
 ## Development
