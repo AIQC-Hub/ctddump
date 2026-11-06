@@ -49,6 +49,10 @@ ctddump batch convert nrt_ar --output ./parquet ./netcdf
 ctddump concat convert ./parquet arctic.parquet
 ```
 
+To see what the full pipeline produces, browse the
+[live example report site](https://aiqc-hub.github.io/ctddump-report-example/),
+built with the [helper scripts](./scripts.md#summary_sitesh).
+
 New here? Start with [Installation](./installation.md), skim the
 [Commands](./commands/convert.md), then follow an end-to-end
 [regional workflow](./examples/arctic.md).
