@@ -365,3 +365,94 @@ fn test_convert_invalid_config_file_errors() {
     assert!(err.contains("Cannot read config file"), "unexpected error: {err}");
     assert!(!out_dir.path().join("out.parquet").exists());
 }
+
+// ── failures ──────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_batch_convert_reports_failed_files_and_converts_the_rest() {
+    let (_src_guard, src_dir) = setup_src(&["./tests/test_data/AR_PR_CT_ITP-71.nc"]);
+    fs::write(src_dir.join("AR_PR_CT_BROKEN.nc"), "not a NetCDF file").unwrap();
+    let out_dir = tempfile::tempdir().unwrap();
+
+    let args = vec![
+        "batch".to_string(), "convert".to_string(), "nrt_ar".to_string(),
+        "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
+        src_dir.to_str().unwrap().to_string(),
+    ];
+    let err = handle_dispatch(&args).unwrap_err().to_string();
+    assert!(err.starts_with("Batch processing errors:"), "unexpected error: {err}");
+    assert!(err.contains("AR_PR_CT_BROKEN.nc"), "error should name the bad file: {err}");
+    assert!(!err.contains("ITP-71"), "the good file should not be reported: {err}");
+    assert!(out_dir.path().join("AR_PR_CT_ITP-71.parquet").exists(), "good file still converted");
+}
+
+#[test]
+fn test_single_file_failures_return_errors() {
+    // `convert` and `header` return an error for an unreadable file (so the
+    // caller decides what to do) rather than exiting the process.
+    let dir = tempfile::tempdir().unwrap();
+    let bad = dir.path().join("broken.nc");
+    fs::write(&bad, "not a NetCDF file").unwrap();
+    let bad = bad.to_str().unwrap().to_string();
+    let dest = |ext: &str| dir.path().join(format!("out.{ext}")).to_str().unwrap().to_string();
+
+    for args in [
+        vec!["convert", "nrt_ar"],
+        vec!["convert", "cora"],
+        vec!["header", "nrt"],
+        vec!["header", "cora"],
+    ] {
+        let ext = if args[0] == "convert" { "parquet" } else { "yaml" };
+        let mut args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        args.extend([bad.clone(), dest(ext)]);
+        assert!(handle_dispatch(&args).is_err(), "{args:?} should fail");
+    }
+}
+
+// ── default patterns per region ───────────────────────────────────────────────
+
+#[test]
+fn test_batch_convert_region_default_patterns() {
+    // One file per NRT region in the same directory: each region's batch picks
+    // only its own files through its built-in pattern.
+    let (_src_guard, src_dir) = setup_src(&[
+        "./tests/test_data/AR_PR_CT_ITP-71.nc",
+        "./tests/test_data/BO_PR_CT_SMHI3125.nc",
+        "./tests/test_data/MO_PR_CT_SicilyChannel_2017.nc",
+        "./tests/test_data/GL_PR_CT_EXEC004K.nc",
+    ]);
+    for (region, expect) in [
+        ("nrt_ar", "AR_PR_CT_ITP-71.parquet"),
+        ("nrt_bo", "BO_PR_CT_SMHI3125.parquet"),
+        ("nrt_mo", "MO_PR_CT_SicilyChannel_2017.parquet"),
+        ("nrt_gl", "GL_PR_CT_EXEC004K.parquet"),
+    ] {
+        let out_dir = tempfile::tempdir().unwrap();
+        let args = vec![
+            "batch".to_string(), "convert".to_string(), region.to_string(),
+            "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
+            src_dir.to_str().unwrap().to_string(),
+        ];
+        handle_dispatch(&args).unwrap();
+        assert_eq!(file_names(out_dir.path()), vec![expect], "{region}");
+    }
+}
+
+#[test]
+fn test_batch_header_generic() {
+    let (_src_guard, src_dir) = setup_src(&[
+        "./tests/test_data/AR_PR_CT_ITP-71.nc",
+        "./tests/test_data/CO_DMQCGL01_19861204_PR_CT.nc",
+    ]);
+    let out_dir = tempfile::tempdir().unwrap();
+    let args = vec![
+        "batch".to_string(), "header".to_string(), "generic".to_string(),
+        "--output".to_string(), out_dir.path().to_str().unwrap().to_string(),
+        src_dir.to_str().unwrap().to_string(),
+    ];
+    handle_dispatch(&args).unwrap();
+    assert_eq!(
+        file_names(out_dir.path()),
+        vec!["AR_PR_CT_ITP-71.yaml", "CO_DMQCGL01_19861204_PR_CT.yaml"]
+    );
+}

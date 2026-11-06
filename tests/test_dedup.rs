@@ -290,3 +290,92 @@ fn test_markdup_and_dedup_empty_input_write_empty_output() {
     assert_eq!(df.height(), 0);
     assert_eq!(df.get_column_names_owned(), in_cols, "schema kept");
 }
+
+// ── key options: --round-mode and --time-format ──────────────────────────────
+
+/// Three pairs of one-observation profiles, keyed with `--decimals 0`. Each
+/// pair has its own latitude, so only its two longitudes decide whether it is a
+/// duplicate under a given rounding mode:
+///   P (0.2, 0.8)   round 0≠1   floor 0=0   ceil 1=1   trunc 0=0
+///   Q (0.8, 1.0)   round 1=1   floor 0≠1   ceil 1=1   trunc 0≠1
+///   R (-0.2, 0.2)  round 0=0   floor -1≠0  ceil 0≠1   trunc 0=0
+fn write_rounding_fixture(path: &Path) {
+    let rows: &[(&str, f64, f64)] = &[
+        ("P1", 0.2, 10.0),
+        ("P2", 0.8, 10.0),
+        ("Q1", 0.8, 20.0),
+        ("Q2", 1.0, 20.0),
+        ("R1", -0.2, 30.0),
+        ("R2", 0.2, 30.0),
+    ];
+    let h = rows.len();
+    let ts = Series::new("profile_timestamp".into(), vec![D_2020_01_01; h])
+        .cast(&DataType::Datetime(TimeUnit::Milliseconds, None))
+        .unwrap();
+    let mut df = DataFrame::new(vec![
+        Series::new("platform_code".into(), rows.iter().map(|r| r.0).collect::<Vec<_>>()),
+        Series::new("profile_no".into(), vec![1u32; h]),
+        Series::new("observation_no".into(), vec![1u32; h]),
+        Series::new("profile_time".into(), vec![D_2020_01_01 as f64; h]),
+        ts,
+        Series::new("longitude".into(), rows.iter().map(|r| r.1).collect::<Vec<_>>()),
+        Series::new("latitude".into(), rows.iter().map(|r| r.2).collect::<Vec<_>>()),
+    ])
+    .unwrap();
+    ParquetWriter::new(fs::File::create(path).unwrap()).finish(&mut df).unwrap();
+}
+
+#[test]
+fn test_markdup_round_modes() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let marked = dir.path().join("marked.parquet");
+    let dups = dir.path().join("dups.tsv");
+    write_rounding_fixture(&src);
+
+    for (mode, expect_dup) in [
+        ("round", ["Q", "R"].as_slice()),
+        ("floor", ["P"].as_slice()),
+        ("ceil", ["P", "Q"].as_slice()),
+        ("trunc", ["P", "R"].as_slice()),
+    ] {
+        dispatch(&[
+            "markdup", "--decimals", "0", "--round-mode", mode,
+            src.to_str().unwrap(), marked.to_str().unwrap(), dups.to_str().unwrap(),
+        ]);
+        let mut got: Vec<String> = dup_flags(&marked)
+            .into_iter()
+            .filter(|(_, dup)| *dup)
+            .map(|((code, _), _)| code[..1].to_string())
+            .collect();
+        got.sort();
+        got.dedup();
+        assert_eq!(got, expect_dup, "--round-mode {mode}");
+    }
+}
+
+#[test]
+fn test_markdup_time_format() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let marked = dir.path().join("marked.parquet");
+    let dups = dir.path().join("dups.tsv");
+    write_fixture(&src);
+    let args = |fmt: &'static str| -> Vec<String> {
+        ["markdup", "--time-format", fmt, src.to_str().unwrap(), marked.to_str().unwrap(), dups.to_str().unwrap()]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    };
+
+    // Keyed to the hour, A/1 (00:00) and B/1 (06:00) are no longer duplicates;
+    // D/1 and E/1 (both 00:00) still are.
+    handle_dispatch(&args("%Y-%m-%dT%H")).unwrap();
+    let f = dup_flags(&marked);
+    assert!(!f[&("A".to_string(), 1)] && !f[&("B".to_string(), 1)]);
+    assert!(f[&("D".to_string(), 1)] && f[&("E".to_string(), 1)]);
+
+    // A malformed format is a clean error, not a panic.
+    let err = handle_dispatch(&args("%Y-%Q")).unwrap_err().to_string();
+    assert!(err.contains("invalid --time-format"), "unexpected error: {err}");
+}

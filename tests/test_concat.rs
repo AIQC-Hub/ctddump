@@ -379,3 +379,35 @@ fn test_concat_convert_all_empty_inputs_write_empty_file() {
         assert_eq!(Some(df.schema()), schema, "threads={threads}: schema kept");
     }
 }
+
+// ── concat convert: a failing range ───────────────────────────────────────────
+
+#[test]
+fn test_concat_convert_threads_error_removes_temp_files() {
+    let parquet_dir = make_parquet_dir(
+        &["./tests/test_data/AR_PR_CT_ITP-71.nc", "./tests/test_data/AR_PR_CT_58KN.nc"],
+        "nrt_ar",
+    );
+    // Give one file a different `temp` type. Both platforms fall in one range,
+    // so merging that range fails.
+    let path = parquet_dir.path().join("AR_PR_CT_58KN.parquet");
+    let mut df = read_parquet(&path);
+    let temp = df.column("temp").unwrap().cast(&DataType::Float64).unwrap();
+    df.with_column(temp).unwrap();
+    ParquetWriter::new(fs::File::create(&path).unwrap()).finish(&mut df).unwrap();
+
+    let out_dir = tempfile::tempdir().unwrap();
+    let out = out_dir.path().join("merged.parquet");
+    let args: Vec<String> = [
+        "concat", "convert", "--threads", "2",
+        parquet_dir.path().to_str().unwrap(), out.to_str().unwrap(),
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let err = handle_dispatch(&args).unwrap_err().to_string();
+    assert!(err.starts_with("Concat processing errors:"), "unexpected error: {err}");
+
+    let left: Vec<_> = fs::read_dir(out_dir.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert!(left.is_empty(), "temp files left behind: {left:?}");
+}

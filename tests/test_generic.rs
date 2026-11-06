@@ -450,3 +450,143 @@ fn platform_from_string_and_integer_variables() {
         assert_eq!(p[3], expected[1], "{kind}");
     }
 }
+
+/// The cruise file with packed latitude, a filled longitude and a char time QC.
+fn write_cruise_cf_coords(path: &Path) {
+    let mut f = netcdf::create(path).unwrap();
+    f.add_dimension("cast", 2).unwrap();
+    f.add_dimension("level", 3).unwrap();
+
+    let mut t = f.add_variable::<f64>("time", &["cast"]).unwrap();
+    t.put_attribute("units", "days since 2000-01-01").unwrap();
+    t.put_values(&[0.5, 1.0], ..).unwrap();
+
+    // Packed: value = raw * 0.01 + 50.
+    let mut lat = f.add_variable::<i16>("lat", &["cast"]).unwrap();
+    lat.put_attribute("scale_factor", 0.01f64).unwrap();
+    lat.put_attribute("add_offset", 50.0f64).unwrap();
+    lat.put_values(&[1000i16, 1150], ..).unwrap();
+
+    let mut lon = f.add_variable::<f64>("lon", &["cast"]).unwrap();
+    lon.set_fill_value(-999.0f64).unwrap();
+    lon.put_values(&[20.0, -999.0], ..).unwrap();
+
+    let mut tqc = f.add_variable_with_type("tqc", &["cast"], &NcVariableType::Char).unwrap();
+    tqc.put_values(&chars("4 ", 2), ..).unwrap();
+
+    let mut depth = f.add_variable::<f32>("depth", &["cast", "level"]).unwrap();
+    depth.put_values(&[5.0f32, 10.0, 15.0, 5.0, 10.0, 15.0], ..).unwrap();
+    let mut temp = f.add_variable::<f32>("TEMP", &["cast", "level"]).unwrap();
+    temp.put_values(&[5.0f32, 4.5, 4.0, 6.0, 5.5, 5.0], ..).unwrap();
+}
+
+#[test]
+fn coordinates_are_cf_decoded_and_char_qc_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("cruise.nc");
+    let dest = dir.path().join("cruise.parquet");
+    write_cruise_cf_coords(&src);
+    let map = format!("{CRUISE_MAP}\n").replace("deph = \"depth\"", "deph = \"depth\"\ntime_qc = \"tqc\"");
+    let map = write_map(dir.path(), "map.toml", &map.replace("[platform]\nvariable = \"ship\"\n", ""));
+
+    convert(Some(&map), &[], &src, &dest).unwrap();
+    let df = read(&dest);
+    assert_eq!(df.height(), 6);
+
+    // Packed latitude is unpacked, per profile and tiled over its levels.
+    let lat = f64s(&df, "latitude");
+    assert!((lat[0] - 60.0).abs() < 1e-4 && (lat[2] - 60.0).abs() < 1e-4, "{lat:?}");
+    assert!((lat[3] - 61.5).abs() < 1e-4, "{lat:?}");
+    // A longitude equal to its _FillValue becomes NaN, not -999.
+    let lon = f64s(&df, "longitude");
+    assert_eq!(lon[0], 20.0);
+    assert!(lon[3..].iter().all(|v| v.is_nan()), "{lon:?}");
+    // Char time QC: a blank flag is empty.
+    assert_eq!(strs(&df, "time_qc"), ["4", "4", "4", "", "", ""]);
+}
+
+#[test]
+fn platform_from_scalar_variables_and_platform_number_default() {
+    // Each variant adds a platform variable to the cruise file; `None` as the
+    // mapping's variable means "no [platform] section" (the profile-level
+    // default, PLATFORM_NUMBER).
+    let cases: [(&str, Option<&str>, [&str; 2]); 4] = [
+        ("scalar_int", Some("station"), ["7", "7"]),
+        ("scalar_string", Some("station"), ["RV SOLO", "RV SOLO"]),
+        ("char_1d", Some("station"), ["BUOY9", "BUOY9"]),
+        ("platform_number", None, ["ARGO1", "ARGO2"]),
+    ];
+    for (kind, var, expected) in cases {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("cruise.nc");
+        let dest = dir.path().join("cruise.parquet");
+        write_cruise(&src);
+        {
+            let mut f = netcdf::append(&src).unwrap();
+            match kind {
+                "scalar_int" => {
+                    let mut v = f.add_variable::<i32>("station", &[]).unwrap();
+                    v.put_values(&[7i32], ..).unwrap();
+                }
+                "scalar_string" => {
+                    let mut v = f.add_variable_with_type("station", &[], &NcVariableType::String).unwrap();
+                    v.put_string(" RV SOLO ", ..).unwrap();
+                }
+                "char_1d" => {
+                    let mut v = f.add_variable_with_type("station", &["strlen"], &NcVariableType::Char).unwrap();
+                    v.put_values(&chars("BUOY9", 8), ..).unwrap();
+                }
+                _ => {
+                    let mut v = f
+                        .add_variable_with_type("PLATFORM_NUMBER", &["cast", "strlen"], &NcVariableType::Char)
+                        .unwrap();
+                    let mut names = chars("ARGO1", 8);
+                    names.extend(chars("ARGO2", 8));
+                    v.put_values(&names, ..).unwrap();
+                }
+            }
+        }
+        let platform = match var {
+            Some(v) => format!("[platform]\nvariable = \"{v}\"\n"),
+            None => String::new(),
+        };
+        let map = write_map(
+            dir.path(),
+            "map.toml",
+            &CRUISE_MAP.replace("[platform]\nvariable = \"ship\"\n", &platform),
+        );
+
+        convert(Some(&map), &[], &src, &dest).unwrap();
+        let p = strs(&read(&dest), "platform_code");
+        assert_eq!([p[0].as_str(), p[3].as_str()], expected, "{kind}");
+    }
+}
+
+#[test]
+fn platform_from_named_global_attribute() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("mooring.nc");
+    let dest = dir.path().join("mooring.parquet");
+    write_mooring(&src, Some("days since 1950-01-01"), None);
+    let map = MOORING_MAP.replace("platform_code = \"MOOR1\"\n", "") + "\n[platform]\nattribute = \"station_id\"\n";
+    let map = write_map(dir.path(), "map.toml", &map);
+
+    convert(Some(&map), &[], &src, &dest).unwrap();
+    assert!(strs(&read(&dest), "platform_code").iter().all(|p| p == "42"));
+}
+
+#[test]
+fn invalid_mappings_are_errors() {
+    let mooring = |p: &Path| write_mooring(p, Some("days since 1950-01-01"), None);
+    let cases = [
+        (MOORING_MAP.replace("data_mode = \"D\"", "data_mode = \"X\""), "data_mode must be \"R\", \"A\" or \"D\""),
+        (MOORING_MAP.replace("longitude = 20.0", "longitude = 400.0"), "[defaults] longitude 400 is out of range"),
+        (format!("{MOORING_MAP}latitude = -95.0\n"), "[defaults] latitude -95 is out of range"),
+        (MOORING_MAP.replace("time = \"time\"", "time = \"t\""), "time variable \"t\" not found"),
+        (MOORING_MAP.replace("pres = \"pressure\"", "pres = \"P\""), "neither pressure \"P\" nor depth"),
+        (MOORING_MAP.replace("temp = \"temperature\"", "temp = \"time\""), "variable \"time\" has dimensions [\"time\"]; expected [\"time\", \"z\"]"),
+    ];
+    for (map, needle) in cases {
+        expect_error(&map, mooring, needle);
+    }
+}
