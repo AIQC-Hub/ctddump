@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-06
+
 ### Added
 - CI reports test coverage to Codecov, and fails on any `cargo clippy` warning
 - CI, Codecov and CodeFactor badges in the README, placed under the title
@@ -363,7 +365,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.1...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.1...v0.35.0
 [0.34.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.0...v0.34.1
 [0.34.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.32.1...v0.33.0
