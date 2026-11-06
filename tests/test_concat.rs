@@ -345,3 +345,37 @@ fn test_concat_header_duplicate_key_error() {
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("Duplicate keys"));
 }
+
+// ── concat convert: empty inputs ──────────────────────────────────────────────
+
+#[test]
+fn test_concat_convert_all_empty_inputs_write_empty_file() {
+    // Two converted files truncated to zero rows: same schema, no data.
+    let parquet_dir = make_parquet_dir(
+        &["./tests/test_data/AR_PR_CT_ITP-71.nc", "./tests/test_data/AR_PR_CT_58KN.nc"],
+        "nrt_ar",
+    );
+    let mut schema = None;
+    for name in ["AR_PR_CT_ITP-71.parquet", "AR_PR_CT_58KN.parquet"] {
+        let path = parquet_dir.path().join(name);
+        let mut df = read_parquet(&path).head(Some(0));
+        ParquetWriter::new(fs::File::create(&path).unwrap()).finish(&mut df).unwrap();
+        schema = Some(df.schema());
+    }
+
+    // Both the sequential path and the threaded one must produce a valid file.
+    for threads in ["1", "4"] {
+        let output = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
+        let args = vec![
+            "concat".to_string(), "convert".to_string(),
+            "--threads".to_string(), threads.to_string(),
+            parquet_dir.path().to_str().unwrap().to_string(),
+            output.path().to_str().unwrap().to_string(),
+        ];
+        handle_dispatch(&args).unwrap();
+
+        let df = read_parquet(output.path());
+        assert_eq!(df.height(), 0, "threads={threads}");
+        assert_eq!(Some(df.schema()), schema, "threads={threads}: schema kept");
+    }
+}

@@ -344,3 +344,65 @@ fn test_sqlite_rejects_bad_target_table() {
     ])
     .is_err());
 }
+
+/// Rewrite the standard fixture with a different `institution` column.
+fn write_fixture_with_institution(path: &Path, institution: [&str; 6]) {
+    write_fixture(path);
+    let mut df = ParquetReader::new(std::fs::File::open(path).unwrap()).finish().unwrap();
+    df.with_column(Series::new("institution".into(), institution.to_vec())).unwrap();
+    ParquetWriter::new(std::fs::File::create(path).unwrap())
+        .finish(&mut df)
+        .unwrap();
+}
+
+#[test]
+fn test_sqlite_added_platform_passthrough_column() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let out = dir.path().join("out.sqlite");
+    // Platform A's first profile has an empty (unknown) institution; it must
+    // yield to the value from A's second profile rather than conflict with it.
+    write_fixture_with_institution(&src, ["", "", "IMR", "IMR", "NOAA", "NOAA"]);
+
+    dispatch(&[
+        "sqlite",
+        "--add-col",
+        "platform.institution",
+        src.to_str().unwrap(),
+        out.to_str().unwrap(),
+    ])
+    .unwrap();
+
+    let conn = Connection::open(&out).unwrap();
+    let inst = |code: &str| -> String {
+        conn.query_row(
+            "SELECT institution FROM platform WHERE platform_code=?1",
+            [code],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(inst("A"), "IMR");
+    assert_eq!(inst("B"), "NOAA");
+    assert_eq!(count(&conn, "SELECT COUNT(*) FROM platform"), 2);
+}
+
+#[test]
+fn test_sqlite_platform_passthrough_not_constant_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let out = dir.path().join("out.sqlite");
+    // Constant within each profile, but platform A's two profiles disagree.
+    write_fixture_with_institution(&src, ["IMR", "IMR", "SMHI", "SMHI", "NOAA", "NOAA"]);
+
+    let err = dispatch(&[
+        "sqlite",
+        "--add-col",
+        "platform.institution",
+        src.to_str().unwrap(),
+        out.to_str().unwrap(),
+    ])
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("not constant across platform `A`"), "unexpected error: {err}");
+}

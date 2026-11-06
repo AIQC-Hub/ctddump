@@ -204,3 +204,89 @@ fn test_dedup_after_markdup_resets_is_dup() {
     assert_eq!(profiles(&out).len(), 5);
 }
 
+
+/// Run `report parquet` at `level` on `src` and return one map per row.
+fn report_rows(src: &Path, level: &str) -> Vec<HashMap<String, String>> {
+    let rpt = src.with_extension(format!("{level}.tsv"));
+    dispatch(&["report", "parquet", "--level", level, src.to_str().unwrap(), rpt.to_str().unwrap()]);
+    let text = fs::read_to_string(&rpt).unwrap();
+    let mut lines = text.lines();
+    let header: Vec<String> = lines.next().unwrap().split('\t').map(str::to_string).collect();
+    lines
+        .map(|l| header.iter().cloned().zip(l.split('\t').map(str::to_string)).collect())
+        .collect()
+}
+
+#[test]
+fn test_report_platform_and_profile_levels_count_duplicates() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let marked = dir.path().join("marked.parquet");
+    let dups = dir.path().join("dups.tsv");
+    write_fixture(&src);
+    dispatch(&["markdup", src.to_str().unwrap(), marked.to_str().unwrap(), dups.to_str().unwrap()]);
+
+    // Platform level: duplicated profiles per platform (A/1, B/1, D/1, E/1).
+    let rows = report_rows(&marked, "platform");
+    let got: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|r| (r["platform_code"].as_str(), r["dup_profiles"].as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![("A", "1"), ("B", "1"), ("C", "0"), ("D", "1"), ("E", "1"), ("F", "0")]
+    );
+
+    // Profile level: the per-profile flag.
+    let rows = report_rows(&marked, "profile");
+    let got: Vec<(&str, &str, &str)> = rows
+        .iter()
+        .map(|r| (r["platform_code"].as_str(), r["profile_no"].as_str(), r["is_dup"].as_str()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            ("A", "1", "true"),
+            ("A", "2", "false"),
+            ("B", "1", "true"),
+            ("C", "1", "false"),
+            ("D", "1", "true"),
+            ("E", "1", "true"),
+            ("F", "1", "false"),
+        ]
+    );
+
+    // Without `is_dup`, neither level has the duplicate columns.
+    for (level, col) in [("platform", "dup_profiles"), ("profile", "is_dup")] {
+        assert!(!report_rows(&src, level)[0].contains_key(col), "{level}: unexpected {col}");
+    }
+}
+
+/// Write the fixture's schema with no rows.
+fn write_empty_fixture(path: &Path) {
+    write_fixture(path);
+    let mut df = ParquetReader::new(fs::File::open(path).unwrap()).finish().unwrap().head(Some(0));
+    ParquetWriter::new(fs::File::create(path).unwrap()).finish(&mut df).unwrap();
+}
+
+#[test]
+fn test_markdup_and_dedup_empty_input_write_empty_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("in.parquet");
+    let marked = dir.path().join("marked.parquet");
+    let dups = dir.path().join("dups.tsv");
+    let out = dir.path().join("out.parquet");
+    write_empty_fixture(&src);
+    let in_cols = ParquetReader::new(fs::File::open(&src).unwrap()).finish().unwrap().get_column_names_owned();
+
+    dispatch(&["markdup", src.to_str().unwrap(), marked.to_str().unwrap(), dups.to_str().unwrap()]);
+    let df = ParquetReader::new(fs::File::open(&marked).unwrap()).finish().unwrap();
+    assert_eq!(df.height(), 0);
+    assert_eq!(df.schema().get("is_dup"), Some(&DataType::Boolean), "is_dup column still added");
+    assert_eq!(fs::read_to_string(&dups).unwrap().lines().count(), 1, "header only");
+
+    dispatch(&["dedup", src.to_str().unwrap(), out.to_str().unwrap()]);
+    let df = ParquetReader::new(fs::File::open(&out).unwrap()).finish().unwrap();
+    assert_eq!(df.height(), 0);
+    assert_eq!(df.get_column_names_owned(), in_cols, "schema kept");
+}
