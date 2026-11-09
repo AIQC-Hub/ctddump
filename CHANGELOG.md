@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- The documentation states plainly that `concat convert` sorts each profile's observations by increasing pressure (and that `convert` does not). A new **Row order and numbering** section in the output schema gives the order and the `profile_no` / `observation_no` numbering each step produces. The section also covers where missing-pressure rows go with `--keep-na-pres`, repeated pressures, and profiles from different files that share platform, time and position, which are merged and interleaved. The `concat` page, the `convert_data.sh` section and the regional workflows point to it
+- The summary site's landing page and README say that the reports describe merged data sorted by pressure, with observations without a pressure value dropped
+- Tests for the `--keep-na-pres` sort order and for merging profiles that share a key
+
+### Changed
+- `concat convert` sorts stably: observations with the same pressure in a profile keep their source order (by file path, then by position in the file) instead of coming out in an arbitrary order. Merged output is otherwise unchanged
+- The **Conversion** section of `report summary` pages says that its counts are taken after the merge, which sorts by pressure and drops observations without one, instead of "before any profile is dropped"
+
 ## [0.36.0] - 2026-11-06
 
 ### Added

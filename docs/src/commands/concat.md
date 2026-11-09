@@ -13,7 +13,8 @@ ctddump concat header  [OPTIONS] <src_dir> <output_file>
 ## `concat convert`
 
 By default the merge re-assigns `profile_no` and `observation_no` so that
-profile numbers are unique and sequential within each platform. Its behaviour
+profile numbers are unique and sequential within each platform, and
+**sorts each profile's observations by increasing pressure**. Its behaviour
 is controlled by a few flags:
 
 | Flag | Effect |
@@ -28,6 +29,27 @@ is controlled by a few flags:
 > Renumbering processes platform ranges in parallel via temporary files in the
 > output folder. Higher thread counts are faster but use more memory, **the
 > merged result is identical either way.**
+
+### Sorting by pressure
+
+The files written by `convert` keep the order of the source NetCDF. The default
+merge reorders them: within each profile, observations run from the lowest to
+the highest `pres`, and `observation_no` is renumbered `1..N` in that order.
+Every other column moves with its row.
+
+- Rows with missing `pres` are dropped before sorting. With `--keep-na-pres`
+  they are kept and placed at the end of their profile.
+- The sort is stable: observations with the same pressure keep their source
+  order (by file path, then by position in the file).
+- Profiles are identified by `(platform_code, profile_timestamp, longitude,
+  latitude)`. Two profiles from different files with the same four values
+  become one `profile_no`, and their observations are interleaved by pressure
+  (`filename` still tells them apart).
+- `--no-pres-sort` keeps each profile's observations in their source order;
+  `--no-renumber` does not sort at all.
+
+See [Row order and numbering](../output-schema.md#row-order-and-numbering) for
+the order each step produces.
 
 ### Examples
 

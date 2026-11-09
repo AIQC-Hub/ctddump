@@ -63,6 +63,10 @@ ctddump concat convert --threads 10 output/convert/ar/gl output/convert/nrt_ar_g
 ctddump concat convert --threads 10 output/convert/ar/cora output/convert/cora_ar.parquet
 ```
 
+The merge sorts each profile's observations by increasing pressure and drops
+observations without a pressure value; add `--no-pres-sort` to keep the source
+order (see [Row order and numbering](../output-schema.md#row-order-and-numbering)).
+
 ### 4. Export the metadata (headers)
 
 ```shell

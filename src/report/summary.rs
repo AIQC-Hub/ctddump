@@ -249,8 +249,11 @@ const DESC_FILES: &str = "Coverage of the core measurement variables and the two
     present, regardless of how many of its values are valid. \"Extra parameters\" lists the \
     non-core variables seen in any file.";
 
-const DESC_CONVERT: &str = "Counts after converting the source NetCDF files to Parquet, before \
-    any profile is dropped. These are the \"original\" numbers every later stage is compared against.";
+const DESC_CONVERT: &str = "Counts after converting the source NetCDF files to Parquet and merging \
+    them into one file. The merge sorts each profile's observations by increasing pressure and drops \
+    observations without a pressure value (a profile with no pressure at all is dropped with them); \
+    no other profile is dropped yet. These are the \"original\" numbers every later stage is compared \
+    against.";
 
 const DESC_DATA_MODE: &str = "Observations per data mode for each parameter: real-time (R), \
     adjusted in real time (A), or delayed mode (D), as recorded in the source files. Percentages \

@@ -6,10 +6,10 @@ from different sources can be merged directly.
 | Column | Type | Notes |
 |--------|------|-------|
 | `platform_code` | `String` | |
-| `profile_no` | `u32` | |
+| `profile_no` | `u32` | see [Row order and numbering](#row-order-and-numbering) |
 | `profile_time` | `f64` | days since 1950-01-01 |
 | `profile_timestamp` | `Datetime(ms)` | Unix milliseconds |
-| `observation_no` | `u32` | |
+| `observation_no` | `u32` | see [Row order and numbering](#row-order-and-numbering) |
 | `longitude` / `latitude` | `f32` (NRT) / `f64` (CORA) | `generic`: as NRT for `time-depth`, as CORA for `profile-level` |
 | `profile_longitude` / `profile_latitude` | `f32` (NRT) / `f64` (CORA) | from `PRECISE_*` or expanded `DEPLOY_*`; NaN when unavailable (always for `generic`) |
 | `time_qc` / `position_qc` | `String` | `""` if absent |
@@ -22,6 +22,40 @@ from different sources can be merged directly.
 Pressure and depth are converted to each other with the TEOS-10 (`gsw`)
 routines when only one is present, and the `*_conv` columns flag which values
 were derived rather than measured.
+
+## Row order and numbering
+
+**`concat convert` sorts each profile's observations by increasing pressure.**
+A single `convert` (or `batch convert`) does not: it keeps the order of the
+source file. Which order a Parquet file has depends on which step wrote it.
+
+| Step | Observation order | `profile_no` | `observation_no` |
+|------|-------------------|--------------|------------------|
+| `convert`, `batch convert` | as in the source file (its level dimension) | the profile's index in the file, from 1 | the level's index in the file, from 1; levels with no valid measurement are dropped, leaving gaps |
+| `concat convert` *(default)* | **increasing `pres`** within each profile | renumbered from 1 within each platform | renumbered `1..N` within each profile, following increasing `pres` |
+| `concat convert --no-pres-sort` | as in the source files | renumbered | renumbered `1..N`, following the source order |
+| `concat convert --no-renumber` | as read, unsorted | kept from the input | kept from the input |
+
+Details of the default `concat convert`:
+
+- Rows are sorted by `platform_code, profile_timestamp, longitude, latitude,
+  pres`. Profiles are therefore in time order within each platform, and the
+  observations of a profile run from the surface down.
+- Rows whose `pres` is missing are dropped first, so a profile with no
+  pressure at all disappears here. With `--keep-na-pres` they are kept and
+  sorted to the end of their profile, after the valid pressures.
+- Observations with the same pressure keep their source order (by file path,
+  then by position in the file).
+- `profile_no` is assigned per distinct `(platform_code, profile_timestamp,
+  longitude, latitude)`. Two profiles from different files that share all four
+  become one profile, and the pressure sort interleaves their observations.
+  `filename` still tells them apart.
+- All other columns move with their row; nothing is interpolated or averaged.
+
+The pipeline scripts and the regional workflows merge with the default, so
+their merged Parquet files, and everything cleaned, de-duplicated, or
+summarised from them, are sorted by pressure. Pass `--no-pres-sort` to keep the
+acquisition order instead (see [`concat`](./commands/concat.md)).
 
 ## Data mode
 

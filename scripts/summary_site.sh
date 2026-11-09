@@ -189,6 +189,12 @@ write_index() {  # <path> <region...>
     printf '# %s\n\n' "$TITLE"
     printf 'Summary reports produced by the `ctddump` pipeline, one page per\n'
     printf '(region, product) unit. Pick a report from the sidebar.\n\n'
+    printf '**Observation order:** when the converted files are merged\n'
+    printf '(`ctddump concat convert`), each profile'"'"'s observations are sorted by\n'
+    printf 'increasing pressure and renumbered in that order, and observations without\n'
+    printf 'a pressure value are dropped. Every count on these pages is taken from data\n'
+    printf 'in that order. See\n'
+    printf '[Row order and numbering](https://aiqc-hub.github.io/ctddump/output-schema.html#row-order-and-numbering).\n\n'
     printf 'Regions in this build: %s.\n\n' "$*"
     printf 'Generated on %s from `%s`.\n' "$(date '+%Y-%m-%d')" "$SRC"
   } > "$f"
@@ -207,6 +213,9 @@ write_site_readme() {  # <path> <region...>
     printf '`summary_site.sh` (built with [mdBook](https://rust-lang.github.io/mdBook/)).\n\n'
     printf 'This directory is the built site: open `index.html` locally, or publish\n'
     printf 'it as-is with GitHub Pages (a `.nojekyll` is included).\n\n'
+    printf 'The reports describe the merged Parquet files, in which each profile'"'"'s\n'
+    printf 'observations are sorted by increasing pressure and observations without a\n'
+    printf 'pressure value are dropped.\n\n'
     printf 'Regions in this build: %s.\n\n' "$*"
     printf 'Generated on %s.\n' "$(date '+%Y-%m-%d')"
     if [[ -n "$LICENSE_SRC" ]]; then
