@@ -133,6 +133,7 @@ full list of tuning variables.
 | `-c, --config FILE` | site | built-in | Custom `book.toml` to use instead of the built-in template. |
 | `-t, --title TEXT` | site | `ctddump: CTD data summary reports` | Book title (built-in template only; ignored with `--config`). |
 | `-l, --license FILE` | site | the `LICENSE` beside the script | LICENSE copied into the built site. Pass `--license ""` to skip it. |
+| `--citation FILE` | site | the `site-CITATION.cff` beside the script | `CITATION.cff` copied into the built site. If it has a top-level `doi:`, the site README also gets a DOI badge and a Citation section. Pass `--citation ""` to skip it. |
 | `-f, --format FMT` | summary | `md` | Summary page format: `md` or `html`. |
 | `--format FMT` | compare | `tsv` | `ctddump compare` output format: `tsv`, `text`, or `json` (sets the report file extension). |
 | `--no-platform-key` | compare | off | Match profiles on time and position only, ignoring `platform_code`. |
@@ -333,9 +334,19 @@ default `-f md` (an HTML run has nothing for mdBook to render).
 The built directory is made self-contained and ready to publish: mdBook writes a
 `.nojekyll` (so GitHub Pages serves its `FontAwesome/` and other asset folders),
 and the script adds a `LICENSE` (the project's own by default, `-l/--license FILE`
-to override or `--license ""` to skip) and a short `README.md` describing the
-site. This is what makes the output directory suitable to push straight to a
-publishing repository such as `ctddump-report-example`.
+to override or `--license ""` to skip), the site's `CITATION.cff` (see below), and a
+short `README.md` describing the site. This is what makes
+the output directory suitable to push straight to a publishing repository such as
+`ctddump-report-example`.
+
+mdBook empties the site directory before every build, so anything added to it by
+hand, such as a `CITATION.cff` or an edited README, is gone after the next run.
+The site's citation therefore lives in this repository, as
+`scripts/site-CITATION.cff`, and every build copies it in as `CITATION.cff` and
+regenerates the README's DOI badge from its `doi:`. It describes the published
+example site (`ctddump-report-example`, with that site's Zenodo DOI), so edit it
+there when the site's metadata changes. If you publish a site of your own, pass
+your own file with `--citation FILE`, or `--citation ""` to leave it out.
 
 A live example of a built site is published at
 <https://aiqc-hub.github.io/ctddump-report-example/> (a static, point-in-time
@@ -345,6 +356,7 @@ sample of this phase's output).
 scripts/summary_site.sh                      # site/ from summary/, every region
 scripts/summary_site.sh -y arctic            # Arctic pages only, no prompt
 scripts/summary_site.sh -t "Arctic CTD QC"   # override the book title
+scripts/summary_site.sh --citation my-CITATION.cff   # your own site's citation and DOI badge
 ```
 
 By default the script writes a `book.toml` for you. Pass `-c/--config FILE` to use

@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: "If you use these reports, please cite them using the metadata in this file, and cite ctddump and the Copernicus Marine products they summarise (see references)."
+type: dataset
+title: "ctddump example report site: summary reports of Copernicus Marine CTD profiles"
+abstract: >-
+  A static web site of summary reports, one page per region and product, for
+  the CTD (Conductivity, Temperature, Depth) profiles of the Copernicus Marine
+  in-situ NRT and CORA products in the Arctic, Baltic and Mediterranean seas.
+  Each page follows the ctddump pipeline: source file coverage, conversion and
+  data mode, pressure order, cleaning, de-duplication, and comparison with the
+  other products of the region. Generated with ctddump's summary_site.sh; a
+  point-in-time snapshot of the data at the date of each release.
+authors:
+  - family-names: "Saito"
+    given-names: "Takaya"
+repository: "https://github.com/AIQC-Hub/ctddump-report-example"
+url: "https://aiqc-hub.github.io/ctddump-report-example/"
+doi: "10.5281/zenodo.24092527"
+license: MIT
+keywords:
+  - oceanography
+  - CTD
+  - Copernicus Marine
+  - data quality
+  - ctddump
+references:
+  - type: software
+    title: "ctddump"
+    authors:
+      - family-names: "Saito"
+        given-names: "Takaya"
+    doi: "10.5281/zenodo.24091418"
+    repository-code: "https://github.com/AIQC-Hub/ctddump"
+    license: MIT
+  - type: data
+    title: "Arctic Ocean in-situ near real time observations (INSITU_ARC_PHYBGCWAV_DISCRETE_MYNRT_013_031)"
+    authors:
+      - name: "Copernicus Marine Service"
+    url: "https://data.marine.copernicus.eu/product/INSITU_ARC_PHYBGCWAV_DISCRETE_MYNRT_013_031/description"
+  - type: data
+    title: "Baltic Sea in-situ near real time observations (INSITU_BAL_PHYBGCWAV_DISCRETE_MYNRT_013_032)"
+    authors:
+      - name: "Copernicus Marine Service"
+    url: "https://data.marine.copernicus.eu/product/INSITU_BAL_PHYBGCWAV_DISCRETE_MYNRT_013_032/description"
+  - type: data
+    title: "Mediterranean Sea in-situ near real time observations (INSITU_MED_PHYBGCWAV_DISCRETE_MYNRT_013_035)"
+    authors:
+      - name: "Copernicus Marine Service"
+    url: "https://data.marine.copernicus.eu/product/INSITU_MED_PHYBGCWAV_DISCRETE_MYNRT_013_035/description"
+  - type: data
+    title: "CORA, global ocean in-situ temperature and salinity reanalysis (INSITU_GLO_PHY_TS_DISCRETE_MY_013_001)"
+    authors:
+      - name: "Copernicus Marine Service"
+    url: "https://data.marine.copernicus.eu/product/INSITU_GLO_PHY_TS_DISCRETE_MY_013_001/description"
