@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- A Zenodo DOI badge in the README, and the concept DOI (`10.5281/zenodo.24091418`, which always resolves to the latest release) in `CITATION.cff`
+
 ## [0.37.0] - 2026-11-09
 
 ### Added

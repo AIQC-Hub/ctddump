@@ -332,8 +332,9 @@ process_unit() {  # <region> <product: regional|gl|cora>
 # after its source with a .parquet.tsv / .yaml.tsv suffix. The pressure-order
 # check reads the per-file Parquet the merge was built from (the merge sorts by
 # pressure, so the merged file cannot show it) and writes
-# $REPORT/convert/checkpres/<stem>.{profiles,platforms,summary}.tsv. (clean_data.sh writes
-# its reports under $REPORT/clean/, dedup_data.sh under $REPORT/dedup/.)
+# $REPORT/convert/checkpres/<stem>.{profiles,platforms,summary}.tsv.
+# (clean_data.sh writes its reports under $REPORT/clean/, dedup_data.sh under
+# $REPORT/dedup/.)
 
 report_unit() {  # <region> <product: regional|gl|cora>
   local r="$1" prod="$2" rc _nrtdir _corasub

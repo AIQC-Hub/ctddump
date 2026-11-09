@@ -13,6 +13,7 @@ authors:
 repository-code: "https://github.com/AIQC-Hub/ctddump"
 url: "https://aiqc-hub.github.io/ctddump/"
 license: MIT
+doi: "10.5281/zenodo.24091418"
 keywords:
   - oceanography
   - CTD
