@@ -13,7 +13,8 @@
 //! `non_monotonic` otherwise. A profile with no usable pressure is not checked
 //! and is counted apart (`n_no_pres`), so the counts match what `concat` keeps.
 //!
-//! Files are read one at a time in fixed row windows and processed in parallel;
+//! Files are read one at a time in fixed row windows and processed in parallel
+//! on plain worker threads (see [`check_files_parallel`] for why not rayon);
 //! only per-profile records are kept, so memory follows the profile count of one
 //! file plus the violating profiles. Three TSVs are written: the violating
 //! profiles, the platforms that have any, and one row of totals.
@@ -23,10 +24,10 @@ use std::error::Error;
 use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::DateTime;
 use polars::prelude::*;
-use rayon::prelude::*;
 
 use crate::concat::collect_parquet_files;
 use crate::convert::common;
@@ -212,26 +213,19 @@ pub fn run(src: &Path, out_prefix: &Path, opts: &Opts) -> Result<Option<Totals>,
         return Ok(None);
     }
 
-    // As in `batch`: parallelism is per file, so keep Polars to one internal
-    // thread unless the user set it, or each worker would start a full pool.
+    let n_workers = opts
+        .threads
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+        .min(files.len())
+        .max(1);
+    // The workers are not Polars threads, so their reads queue on Polars' own
+    // pool; size it to match so `--threads` sets both (unless the user set it).
+    // A single Polars thread, as `batch` uses, would serialize the workers.
     if std::env::var_os("POLARS_MAX_THREADS").is_none() {
-        std::env::set_var("POLARS_MAX_THREADS", "1");
+        std::env::set_var("POLARS_MAX_THREADS", n_workers.to_string());
     }
-    const WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
-    let mut builder = rayon::ThreadPoolBuilder::new().stack_size(WORKER_STACK_SIZE);
-    if let Some(n) = opts.threads {
-        builder = builder.num_threads(n);
-    }
-    let results: Vec<Result<FileResult, String>> = builder
-        .build()
-        .map_err(|e| format!("Failed to build thread pool: {}", e))?
-        .install(|| {
-            files
-                .par_iter()
-                .with_max_len(1)
-                .map(|f| check_file(f, opts).map_err(|e| format!("{}: {}", f.display(), e)))
-                .collect()
-        });
+    let results = check_files_parallel(&files, n_workers, opts)?;
 
     let mut errors = Vec::new();
     let mut totals = Totals { n_files: files.len() as u64, ..Totals::default() };
@@ -287,6 +281,52 @@ pub fn run(src: &Path, out_prefix: &Path, opts: &Opts) -> Result<Option<Totals>,
         totals.n_no_pres
     );
     Ok(Some(totals))
+}
+
+/// Check `files` on plain worker threads that take the next file from a shared
+/// counter, and return the results in file order.
+///
+/// Not a rayon pool on purpose: a rayon worker that waits inside Polars steals
+/// queued tasks, which here are other files' checks, and runs them nested on its
+/// own stack. With thousands of small files (a CORA directory) the nesting grows
+/// until even a 16 MiB stack overflows. Plain threads never steal, so each check
+/// runs on a fresh stack.
+fn check_files_parallel(
+    files: &[PathBuf],
+    n_workers: usize,
+    opts: &Opts,
+) -> Result<Vec<Result<FileResult, String>>, Box<dyn Error>> {
+    const WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
+    let next = AtomicUsize::new(0);
+    let work = || {
+        let mut done = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            let Some(f) = files.get(i) else { break };
+            done.push((i, check_file(f, opts).map_err(|e| format!("{}: {}", f.display(), e))));
+        }
+        done
+    };
+
+    let mut results: Vec<Option<Result<FileResult, String>>> = (0..files.len()).map(|_| None).collect();
+    std::thread::scope(|s| -> Result<(), Box<dyn Error>> {
+        let mut handles = Vec::with_capacity(n_workers);
+        for _ in 0..n_workers {
+            let h = std::thread::Builder::new()
+                .stack_size(WORKER_STACK_SIZE)
+                .spawn_scoped(s, work)
+                .map_err(|e| format!("Failed to start a worker thread: {}", e))?;
+            handles.push(h);
+        }
+        for h in handles {
+            let done = h.join().map_err(|_| "A worker thread panicked while checking files".to_string())?;
+            for (i, r) in done {
+                results[i] = Some(r);
+            }
+        }
+        Ok(())
+    })?;
+    Ok(results.into_iter().map(|r| r.unwrap_or_else(|| Err("file was not checked".to_string()))).collect())
 }
 
 /// `<prefix><suffix>`, keeping any dots already in the prefix.

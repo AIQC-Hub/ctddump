@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- `checkpres` aborted with a stack overflow on directories with thousands of files, such as the CORA products. It ran each file as a rayon task, and a thread waiting inside Polars picked up other files' checks and nested them on its own stack. Files are now checked on plain worker threads that never nest, and Polars' thread pool is sized to `--threads` instead of 1, which also makes the check about 1.5 times faster at 6 threads
+
 ### Added
 - A Zenodo DOI badge in the README, and the concept DOI (`10.5281/zenodo.24091418`, which always resolves to the latest release) in `CITATION.cff`
 
