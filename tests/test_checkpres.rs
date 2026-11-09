@@ -261,3 +261,23 @@ fn cora_fixture_with_shuffled_levels() {
     let y7bo3 = prof.iter().find(|r| r["platform_code"] == "Y7BO" && r["profile_no"] == "3").unwrap();
     assert_eq!((y7bo3["n_pres"].as_str(), y7bo3["n_decreases"].as_str()), ("17", "10"));
 }
+
+/// Many small files, as in a CORA directory. A rayon pool ran each file's check
+/// as a task, and a worker waiting inside Polars stole and nested other files'
+/// checks on its own stack until it overflowed (seen at 20,000 CORA files).
+/// The plain worker threads never nest, so this completes.
+#[test]
+fn many_small_files_do_not_overflow_the_stack() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    std::fs::create_dir(&src).unwrap();
+    write_file(&src.join("f00000.parquet"), &[("A", 1, 2.0, "1"), ("A", 1, 1.0, "1")]);
+    let n = 3000;
+    for i in 1..n {
+        std::fs::copy(src.join("f00000.parquet"), src.join(format!("f{i:05}.parquet"))).unwrap();
+    }
+    let prefix = dir.path().join("o");
+    run(&["--threads", "4"], &src, &prefix);
+    let s = &tsv(&out(&prefix, ".summary.tsv"))[0];
+    assert_eq!((s["n_files"].as_str(), s["n_profiles"].as_str()), ("3000", "3000"));
+}

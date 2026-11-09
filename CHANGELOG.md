@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.37.1] - 2026-11-09
+
+### Fixed
+- `checkpres` aborted with a stack overflow on directories with thousands of files, such as the CORA products. It ran each file as a rayon task, and a thread waiting inside Polars picked up other files' checks and nested them on its own stack. Files are now checked on plain worker threads that never nest, and Polars' thread pool is sized to `--threads` instead of 1, which also makes the check about 1.5 times faster at 6 threads
+
+### Added
+- A Zenodo DOI badge in the README, and the concept DOI (`10.5281/zenodo.24091418`, which always resolves to the latest release) in `CITATION.cff`
+
 ## [0.37.0] - 2026-11-09
 
 ### Added
@@ -389,7 +397,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.37.1...HEAD
+[0.37.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.37.0...v0.37.1
 [0.37.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.1...v0.35.0

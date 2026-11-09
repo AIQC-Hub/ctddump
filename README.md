@@ -4,6 +4,7 @@
 [![CI](https://github.com/AIQC-Hub/ctddump/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AIQC-Hub/ctddump/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/AIQC-Hub/ctddump/graph/badge.svg)](https://codecov.io/gh/AIQC-Hub/ctddump)
 [![CodeFactor](https://www.codefactor.io/repository/github/aiqc-hub/ctddump/badge)](https://www.codefactor.io/repository/github/aiqc-hub/ctddump)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24091418.svg)](https://doi.org/10.5281/zenodo.24091418)
 
 A Rust CLI tool for converting oceanographic CTD (Conductivity, Temperature, Depth) data from NetCDF to Parquet (data) or YAML (metadata).
 
@@ -11,6 +12,7 @@ A Rust CLI tool for converting oceanographic CTD (Conductivity, Temperature, Dep
 
 - 📦 [crates.io](https://crates.io/crates/ctddump)
 - 📖 [Documentation](https://aiqc-hub.github.io/ctddump/)
+- 🔖 [Zenodo archive](https://doi.org/10.5281/zenodo.24091418): DOI for citing ctddump (always resolves to the latest version; see `CITATION.cff`)
 - 🌊 [Live example report site](https://aiqc-hub.github.io/ctddump-report-example/): sample output of the `summary_site.sh` pipeline phase
 
 Two Copernicus data sources are supported, plus your own files:

@@ -13,11 +13,12 @@ authors:
 repository-code: "https://github.com/AIQC-Hub/ctddump"
 url: "https://aiqc-hub.github.io/ctddump/"
 license: MIT
+doi: "10.5281/zenodo.24091418"
 keywords:
   - oceanography
   - CTD
   - NetCDF
   - Parquet
   - Copernicus Marine
-version: "0.37.0"
+version: "0.37.1"
 date-released: "2026-11-09"
