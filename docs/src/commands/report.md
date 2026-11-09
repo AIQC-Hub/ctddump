@@ -91,6 +91,7 @@ paths under `--report-dir` (default `report`) and `--out-dir` (default `output`)
 |---------|----------------|
 | File summary | `report/header/<stem>.yaml.tsv` |
 | Conversion | `report/convert/<stem>.parquet.tsv` |
+| Pressure order | `report/convert/checkpres/<stem>.summary.tsv` and `.platforms.tsv` |
 | Cleaning → Drop bad QC | `report/clean/dropqc/<stem>.parquet.tsv` |
 | Cleaning → Drop all-NA profiles | `report/clean/dropna/<stem>.parquet.tsv` |
 | Cleaning → Filter by region | `report/clean/filter/<stem>.parquet.tsv` |
@@ -122,6 +123,14 @@ then **Unknown** for those with no data mode. Reports made before the
 `_dm_unknown` counts existed have no Unknown columns, so their rows can sum to
 less than 100%. Reports of files converted before the data-mode columns existed
 have no data-mode columns at all, and the table is omitted.
+
+The **Pressure order** section comes from [`checkpres`](./checkpres.md), run on
+the per-file Parquet before the merge. A first table gives the profiles checked (and
+those without any pressure, which are not), those with decreasing pressure (split into reversed and non-monotonic) as shares
+of all profiles, and the platforms and files that have any. When there are such
+profiles, a **Platforms** table lists the 10 platforms with the most, with their
+share of the platform's profiles and the dates of the first and last one. The
+full lists stay in the `checkpres` TSVs.
 
 The **Filter by region** section carries a second table, **Bounding box**, with the
 minimum and maximum longitude and latitude of the profiles that survived the

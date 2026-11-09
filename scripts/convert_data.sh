@@ -10,7 +10,8 @@
 #
 # Commands:
 #   process     Convert + merge Parquet, export + merge headers.
-#   report      Summarise the merged Parquet/YAML outputs as TSV.
+#   report      Summarise the merged Parquet/YAML outputs as TSV, and check the
+#               pressure order of the per-file Parquet (ctddump checkpres).
 #   all         process, then report.  (default)
 #   help        Show this help.
 #
@@ -260,6 +261,13 @@ report_parquet() {  # <src_file> <out_tsv> -- platform-level summary of a merged
   measure "report ${2##*/}" ctddump report parquet --level platform "$1" "$2"
 }
 
+report_checkpres() {  # <src_dir> <out_prefix> -- pressure order of the per-file Parquet
+  [[ -d "$1" ]] || { log "skip checkpres (missing $1)"; return 0; }
+  mkdir -p "$(dirname "$2")"
+  log "checkpres: $1 -> $2.*.tsv"
+  measure "checkpres ${2##*/}" ctddump checkpres --threads "$THREADS" "$1" "$2"
+}
+
 report_yaml() {  # <src_file> <out_tsv> -- summary of a merged header YAML
   [[ -f "$1" ]] || { log "skip report yaml (missing $1)"; return 0; }
   mkdir -p "$(dirname "$2")"
@@ -321,21 +329,25 @@ process_unit() {  # <region> <product: regional|gl|cora>
 # ---- Per-unit reports (summaries of the merged outputs) ------------------
 # Parquet reports use the platform level. Parquet-data summaries land in
 # $REPORT/convert/ and header (YAML) summaries in $REPORT/header/, each named
-# after its source with a .parquet.tsv / .yaml.tsv suffix. (clean_data.sh writes
+# after its source with a .parquet.tsv / .yaml.tsv suffix. The pressure-order
+# check reads the per-file Parquet the merge was built from (the merge sorts by
+# pressure, so the merged file cannot show it) and writes
+# $REPORT/convert/checkpres/<stem>.{profiles,platforms,summary}.tsv. (clean_data.sh writes
 # its reports under $REPORT/clean/, dedup_data.sh under $REPORT/dedup/.)
 
 report_unit() {  # <region> <product: regional|gl|cora>
   local r="$1" prod="$2" rc _nrtdir _corasub
   read -r rc _nrtdir _corasub <<<"$(region_meta "$r")"
   local P="$OUT/convert" H="$OUT/header" RC="$REPORT/convert" RH="$REPORT/header"
-  local stem
+  local stem sub
   case "$prod" in
-    regional) stem="nrt_${rc}_${rc}" ;;
-    gl)       stem="nrt_${rc}_gl" ;;
-    cora)     stem="cora_${rc}" ;;
+    regional) stem="nrt_${rc}_${rc}"; sub="$rc" ;;
+    gl)       stem="nrt_${rc}_gl";    sub=gl ;;
+    cora)     stem="cora_${rc}";      sub=cora ;;
   esac
   report_parquet "$P/$stem.parquet" "$RC/$stem.parquet.tsv"
   report_yaml    "$H/$stem.yaml"    "$RH/$stem.yaml.tsv"
+  report_checkpres "$P/$rc/$sub"    "$RC/checkpres/$stem"
 }
 
 # ---- Dispatch ------------------------------------------------------------

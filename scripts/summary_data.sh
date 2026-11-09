@@ -164,6 +164,7 @@ has_any_report() {  # <stem>
   for f in \
     "$REPORT/header/$s.yaml.tsv" \
     "$REPORT/convert/$s.parquet.tsv" \
+    "$REPORT/convert/checkpres/$s.summary.tsv" \
     "$REPORT/clean/dropqc/$s.parquet.tsv" \
     "$REPORT/clean/dropna/$s.parquet.tsv" \
     "$REPORT/clean/filter/$s.parquet.tsv" \
