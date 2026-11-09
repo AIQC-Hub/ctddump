@@ -141,7 +141,7 @@ fn build_and_write_range(
 }
 
 /// Recursively collect all files under `src_dir` whose filename matches `pattern`.
-fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+pub(crate) fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let glob_pat = Pattern::new(pattern)
         .map_err(|e| format!("Invalid pattern '{}': {}", pattern, e))?;
 

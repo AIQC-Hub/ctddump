@@ -27,6 +27,7 @@ Two families of source files are supported:
 | [`convert`](./commands/convert.md) | Convert a single NetCDF file to Parquet. |
 | [`batch`](./commands/batch.md) | Convert a whole directory tree to Parquet or YAML, in parallel. |
 | [`header`](./commands/header.md) | Extract a single file's metadata to YAML. |
+| [`checkpres`](./commands/checkpres.md) | Find profiles whose pressure does not increase in observation order. |
 | [`concat`](./commands/concat.md) | Merge many Parquet (or YAML) files into one. |
 | [`report`](./commands/report.md) | Summarise a Parquet or YAML file as a text report. |
 | [`filter`](./commands/filter.md) | Filter a Parquet file's profiles by a geographic bounding box. |

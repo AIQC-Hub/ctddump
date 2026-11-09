@@ -8,6 +8,7 @@
 - [convert](./commands/convert.md)
 - [batch](./commands/batch.md)
 - [header](./commands/header.md)
+- [checkpres](./commands/checkpres.md)
 - [concat](./commands/concat.md)
 - [report](./commands/report.md)
 - [filter](./commands/filter.md)

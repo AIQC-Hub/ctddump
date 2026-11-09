@@ -49,7 +49,9 @@ Every other column moves with its row.
   `--no-renumber` does not sort at all.
 
 See [Row order and numbering](../output-schema.md#row-order-and-numbering) for
-the order each step produces.
+the order each step produces. To list the profiles whose source order is not
+increasing in pressure, run [`checkpres`](./checkpres.md) on the same directory
+before merging.
 
 ### Examples
 

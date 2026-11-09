@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 pub mod batch;
+pub mod checkpres;
 pub mod cli;
 pub mod compare;
 pub mod concat;
@@ -39,6 +40,11 @@ pub fn run(cli: Cli) -> Result<Config, Box<dyn Error>> {
         Commands::Convert { format } => dispatch_convert(format),
         Commands::Batch { subcommand } => dispatch_batch(subcommand),
         Commands::Header { format } => dispatch_header(format),
+        Commands::Checkpres { pattern, min_drop, pres_qc, threads, src, out_prefix } => {
+            let opts = checkpres::Opts { pattern, min_drop, pres_qc, threads };
+            checkpres::run(&src, &out_prefix, &opts)?;
+            Ok(Config { module: "checkpres".to_string(), target: "parquet".to_string(), args: vec![] })
+        }
         Commands::Concat { subcommand } => dispatch_concat(subcommand),
         Commands::Report { subcommand } => dispatch_report(subcommand),
         Commands::Filter { mode, min_lon, max_lon, min_lat, max_lat, src, dest } => {

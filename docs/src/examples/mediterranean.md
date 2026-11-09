@@ -52,6 +52,23 @@ ctddump batch convert cora --threads 10 --output output/convert/mo/cora source/I
 
 ### 3. Merge the Parquet files
 
+First list the profiles whose pressure does not increase in the source order,
+since the merge sorts by pressure and hides it (see
+[`checkpres`](../commands/checkpres.md)):
+
+```shell
+# NRT MO
+ctddump checkpres --threads 10 output/convert/mo/mo report/convert/checkpres/nrt_mo_mo
+
+# NRT GL
+ctddump checkpres --threads 10 output/convert/mo/gl report/convert/checkpres/nrt_mo_gl
+
+# CORA MO
+ctddump checkpres --threads 10 output/convert/mo/cora report/convert/checkpres/cora_mo
+```
+
+Then merge:
+
 ```shell
 # NRT MO
 ctddump concat convert --threads 10 output/convert/mo/mo output/convert/nrt_mo_mo.parquet

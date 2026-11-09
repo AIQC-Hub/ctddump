@@ -55,7 +55,9 @@ Details of the default `concat convert`:
 The pipeline scripts and the regional workflows merge with the default, so
 their merged Parquet files, and everything cleaned, de-duplicated, or
 summarised from them, are sorted by pressure. Pass `--no-pres-sort` to keep the
-acquisition order instead (see [`concat`](./commands/concat.md)).
+acquisition order instead (see [`concat`](./commands/concat.md)). To find the
+profiles whose source order is not increasing in pressure, run
+[`checkpres`](./commands/checkpres.md) on the per-file Parquet before the merge.
 
 ## Data mode
 
