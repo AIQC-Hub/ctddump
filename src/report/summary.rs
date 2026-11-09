@@ -16,6 +16,9 @@
 //! to one platform) and across-platform (a group spanning two or more), and
 //! tabulates how many profiles the duplicate groups hold.
 //!
+//! The Pressure-order section reads the `checkpres` summary and platforms TSVs
+//! (the source order of the per-file data, before the merge sorted it).
+//!
 //! The page title and any notes are supplied by the caller (the pipeline scripts
 //! pass a human-readable title and region- or product-specific notes); the section
 //! prose is generic and applies to every region and dataset.
@@ -74,6 +77,8 @@ pub fn run(stem: &str, o: Opts) -> Result<(), Box<dyn Error>> {
 struct StemPaths {
     yaml: PathBuf,        // report/header/<stem>.yaml.tsv
     convert: PathBuf,     // report/convert/<stem>.parquet.tsv
+    checkpres: PathBuf,   // report/convert/checkpres/<stem>.summary.tsv
+    checkpres_platforms: PathBuf, // report/convert/checkpres/<stem>.platforms.tsv
     dropqc: PathBuf,      // report/clean/dropqc/<stem>.parquet.tsv
     dropna: PathBuf,      // report/clean/dropna/<stem>.parquet.tsv
     filter: PathBuf,      // report/clean/filter/<stem>.parquet.tsv
@@ -89,6 +94,8 @@ impl StemPaths {
         StemPaths {
             yaml: report_dir.join("header").join(format!("{stem}.yaml.tsv")),
             convert: pq("convert"),
+            checkpres: report_dir.join("convert/checkpres").join(format!("{stem}.summary.tsv")),
+            checkpres_platforms: report_dir.join("convert/checkpres").join(format!("{stem}.platforms.tsv")),
             dropqc: pq("clean/dropqc"),
             dropna: pq("clean/dropna"),
             filter: pq("clean/filter"),
@@ -249,8 +256,25 @@ const DESC_FILES: &str = "Coverage of the core measurement variables and the two
     present, regardless of how many of its values are valid. \"Extra parameters\" lists the \
     non-core variables seen in any file.";
 
-const DESC_CONVERT: &str = "Counts after converting the source NetCDF files to Parquet, before \
-    any profile is dropped. These are the \"original\" numbers every later stage is compared against.";
+const DESC_CONVERT: &str = "Counts after converting the source NetCDF files to Parquet and merging \
+    them into one file. The merge sorts each profile's observations by increasing pressure and drops \
+    observations without a pressure value (a profile with no pressure at all is dropped with them); \
+    no other profile is dropped yet. These are the \"original\" numbers every later stage is compared \
+    against.";
+
+const DESC_PRES_ORDER: &str = "Checks, before the merge, that pressure increases along each profile \
+    in the order the source file stores it. A profile is counted when its pressure steps down between \
+    two observations; missing pressures are skipped and a repeated pressure is fine. \"Reversed\" \
+    profiles are stored from the bottom up, which the merge's sort by pressure puts right; \
+    \"non-monotonic\" ones go both up and down, which can mean loops, spikes or misplaced levels, and \
+    the sort hides them. Shares are of the profiles, platforms and files checked; profiles without \
+    any pressure are not checked (the merge drops them). Nothing is removed here.";
+
+const DESC_PRES_ORDER_PLATFORMS: &str = "The platforms with the most such profiles, at most 10; the \
+    full list, and every profile with its time and position, are in the checkpres reports.";
+
+/// The Pressure order section lists at most this many platforms.
+const PRES_ORDER_TOP: usize = 10;
 
 const DESC_DATA_MODE: &str = "Observations per data mode for each parameter: real-time (R), \
     adjusted in real time (A), or delayed mode (D), as recorded in the source files. Percentages \
@@ -371,6 +395,11 @@ fn build_sections(p: &StemPaths, stem: &str) -> Result<Vec<Section>, Box<dyn Err
             files: vec![path_str(&p.convert)],
             tables,
         });
+    }
+
+    // 2b. Pressure order of the per-file data the merge was built from.
+    if let Some(s) = pres_order_section(p)? {
+        sections.push(s);
     }
 
     // The pre-filter extent the "Filter by region" bounding box is compared against:
@@ -565,6 +594,80 @@ fn compare_section(dir: &Path, stem: &str) -> Result<Option<Section>, Box<dyn Er
         files,
         tables: vec![totals, coverage],
     }))
+}
+
+/// "Pressure order" from the `checkpres` summary (totals) and platforms TSVs.
+/// `None` when the summary is absent.
+fn pres_order_section(p: &StemPaths) -> Result<Option<Section>, Box<dyn Error>> {
+    if !p.checkpres.exists() {
+        return Ok(None);
+    }
+    let t = Tsv::read(&p.checkpres)?;
+    let get = |name: &str| t.sum_u64(name);
+    let (profiles, bad) = (get("n_profiles"), get("n_bad_profiles"));
+    let (platforms, files) = (get("n_platforms"), get("n_files"));
+    let mut tables = vec![Table {
+        title: None,
+        desc: String::new(),
+        headers: vec!["Metric".into(), "Count".into(), "Share".into()],
+        rows: vec![
+            vec!["Profiles checked".into(), fmt_int(profiles), String::new()],
+            vec!["Profiles without pressure (not checked)".into(), fmt_int(get("n_no_pres")), String::new()],
+            vec!["Profiles with decreasing pressure".into(), fmt_int(bad), fmt_pct(pct(bad, profiles))],
+            vec!["of which reversed".into(), fmt_int(get("n_reversed")), fmt_pct(pct(get("n_reversed"), profiles))],
+            vec![
+                "of which non-monotonic".into(),
+                fmt_int(get("n_non_monotonic")),
+                fmt_pct(pct(get("n_non_monotonic"), profiles)),
+            ],
+            vec![
+                "Platforms with such profiles".into(),
+                fmt_int(get("n_bad_platforms")),
+                fmt_pct(pct(get("n_bad_platforms"), platforms)),
+            ],
+            vec!["Files with such profiles".into(), fmt_int(get("n_bad_files")), fmt_pct(pct(get("n_bad_files"), files))],
+        ],
+    }];
+    let mut file_list = vec![path_str(&p.checkpres)];
+
+    if bad > 0 && p.checkpres_platforms.exists() {
+        let pt = Tsv::read(&p.checkpres_platforms)?;
+        let cell = |r: &[String], name: &str| pt.col(name).and_then(|i| r.get(i)).cloned().unwrap_or_default();
+        let num = |r: &[String], name: &str| pt.col(name).map(|i| parse_u64(r.get(i))).unwrap_or(0);
+        let mut rows: Vec<&Vec<String>> = pt.rows.iter().collect();
+        rows.sort_by(|a, b| {
+            num(b, "n_bad_profiles").cmp(&num(a, "n_bad_profiles")).then_with(|| cell(a, "platform_code").cmp(&cell(b, "platform_code")))
+        });
+        let body: Vec<Vec<String>> = rows
+            .iter()
+            .take(PRES_ORDER_TOP)
+            .map(|r| {
+                vec![
+                    cell(r, "platform_code"),
+                    fmt_int(num(r, "n_bad_profiles")),
+                    fmt_pct(pct(num(r, "n_bad_profiles"), num(r, "n_profiles"))),
+                    fmt_int(num(r, "n_reversed")),
+                    fmt_int(num(r, "n_non_monotonic")),
+                    cell(r, "first_date"),
+                    cell(r, "last_date"),
+                ]
+            })
+            .collect();
+        if !body.is_empty() {
+            tables.push(Table {
+                title: Some("Platforms".into()),
+                desc: DESC_PRES_ORDER_PLATFORMS.into(),
+                headers: ["Platform", "Profiles", "% of its profiles", "Reversed", "Non-monotonic", "First", "Last"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                rows: body,
+            });
+            file_list.push(path_str(&p.checkpres_platforms));
+        }
+    }
+
+    Ok(Some(Section { level: 1, title: "Pressure order".into(), desc: DESC_PRES_ORDER.into(), files: file_list, tables }))
 }
 
 fn parent_section(title: &str, desc: &str) -> Section {

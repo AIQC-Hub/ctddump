@@ -199,6 +199,129 @@ fn test_concat_convert_drops_na_pres_by_default() {
     assert_eq!(run(&["--keep-na-pres"]).height(), 5);
 }
 
+/// With `--keep-na-pres` the pressure sort still applies: valid pressures come
+/// first in increasing order and the missing-pressure rows go to the end of the
+/// profile, numbered after them. The docs state this order.
+#[test]
+fn test_concat_convert_keep_na_pres_sorts_missing_pres_last() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let mut df = df!(
+        "platform_code"     => ["P", "P", "P", "P", "P"],
+        "profile_timestamp" => [1000i64, 1000, 1000, 1000, 1000],
+        "longitude"         => [10.0f64, 10.0, 10.0, 10.0, 10.0],
+        "latitude"          => [60.0f64, 60.0, 60.0, 60.0, 60.0],
+        "pres"              => [f32::NAN, 30.0, 10.0, f32::NAN, 20.0],
+        "temp"              => [1.0f32, 2.0, 3.0, 4.0, 5.0],
+        "profile_no"        => [0u32, 0, 0, 0, 0],
+        "observation_no"    => [0u32, 0, 0, 0, 0],
+    )
+    .unwrap();
+    ParquetWriter::new(std::fs::File::create(dir.path().join("in.parquet")).unwrap())
+        .finish(&mut df)
+        .unwrap();
+
+    let out = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
+    let args: Vec<String> = ["concat", "convert", "--keep-na-pres", dir.path().to_str().unwrap(), out.path().to_str().unwrap()]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    assert!(handle_dispatch(&args).is_ok());
+    let df = read_parquet(out.path());
+
+    let pres: Vec<f32> = df.column("pres").unwrap().f32().unwrap().into_no_null_iter().collect();
+    assert_eq!(&pres[..3], &[10.0, 20.0, 30.0]);
+    assert!(pres[3].is_nan() && pres[4].is_nan(), "{pres:?}");
+    let temp: Vec<f32> = df.column("temp").unwrap().f32().unwrap().into_no_null_iter().collect();
+    assert_eq!(&temp[..3], &[3.0, 5.0, 2.0], "rows move with their pressure");
+    let obs: Vec<u32> = df.column("observation_no").unwrap().u32().unwrap().into_no_null_iter().collect();
+    assert_eq!(obs, vec![1, 2, 3, 4, 5]);
+}
+
+/// The pressure sort is stable: repeated pressures keep their source order,
+/// within a file and across files merged into one profile (files in path
+/// order). Checked on the parallel and the sequential path.
+#[test]
+fn test_concat_convert_equal_pres_keep_source_order() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, pres, temp) in [
+        ("a.parquet", vec![20.0f32, 10.0, 20.0, 10.0, 20.0], vec![1.0f32, 2.0, 3.0, 4.0, 5.0]),
+        ("b.parquet", vec![10.0, 20.0], vec![6.0, 7.0]),
+    ] {
+        let n = pres.len();
+        let mut df = df!(
+            "platform_code"     => vec!["P"; n],
+            "profile_timestamp" => vec![1000i64; n],
+            "longitude"         => vec![10.0f64; n],
+            "latitude"          => vec![60.0f64; n],
+            "pres"              => pres,
+            "temp"              => temp,
+            "profile_no"        => vec![0u32; n],
+            "observation_no"    => vec![0u32; n],
+        )
+        .unwrap();
+        ParquetWriter::new(std::fs::File::create(dir.path().join(name)).unwrap())
+            .finish(&mut df)
+            .unwrap();
+    }
+
+    for threads in [None, Some("1")] {
+        let out = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
+        let mut args: Vec<String> = vec!["concat".into(), "convert".into()];
+        if let Some(t) = threads {
+            args.extend(["--threads".to_string(), t.to_string()]);
+        }
+        args.push(dir.path().to_str().unwrap().to_string());
+        args.push(out.path().to_str().unwrap().to_string());
+        assert!(handle_dispatch(&args).is_ok());
+        let df = read_parquet(out.path());
+
+        let pres: Vec<f32> = df.column("pres").unwrap().f32().unwrap().into_no_null_iter().collect();
+        assert_eq!(pres, vec![10.0, 10.0, 10.0, 20.0, 20.0, 20.0, 20.0], "threads {threads:?}");
+        let temp: Vec<f32> = df.column("temp").unwrap().f32().unwrap().into_no_null_iter().collect();
+        assert_eq!(temp, vec![2.0, 4.0, 6.0, 1.0, 3.0, 5.0, 7.0], "threads {threads:?}");
+    }
+}
+
+/// Profiles from different files that share platform, time and position are
+/// merged into one `profile_no`, and the pressure sort interleaves their
+/// observations. The docs state this.
+#[test]
+fn test_concat_convert_same_key_profiles_merge_and_interleave() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, pres) in [("a.parquet", [10.0f32, 30.0]), ("b.parquet", [20.0, 40.0])] {
+        let mut df = df!(
+            "platform_code"     => ["P", "P"],
+            "profile_timestamp" => [1000i64, 1000],
+            "longitude"         => [10.0f64, 10.0],
+            "latitude"          => [60.0f64, 60.0],
+            "pres"              => pres,
+            "filename"          => [name, name],
+            "profile_no"        => [0u32, 0],
+            "observation_no"    => [0u32, 0],
+        )
+        .unwrap();
+        ParquetWriter::new(std::fs::File::create(dir.path().join(name)).unwrap())
+            .finish(&mut df)
+            .unwrap();
+    }
+
+    let out = tempfile::NamedTempFile::with_suffix(".parquet").unwrap();
+    let args: Vec<String> = ["concat", "convert", dir.path().to_str().unwrap(), out.path().to_str().unwrap()]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    assert!(handle_dispatch(&args).is_ok());
+    let df = read_parquet(out.path());
+
+    let prof: Vec<u32> = df.column("profile_no").unwrap().u32().unwrap().into_no_null_iter().collect();
+    assert_eq!(prof, vec![1, 1, 1, 1]);
+    let files: Vec<&str> = df.column("filename").unwrap().str().unwrap().into_no_null_iter().collect();
+    assert_eq!(files, vec!["a.parquet", "b.parquet", "a.parquet", "b.parquet"]);
+    let obs: Vec<u32> = df.column("observation_no").unwrap().u32().unwrap().into_no_null_iter().collect();
+    assert_eq!(obs, vec![1, 2, 3, 4]);
+}
+
 // ── concat convert: --no-renumber ─────────────────────────────────────────────
 
 #[test]

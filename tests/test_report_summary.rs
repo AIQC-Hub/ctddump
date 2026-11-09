@@ -603,3 +603,67 @@ fn conversion_without_data_mode_columns_has_no_data_mode_table() {
     let md = run_summary(&rep, &out, "nrt_ar_ar", "md", &dir.path().join("s.md"));
     assert!(!md.contains("Data mode"), "unexpected data-mode table\n{md}");
 }
+
+fn write_checkpres(rep: &Path, stem: &str, bad: u64, platforms: &[(&str, u64, u64, u64, u64)]) {
+    let dir = rep.join("convert/checkpres");
+    fs::create_dir_all(&dir).unwrap();
+    let rev: u64 = platforms.iter().map(|p| p.3).sum();
+    fs::write(
+        dir.join(format!("{stem}.summary.tsv")),
+        format!(
+            "n_files\tn_platforms\tn_profiles\tn_no_pres\tn_bad_profiles\tpct_bad\tn_reversed\tn_non_monotonic\tn_bad_platforms\tn_bad_files\n\
+             4\t20\t200\t7\t{bad}\t0\t{rev}\t{}\t{}\t2\n",
+            bad - rev,
+            platforms.len()
+        ),
+    )
+    .unwrap();
+    let mut s = String::from("platform_code\tn_files\tn_profiles\tn_bad_profiles\tpct_bad\tn_reversed\tn_non_monotonic\tfirst_date\tlast_date\n");
+    for (code, n_prof, n_bad, n_rev, n_nm) in platforms {
+        s.push_str(&format!("{code}\t1\t{n_prof}\t{n_bad}\t0\t{n_rev}\t{n_nm}\t2001-01-01\t2002-02-02\n"));
+    }
+    fs::write(dir.join(format!("{stem}.platforms.tsv")), s).unwrap();
+}
+
+#[test]
+fn pressure_order_section_follows_conversion() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = full_tree(dir.path(), "nrt_ar_ar");
+    // 12 platforms with problems: only the 10 with the most are listed.
+    let plats: Vec<(String, u64, u64, u64, u64)> =
+        (1..=12).map(|i| (format!("P{i:02}"), 20, i, i / 2, i - i / 2)).collect();
+    let refs: Vec<(&str, u64, u64, u64, u64)> = plats.iter().map(|p| (p.0.as_str(), p.1, p.2, p.3, p.4)).collect();
+    let bad: u64 = refs.iter().map(|p| p.2).sum();
+    write_checkpres(&rep, "nrt_ar_ar", bad, &refs);
+    let md = run_summary(&rep, &out, "nrt_ar_ar", "md", &dir.path().join("s.md"));
+
+    let conv = md.find("## Conversion").unwrap();
+    let pres = md.find("## Pressure order").expect("section missing");
+    let clean = md.find("## Cleaning").unwrap();
+    assert!(conv < pres && pres < clean, "section out of place\n{md}");
+
+    // 78 of 200 profiles; 36 reversed (sum of i/2), 42 non-monotonic.
+    assert!(md.contains("| Profiles checked | 200 |  |"), "{md}");
+    assert!(md.contains("| Profiles without pressure (not checked) | 7 |  |"), "{md}");
+    assert!(md.contains("| Profiles with decreasing pressure | 78 | 39.0% |"), "{md}");
+    assert!(md.contains("| of which reversed | 36 | 18.0% |"), "{md}");
+    assert!(md.contains("| of which non-monotonic | 42 | 21.0% |"), "{md}");
+    assert!(md.contains("| Platforms with such profiles | 12 | 60.0% |"), "{md}");
+    assert!(md.contains("| Files with such profiles | 2 | 50.0% |"), "{md}");
+
+    // Most affected first; P01 and P02 fall outside the top 10.
+    assert!(md.contains("| P12 | 12 | 60.0% | 6 | 6 | 2001-01-01 | 2002-02-02 |"), "{md}");
+    assert!(md.find("| P12 |").unwrap() < md.find("| P03 |").unwrap(), "{md}");
+    assert!(!md.contains("| P02 |") && !md.contains("| P01 |"), "{md}");
+    assert!(md.contains("checkpres/nrt_ar_ar.platforms.tsv"), "{md}");
+}
+
+#[test]
+fn pressure_order_section_without_problems_has_no_platform_table() {
+    let dir = tempfile::tempdir().unwrap();
+    let (rep, out) = full_tree(dir.path(), "nrt_ar_ar");
+    write_checkpres(&rep, "nrt_ar_ar", 0, &[]);
+    let md = run_summary(&rep, &out, "nrt_ar_ar", "md", &dir.path().join("s.md"));
+    assert!(md.contains("| Profiles with decreasing pressure | 0 | 0.0% |"), "{md}");
+    assert!(!md.contains("**Platforms**"), "{md}");
+}

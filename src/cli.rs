@@ -33,6 +33,27 @@ pub enum Commands {
         #[command(subcommand)]
         format: HeaderFormat,
     },
+    /// Find profiles whose pressure does not increase in observation order
+    #[command(name = "checkpres")]
+    Checkpres {
+        /// Filename glob used when the source is a directory (default: *.parquet)
+        #[arg(long, value_name = "GLOB", default_value = "*.parquet")]
+        pattern: String,
+        /// Ignore decreases no larger than this, in dbar
+        #[arg(long, value_name = "DBAR", default_value_t = 0.0)]
+        min_drop: f64,
+        /// Use only pressures whose pres_qc is one of these flags (comma-separated,
+        /// e.g. 1,2; default: every pressure)
+        #[arg(long, value_name = "FLAGS", value_delimiter = ',')]
+        pres_qc: Vec<String>,
+        /// Number of files checked in parallel (defaults to all CPU cores)
+        #[arg(short, long)]
+        threads: Option<usize>,
+        /// Source: a directory of Parquet files (as for `concat convert`) or one file
+        src: PathBuf,
+        /// Output prefix: writes <prefix>.profiles.tsv, .platforms.tsv and .summary.tsv
+        out_prefix: PathBuf,
+    },
     /// Concatenate files from a directory tree into a single file
     #[command(name = "concat")]
     Concat {

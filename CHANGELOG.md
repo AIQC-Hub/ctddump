@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-09
+
+### Added
+- `checkpres` command: finds profiles whose pressure does not increase in observation order, meant for the per-file Parquet before `concat convert` sorts it by pressure. Each observation with a pressure is compared with the previous one (missing pressures are skipped; a repeated pressure is fine), and a profile with a decrease is reported as `reversed` (stored bottom-up) or `non_monotonic`. It takes a directory (with `--pattern`, as `concat convert` does) or one file, handles files holding many profiles and platforms, and writes `<prefix>.profiles.tsv` (file, platform, profile, time, position, number and size of the drops, pressure range), `<prefix>.platforms.tsv` and `<prefix>.summary.tsv`. Profiles without any pressure are not checked and are counted apart, so the totals match what `concat convert` keeps. `--min-drop` ignores small drops, `--pres-qc` uses only pressures with the given flags, and `--threads` checks files in parallel with the same result for any count. A new command page documents it, and the regional workflows run it before each merge
+- `convert_data.sh report` runs `checkpres` on the per-file Parquet of each unit, writing `report/convert/checkpres/<stem>.{profiles,platforms,summary}.tsv`, and `report summary` pages gain a **Pressure order** section after Conversion: the totals (reversed and non-monotonic profiles, affected platforms and files) and the 10 platforms with the most such profiles. `summary_data.sh` counts the checkpres summary as a report, so a page is made when it is the only one
+- The documentation states plainly that `concat convert` sorts each profile's observations by increasing pressure (and that `convert` does not). A new **Row order and numbering** section in the output schema gives the order and the `profile_no` / `observation_no` numbering each step produces. The section also covers where missing-pressure rows go with `--keep-na-pres`, repeated pressures, and profiles from different files that share platform, time and position, which are merged and interleaved. The `concat` page, the `convert_data.sh` section and the regional workflows point to it
+- The summary site's landing page and README say that the reports describe merged data sorted by pressure, with observations without a pressure value dropped
+- Tests for the `--keep-na-pres` sort order and for merging profiles that share a key
+- `CITATION.cff` with the citation metadata (title, author, license, version). GitHub shows a "Cite this repository" button from it, and Zenodo uses it for the archived release and its DOI. RELEASING.md keeps its version current and describes the Zenodo archiving
+
+### Changed
+- `concat convert` sorts stably: observations with the same pressure in a profile keep their source order (by file path, then by position in the file) instead of coming out in an arbitrary order. Merged output is otherwise unchanged
+- The **Conversion** section of `report summary` pages says that its counts are taken after the merge, which sorts by pressure and drops observations without one, instead of "before any profile is dropped"
+
 ## [0.36.0] - 2026-11-06
 
 ### Added
@@ -375,7 +389,8 @@
 
 Initial import.
 
-[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.36.0...HEAD
+[Unreleased]: https://github.com/AIQC-Hub/ctddump/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.1...v0.35.0
 [0.34.1]: https://github.com/AIQC-Hub/ctddump/compare/v0.34.0...v0.34.1

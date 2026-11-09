@@ -218,6 +218,18 @@ Reads the source NetCDF from `source/` (`-s/--src`); writes merged Parquet to
 `output/convert/`, merged headers to `output/header/`, and summaries to
 `report/convert/` (Parquet data) and `report/header/` (header YAML).
 
+The merge runs `concat convert` with its defaults, so **the merged Parquet has
+each profile's observations sorted by increasing pressure**, and observations
+without a pressure value are dropped. Every later phase works on this order.
+See [Row order and numbering](./output-schema.md#row-order-and-numbering).
+
+Because the merge hides the source order, the `report` command also runs
+[`checkpres`](./commands/checkpres.md) on the per-file Parquet each merge was
+built from (`output/convert/<region>/<product>/`, kept after the merge) and
+writes `report/convert/checkpres/<stem>.profiles.tsv`, `.platforms.tsv` and
+`.summary.tsv`: the profiles whose pressure does not increase in the source
+order. The summary page shows them in its **Pressure order** section.
+
 ## `clean_data.sh`
 
 Cleans the merged Parquet from phase 1. Commands: `dropqc`, `dropna`, `filter`,

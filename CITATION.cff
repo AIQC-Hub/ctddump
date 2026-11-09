@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata in this file."
+type: software
+title: "ctddump"
+abstract: >-
+  A command-line tool that converts oceanographic CTD (Conductivity,
+  Temperature, Depth) profiles from NetCDF (Copernicus Marine NRT and CORA, or
+  any similarly laid-out file) to Parquet and YAML, and cleans, de-duplicates,
+  compares and summarises them.
+authors:
+  - family-names: "Saito"
+    given-names: "Takaya"
+repository-code: "https://github.com/AIQC-Hub/ctddump"
+url: "https://aiqc-hub.github.io/ctddump/"
+license: MIT
+keywords:
+  - oceanography
+  - CTD
+  - NetCDF
+  - Parquet
+  - Copernicus Marine
+version: "0.37.0"
+date-released: "2026-11-09"

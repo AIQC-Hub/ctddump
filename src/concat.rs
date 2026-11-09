@@ -141,7 +141,7 @@ fn build_and_write_range(
 }
 
 /// Recursively collect all files under `src_dir` whose filename matches `pattern`.
-fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+pub(crate) fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let glob_pat = Pattern::new(pattern)
         .map_err(|e| format!("Invalid pattern '{}': {}", pattern, e))?;
 
@@ -168,9 +168,11 @@ fn collect_parquet_files(src_dir: &Path, pattern: &str) -> Result<Vec<PathBuf>, 
 ///
 /// Sort order: `platform_code`, `profile_timestamp`, `longitude`, `latitude`, and
 /// — when `sort_by_pres` is `true` — `pres`. When `sort_by_pres` is `false` the
-/// `pres` key is dropped and the sort is made stable (`maintain_order`), so
-/// observations keep their original per-profile order from the source rather than
-/// being reordered by pressure.
+/// `pres` key is dropped, so observations keep their original per-profile order
+/// from the source rather than being reordered by pressure. The sort is stable
+/// (`maintain_order`) either way: rows with equal keys, such as repeated pressures
+/// in one profile, keep their incoming order (files in path order, rows in source
+/// order).
 ///
 /// `profile_no` — dense rank of the composite key
 /// `(platform_code | profile_timestamp | longitude | latitude)` within each
@@ -185,10 +187,10 @@ fn renumber(lf: LazyFrame, sort_by_pres: bool) -> LazyFrame {
     if sort_by_pres {
         sort_keys.push("pres");
     }
-    // Without `pres` as a tie-breaker, keep equal-key rows in their incoming
-    // (source) order so `observation_no` is deterministic and follows the original
-    // observation order.
-    let sort_opts = SortMultipleOptions::default().with_maintain_order(!sort_by_pres);
+    // Stable: equal-key rows (repeated pressures, or every row of a profile with
+    // `--no-pres-sort`) keep their incoming source order, so `observation_no` is
+    // deterministic.
+    let sort_opts = SortMultipleOptions::default().with_maintain_order(true);
 
     lf.sort(sort_keys, sort_opts)
     .with_column(

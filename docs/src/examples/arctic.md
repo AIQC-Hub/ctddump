@@ -52,6 +52,23 @@ ctddump batch convert cora --threads 10 --output output/convert/ar/cora source/I
 
 ### 3. Merge the Parquet files
 
+First list the profiles whose pressure does not increase in the source order,
+since the merge sorts by pressure and hides it (see
+[`checkpres`](../commands/checkpres.md)):
+
+```shell
+# NRT AR
+ctddump checkpres --threads 10 output/convert/ar/ar report/convert/checkpres/nrt_ar_ar
+
+# NRT GL
+ctddump checkpres --threads 10 output/convert/ar/gl report/convert/checkpres/nrt_ar_gl
+
+# CORA AR
+ctddump checkpres --threads 10 output/convert/ar/cora report/convert/checkpres/cora_ar
+```
+
+Then merge:
+
 ```shell
 # NRT AR
 ctddump concat convert --threads 10 output/convert/ar/ar output/convert/nrt_ar_ar.parquet
@@ -62,6 +79,10 @@ ctddump concat convert --threads 10 output/convert/ar/gl output/convert/nrt_ar_g
 # CORA AR
 ctddump concat convert --threads 10 output/convert/ar/cora output/convert/cora_ar.parquet
 ```
+
+The merge sorts each profile's observations by increasing pressure and drops
+observations without a pressure value; add `--no-pres-sort` to keep the source
+order (see [Row order and numbering](../output-schema.md#row-order-and-numbering)).
 
 ### 4. Export the metadata (headers)
 

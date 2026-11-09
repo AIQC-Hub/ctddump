@@ -144,6 +144,19 @@ ctddump header cora    input.nc output.yaml
 ctddump header generic input.nc output.yaml   # any NetCDF, all global attributes
 ```
 
+### `checkpres`: find profiles whose pressure does not increase
+
+```
+ctddump checkpres [OPTIONS] <src> <out_prefix>
+```
+
+Checks each profile of the per-file Parquet written by `batch convert`, in source order, before `concat convert` sorts it by pressure. A profile is reported when its pressure steps down between two observations (missing pressures are skipped, a repeated pressure is fine), as `reversed` (stored bottom-up) or `non_monotonic` (both up and down). `<src>` is a directory (with `--pattern`, as for `concat convert`) or one file. It writes `<out_prefix>.profiles.tsv` (each reported profile with its file, platform, time, position and the size of the drops), `.platforms.tsv` (per platform) and `.summary.tsv` (totals). `--min-drop DBAR` ignores small drops, `--pres-qc 1,2` uses only pressures with those flags, and `--threads N` caps the files checked in parallel.
+
+```bash
+ctddump checkpres /data/parquet reports/arctic
+ctddump checkpres --min-drop 0.1 --pres-qc 1,2 /data/parquet reports/arctic
+```
+
 ### `concat`: merge files from a directory tree into a single file
 
 ```
