@@ -20,5 +20,5 @@ keywords:
   - NetCDF
   - Parquet
   - Copernicus Marine
-version: "0.37.1"
+version: "0.37.2"
 date-released: "2026-11-09"
