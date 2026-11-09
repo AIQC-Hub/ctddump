@@ -48,6 +48,9 @@ Replace `X.Y.Z` with the new version and `PREV` with the previous tag.
    grep -rn 'v[0-9]\+\.[0-9]\+\.[0-9]\+' docs/src/installation.md
    ```
 
+   `CITATION.cff` carries it too: set `version: "X.Y.Z"` and `date-released` to
+   the release date. Zenodo copies both into the archived record.
+
 2. **Update `CHANGELOG.md`:**
    - Move the `## [Unreleased]` entries into a new `## [X.Y.Z] - YYYY-MM-DD`
      section, leaving a fresh empty `## [Unreleased]` above it.
@@ -59,7 +62,7 @@ Replace `X.Y.Z` with the new version and `PREV` with the previous tag.
 
 3. **Commit the bump** on `develop`:
    ```bash
-   git add Cargo.toml Cargo.lock CHANGELOG.md
+   git add Cargo.toml Cargo.lock CHANGELOG.md CITATION.cff docs/src/installation.md
    git commit -m "Bump version to vX.Y.Z"
    ```
 
@@ -129,6 +132,16 @@ Confirm they are green:
 gh run list --branch main --limit 3
 gh run list --workflow publish.yml --limit 1
 ```
+
+### Zenodo
+
+The repository is connected to [Zenodo](https://zenodo.org/) through its GitHub
+integration, so every published GitHub Release (created by the tag's publish
+run) is archived and gets its own DOI, plus one concept DOI that always resolves
+to the latest version. Zenodo takes the title, authors, license and version from
+`CITATION.cff`, which is why step 1 keeps it current. Nothing else is needed per
+release; if a release is missing on Zenodo, check that the integration is still
+switched on for `AIQC-Hub/ctddump` under Zenodo's GitHub settings.
 
 ### Publishing to crates.io
 
